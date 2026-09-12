@@ -85,11 +85,27 @@ All require a consumer bearer token (`Authorization: Bearer <user token>`).
 | POST | `/api/v1/ats/analyze` | Body: exactly one of `cv_document_id`/`cv_text`, and exactly one of `job_id`/`job_description` (+ optional `job_title` when pasting a description). Returns `AtsAnalysisOut` — `overall_score`, a `score_breakdown` naming all 8 weighted components (see ARCHITECTURE.md), `strong_matches`, `missing_keywords`, `formatting_issues`, `missing_metrics_note`. Runs the deterministic engine in `app/matching/ats_engine.py` — no external AI call. |
 | GET | `/api/v1/ats/analyses` | Paginated analysis history for the current user. |
 
+## Implemented endpoints (Phase 5 — Applications)
+
+All require a consumer bearer token. Applications are strictly user-owned — every route 404s (not
+403) on another user's application, so existence isn't leaked either.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/applications` | Body: either `job_id` (pre-fills company/role/location/job_url from the real job) or both `company_name` + `role_title` for a manual entry not in our `jobs` table (spec §36). Optional `current_stage` (default `SAVED`), dates, salary, contact info, `cover_letter_text`. Creates the first timeline event automatically. |
+| GET | `/api/v1/applications` | Paginated, `?stage=` filter. |
+| GET | `/api/v1/applications/{id}` | Full detail including `timeline` (all stage events, oldest first) and `notes` (newest first). |
+| PUT | `/api/v1/applications/{id}` | Partial update of the non-stage fields (location, dates, salary, contact, cover letter, etc.) — does **not** change `current_stage`; use the `/stage` endpoint for that so a timeline event is always recorded. |
+| POST | `/api/v1/applications/{id}/stage` | Body: `stage`, optional `note`, optional `occurred_at` (backdating). Updates `current_stage` and appends an `application_stage_events` row — this is the *only* way `current_stage` changes, by design (spec §42's "never silently change a stage" principle applies here too, even without email detection yet: a stage change always leaves an audit trail). |
+| POST | `/api/v1/applications/{id}/notes` | Body: `text`. |
+| DELETE | `/api/v1/applications/{id}` | |
+| GET | `/api/v1/me/applications-summary` | `{"active_applications": <count>}` — excludes `HIRED`/`REJECTED`/`WITHDRAWN`/`EXPIRED`. Backs the Home dashboard's "Active Applications" card with a real number. |
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```
 /profile         career preferences, skills, experiences, education, certifications (beyond §10 basics)
-/applications    CRUD, stage updates, timeline, notes, documents
+/applications    document attachments (CRUD/stage/notes already implemented above)
 /aptitude        section/question selection, test session lifecycle, submit, results, analytics
 /interview       question sets, sessions, STAR stories
 /documents       CV vault + document vault upload/list/rename/delete (signed URLs, private by default)

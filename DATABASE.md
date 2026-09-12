@@ -58,6 +58,19 @@ Implemented so far (migrations `1787363de7f0` → `e4a80fc268db`, `backend/migra
   media fields, `summary`/`full_content`, `why_it_matters` (admin-written, never generated — see
   ARCHITECTURE.md), `relevant_roles`/`relevant_skills` (JSON lists), source fields, `published_at`,
   verification/featured/active/demo flags, `status`, `created_by_admin_id`.
+- `applications` — `id`, `user_id` (FK, CASCADE — strictly user-owned, no admin visibility), `job_id`
+  (FK → `jobs.id`, `ON DELETE SET NULL` — tracker history survives an expired/deleted job),
+  `cv_document_id` (FK, `SET NULL`), `company_name`/`role_title` (denormalized — an application can
+  track a role that was never in our `jobs` table at all, spec §36), `location`, `job_url`,
+  `current_stage` (19-value enum from spec §36: SAVED → ... → HIRED/REJECTED/WITHDRAWN/EXPIRED/
+  NO_RESPONSE), `applied_date`/`deadline`/`interview_date`/`assessment_date`, `salary`, `contact_name`/
+  `contact_email`, `cover_letter_text` (plain text, not a file — a real document vault is a later
+  phase), `is_demo`.
+- `application_stage_events` — `id`, `application_id` (FK, CASCADE), `stage`, `occurred_at`, `note`,
+  `source` (`"MANUAL"` always for now — the column exists so Phase 8's email-detection flow can write
+  `"EMAIL_CONFIRMED"` later without a schema change). Append-only: created automatically every time
+  `current_stage` changes, never edited — the timeline is a true history, not an editable log.
+- `application_notes` — `id`, `application_id` (FK, CASCADE), `text`.
 
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
@@ -73,7 +86,8 @@ scholarship_requirements (folded into scholarships' own columns for now — see 
 
 documents (general document vault — cv_documents/ats_analyses already implemented, see above)
 
-applications, application_stage_events, application_notes, application_documents
+application_documents (applications/application_stage_events/application_notes already implemented,
+see above — this is just the file-attachment side, blocked on the general document vault)
 
 email_connections, recruitment_email_events
 

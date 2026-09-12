@@ -49,6 +49,11 @@ class ProfileTab extends ConsumerWidget {
         ),
         const SizedBox(height: 32),
         _ProfileMenuItem(
+          icon: Icons.timeline_outlined,
+          label: "My Applications",
+          onTap: () => context.push("/applications"),
+        ),
+        _ProfileMenuItem(
           icon: Icons.bookmark_border,
           label: "Saved Jobs & Scholarships",
           onTap: () => context.push("/saved"),

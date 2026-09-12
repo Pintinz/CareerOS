@@ -3,6 +3,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../core/app_providers.dart";
+import "../features/applications/presentation/application_detail_screen.dart";
+import "../features/applications/presentation/application_list_screen.dart";
+import "../features/applications/presentation/create_application_screen.dart";
 import "../features/ats/presentation/ats_analyze_screen.dart";
 import "../features/auth/presentation/login_screen.dart";
 import "../features/companies/presentation/company_detail_screen.dart";
@@ -82,6 +85,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AtsAnalyzeScreen(args: state.extra as AtsAnalyzeArgs?),
       ),
       GoRoute(path: "/saved", builder: (context, state) => const SavedItemsScreen()),
+      GoRoute(path: "/applications", builder: (context, state) => const ApplicationListScreen()),
+      GoRoute(path: "/applications/new", builder: (context, state) => const CreateApplicationScreen()),
+      GoRoute(
+        path: "/applications/:id",
+        builder: (context, state) => ApplicationDetailScreen(applicationId: state.pathParameters["id"]!),
+      ),
     ],
   );
 });

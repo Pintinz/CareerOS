@@ -7,11 +7,10 @@ This file is the single source of truth for build progress. Update it after ever
 ## Git
 
 - Repo initialized 2026-09-12.
-- Baseline commit: `9357753e2af2ee9e011abb37259e0112a2da5b84` — "feat: establish CareerOS foundation and
-  Phase 1 authentication", tagged `phase-1-baseline`.
-- Second commit: `9593281` — "feat: Phase 2 (Opportunities), Phase 3 (ATS), Phase 4 (Company
-  Intelligence), and verified mobile toolchain" (backend/admin only — mobile screens below came after).
-- Everything under "Mobile — Phase 2/3/4 screens" below is the next commit.
+- `9357753` — Foundation + Phase 1 auth (tagged `phase-1-baseline`).
+- `9593281` — Phase 2/3/4 backend+admin, mobile toolchain installed and verified from scratch.
+- `1c0608f` — Mobile screens for Phase 2 (Opportunities)/3 (ATS)/4 (Company Intelligence).
+- Everything under "Phase 5 — Applications" below is the next commit.
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -22,35 +21,18 @@ This file is the single source of truth for build progress. Update it after ever
 - **Docker: still NOT installed.** `docker-compose.yml` is written but never run; backend dev/test uses
   local SQLite (`DATABASE_URL` swaps cleanly to Postgres once available).
 - **Python 3.13 and Node.js: available and used**, backend/admin verified live throughout.
-
-## Mobile toolchain verification — ALL GREEN, and stayed green through a second full feature pass
-
-- `flutter doctor -v` / `pub get` / `analyze` / `test`: all clean.
-- `flutter build apk --debug`: **GREEN**, twice now:
-  - First green build (toolchain-only, Phase 0/1 screens): 175,603,508 bytes, SHA1
-    `43c7e62094354b3e4c4de3c865d76b2739c20780`. Took 9 attempts to get the *toolchain* working — see
-    "Mobile toolchain, first-time setup" below for the full diagnosis (network rate-limiting, two
-    outdated Gradle-incompatible plugins, one missing Android config).
-  - Second green build (after adding all Phase 2/3/4 mobile screens — see below): 201,271,208 bytes,
-    SHA1 `17bc5604e23b63085634dd9e3df1f2264f9ad43a`, built in **118 seconds** — confirming the earlier
-    9-attempt saga was genuinely one-time setup cost, not a recurring problem. Every dependency was
-    already cached and every Gradle config issue was already fixed.
-- `android/`/`ios/` platform folders generated via `flutter create . --org com.careeros
-  --project-name careeros --platforms=android,ios` without touching existing `lib/`/`pubspec.yaml`.
 - iOS: cannot be built or verified at all on this machine (Windows, no macOS/Xcode).
 
-### Mobile toolchain, first-time setup (for the record)
-1. **Network flakiness** (attempts 1-3): Maven Central / Gradle Plugin Portal intermittently 403'd
-   concurrent artifact requests. Confirmed via direct `curl` (works standalone; 2/8 concurrent requests
-   to the same URL got real 403s). Added `org.gradle.internal.repository.max.tentatives=10` /
-   `...initial.backoff=500` to `android/gradle.properties`.
-2. **Outdated plugin versions** (attempt 4): `google_mobile_ads` (was `^5.1.0`) and
-   `flutter_secure_storage` (was `^9.2.2`) shipped Gradle scripts incompatible with Gradle 9.3.1.
-   Bumped to `^9.1.0` / `^11.1.1`, cascading into `file_picker` → `^12.3.0` (transitive `win32`
-   conflict, which also changed its API — see Known Bugs).
-3. **Missing standard config** (attempt 8): `flutter_local_notifications` needs Android "core library
-   desugaring." Added `isCoreLibraryDesugaringEnabled = true` + `desugar_jdk_libs` to
-   `android/app/build.gradle.kts`. Attempt 9 succeeded.
+## Mobile toolchain — verified green, and staying green
+
+`flutter analyze`/`test`/`build apk --debug` have now been run clean **four times** across this
+session as features were added (Phase 0/1 screens, then Phase 2/3/4, then Phase 5) — each rebuild
+faster than the last since everything is cached:
+- Toolchain-only build (first ever): 175.6MB APK, ~9 attempts to resolve (one-time cost — see git log
+  on commit `9593281` for the full diagnosis: Maven Central rate-limiting, two outdated Gradle-
+  incompatible plugins, one missing Android config).
+- Phase 2/3/4 screens added: 201.3MB APK, built in **118 seconds**.
+- Phase 5 (Applications) added: 201.3MB APK, built in **31 seconds**.
 
 ## Phase Status
 
@@ -58,10 +40,10 @@ This file is the single source of truth for build progress. Update it after ever
 |---|---|---|
 | 0 — Foundation | DONE | Monorepo scaffolded, all 3 apps boot and were verified live. |
 | 1 — Auth + Profile | IN PROGRESS | Backend + mobile screens built and verified. Not built: Google/Apple Sign-In, forgot-password, email verification, settings screen. |
-| 2 — Opportunities | IN PROGRESS | Backend + admin web + **mobile screens** all built and verified (real APK build). Missing: internships/graduate-programme sub-tabs (currently reuse the jobs model, spec allows this), career-preferences-driven "recommended" scoring. |
-| 3 — ATS | IN PROGRESS | Backend + **mobile screens** (CV upload, analyze, results) built and verified. Missing: CV vault management UI beyond upload/select (rename/set-primary not exposed in mobile UI yet, though the backend supports `is_primary`). |
-| 4 — Company Intelligence | IN PROGRESS | Backend + **mobile screens** (feed, detail, company follow, company profile with Jobs/News tabs) built and verified. Admin CMS UI for intelligence posts NOT built (API-only — publish via curl/Postman or extend the Next.js admin app). |
-| 5 — Applications | NOT STARTED | |
+| 2 — Opportunities | IN PROGRESS | Backend + admin web + mobile screens all built and verified (real APK build). Missing: internships/graduate-programme sub-tabs (reuse the jobs model), career-preferences-driven "recommended" scoring. |
+| 3 — ATS | IN PROGRESS | Backend + mobile screens (CV upload, analyze, results) built and verified. Missing: CV rename/set-primary controls in the mobile UI. |
+| 4 — Company Intelligence | IN PROGRESS | Backend + mobile screens (feed, detail, follow, company profile) built and verified. Admin CMS UI for intelligence posts NOT built (API-only). |
+| 5 — Applications | IN PROGRESS | Backend + mobile screens (list, detail w/ timeline, stage update, notes, manual + from-job creation) built and verified. Missing: document attachments (needs the general document vault), email-detected stage confirmation (Phase 8). |
 | 6 — Aptitude Testing | NOT STARTED | |
 | 7 — Interview Preparation | NOT STARTED | |
 | 8 — Email Tracking | NOT STARTED | |
@@ -71,64 +53,48 @@ This file is the single source of truth for build progress. Update it after ever
 
 ## Completed
 
-### Phase 0/1 (verified previously, still green)
-Monorepo scaffold, root docs, backend auth+profile, admin dashboard shell, `docker-compose.yml`
-(unverified — no Docker).
+### Phases 0-4 (see git log for `9357753`, `9593281`, `1c0608f` for full detail)
+Foundation, auth/profile, opportunities (jobs/scholarships/companies, backend+admin+mobile), ATS
+(backend+mobile), company intelligence (backend+mobile). 58 backend tests, all passing.
 
-### Phase 2 — Opportunities (backend, admin web, AND mobile — all verified)
-**Backend/admin** (see prior commit `9593281` for full detail): RBAC foundation, companies/jobs/
-scholarships full CRUD with search/filter/save, `expires_at` enforcement, image upload, demo seed data,
-Next.js admin CMS for all three, acceptance workflow verified by pytest and by hand.
+### Phase 5 — Applications (backend AND mobile, verified)
+**Backend** (`app/models/application.py`, `app/services/application_service.py`,
+`app/api/v1/applications.py`):
+- `applications`/`application_stage_events`/`application_notes` tables. An application can reference
+  a real `job_id` (auto-fills company/role/location/job_url) or be entered manually for a role not in
+  our `jobs` table (spec §36) — strictly user-owned, every route 404s on another user's application
+  rather than leaking existence via 403.
+- `current_stage` can **only** change via `POST /applications/{id}/stage`, which always appends an
+  `application_stage_events` row — there is no way to silently change a stage, mirroring the "never
+  silently change a stage" principle spec §42 states for email-detected updates, applied here even
+  for manual updates.
+- `GET /me/applications-summary` backs the Home dashboard's "Active Applications" card with a real
+  count (excludes HIRED/REJECTED/WITHDRAWN/EXPIRED) — not a placeholder number.
+- 9 tests: manual creation validation, creation-from-job field prefill, per-user isolation (404 not
+  403 on another user's application), stage update appends timeline + updates current_stage, notes
+  CRUD, stage filtering, active-count excludes terminal stages, deletion.
 
-**Mobile** (`lib/features/jobs/`, `lib/features/scholarships/`, `lib/features/companies/`,
-`lib/features/opportunities/`), verified via `flutter analyze`/`test` and a real debug APK build:
-- Data layer: hand-written JSON models (`JobCard`/`JobDetail`/`ScholarshipCard`/`ScholarshipDetail`/
-  `Company`) matching the backend schemas exactly, repositories wrapping every endpoint built above.
-- `OpportunitiesTab` — Jobs/Scholarships sub-tabs (spec §12), each with search, filter chips
-  (employment type/work mode for jobs; funding type/degree level for scholarships), infinite-scroll
-  pagination, pull-to-refresh, optimistic save/unsave with rollback on failure.
-- `JobDetailScreen`/`ScholarshipDetailScreen` — Overview/Requirements-or-Eligibility/Company-or-
-  Documents tabs, Save/Analyze CV/Apply action bar, `Apply` opens the real external URL via
-  `url_launcher` (never impersonates the employer — spec §14).
-- `CompanyDetailScreen` — Overview/Jobs/News tabs, follow/unfollow with optimistic UI.
-- `SavedItemsScreen` — Jobs/Scholarships tabs, reachable from Profile → "Saved Jobs & Scholarships".
-- **Real bug found and fixed**: `JobListController.toggleSave`/`ScholarshipListController.toggleSave`
-  silently no-op when the item isn't already in that controller's own list state — which is exactly
-  the case on the detail screen (reached via search, a deep link, or another list) and on the Saved
-  Items / company-Jobs-tab screens (items never loaded into the main list controller at all). Fixed by
-  having every screen other than the main list call the repository's `save`/`unsave` directly based on
-  the item's own `isSaved` field, instead of delegating to a specific list controller's toggle method.
-
-### Phase 3 — ATS (backend AND mobile, verified)
-**Backend**: deterministic 8-component weighted scoring engine (`app/matching/ats_engine.py`), real
-PDF/DOCX/TXT extraction, synonym normalization, full analyze/history API — see prior commit for detail.
-
-**Mobile** (`lib/features/ats/`): `AtsAnalyzeScreen` — pick/upload a CV (`file_picker`, PDF/DOCX/TXT),
-select from previously uploaded CVs, paste a job description (or skip straight to analysis when
-reached from a job's "Analyze CV" button, which passes the real job ID). `AtsResultView` — circular
-overall-score gauge, full weighted breakdown with per-component progress bars and percentages, strong
-matches / missing keywords as colored chips, formatting issues list, missing-quantified-achievements
-note — every number traceable to a named component, never a bare percentage (spec Rule 8).
-Reachable from a job's detail screen and from Profile → "CVs & ATS Analysis".
-
-### Phase 4 — Company Intelligence (backend AND mobile, verified)
-**Backend**: full CRUD news feed with categories, company follow/unfollow, hedged "why this matters"
-copy — see prior commit for detail.
-
-**Mobile** (`lib/features/intelligence/`): `IntelligenceFeedTab` — category filter chips + a
-"Following" toggle, infinite scroll, pull-to-refresh, honest empty states distinguishing "no news at
-all" from "no news from companies you follow yet." `IntelligenceDetailScreen` — headline, content, and
-a visually distinct "Why This Matters To Your Career" card showing the admin-written hedged copy plus
-relevant roles/skills, with a link to the original source. Company follow surfaced on
-`CompanyDetailScreen` (optimistic follow/unfollow button) and reflected on `Company.isFollowing`.
+**Mobile** (`lib/features/applications/`):
+- `ApplicationListScreen` — stage filter chips (all 19 stages + "All"), pull-to-refresh, FAB to add
+  a manual entry.
+- `ApplicationDetailScreen` — Details/Timeline/Notes tabs, a visual timeline (newest-first, checked
+  circles for past stages, an open circle for the current one — spec §36's example), "Update Stage"
+  bottom sheet (`RadioGroup` over all 19 stages + optional note), inline note composer, delete with
+  confirmation, "View Job" opens the real external URL when available.
+- Stage-aware hints (spec §38): an info banner appears for APTITUDE_TEST/INTERVIEW/FINAL_INTERVIEW/
+  MEDICAL stages. Since Phases 6/7 (aptitude/interview prep) don't exist yet, this is **informational
+  text only** — no "Prepare" button pointing at a screen that isn't built, which would violate spec
+  Rule 2 (no placeholders for things that could instead just not be shown yet).
+- `CreateApplicationScreen` — manual entry form (company, role, location, job URL).
+- Entry points: a job's detail screen ("Track This Application" → creates from that job), Home
+  dashboard (real "Active Applications" count card, tappable), Profile → "My Applications".
 
 ## Partially Complete
 
-- **Mobile app**: Phase 0/1/2/3/4 core loops written and verified. Not yet built: internships/graduate-
-  programme-specific mobile UI (data model already supports it via the jobs schema), CV rename/set-
-  primary controls, career-preferences-driven personalization anywhere.
-- Admin web: no UI yet for intelligence posts (API-only) — jobs/scholarships/companies CMS pattern is
-  established and would extend the same way.
+- **Mobile app**: Phase 0-5 core loops written and verified. Not yet built: internships/graduate-
+  programme-specific UI, CV rename/set-primary, career-preferences-driven personalization anywhere,
+  application document attachments.
+- Admin web: no UI yet for intelligence posts (API-only).
 
 ## Not Started
 
@@ -136,8 +102,8 @@ relevant roles/skills, with a link to the original source. Company follow surfac
   beyond name/location/experience, aptitude/interview prep screens (Prepare tab is still an honest
   empty state).
 - Admin web: intelligence post CMS UI, question bank, source registry, discovery queue, user mgmt.
-- Everything under Phases 5–11 (application tracker, aptitude engine, interview prep, email classifier,
-  AdMob integration code, production hardening).
+- Everything under Phases 6-11 (aptitude engine, interview prep, email classifier, AdMob integration
+  code, production hardening).
 
 ## Blocked by Credential / Tooling
 
@@ -149,48 +115,41 @@ relevant roles/skills, with a link to the original source. Company follow surfac
 
 ## Known Bugs
 
-None currently open. Found and fixed this session (backend + mobile toolchain bugs from the prior
-commit still apply — see git log — plus, from the mobile screens pass):
-- `AppColors.violet` doesn't exist (the palette constant is `purple`) — `flutter analyze` caught every
-  usage across the intelligence screens.
-- `file_picker` v12's API changed (`FilePicker.platform.pickFiles(...)` → `FilePicker.pickFile(...)`,
-  a static method, no more `.platform` singleton) — caught by `flutter analyze`, not by chance.
-- **The save/unsave list-relative-toggle bug described above under Phase 2** — found by reasoning
-  through which screens can reach a job/scholarship without it being in `jobListProvider`/
-  `scholarshipListProvider`'s state (detail screens via search or deep link, Saved Items, a company's
-  Jobs tab), not by a runtime crash — the bug was a silent no-op, not an exception.
+None currently open. Full history of bugs found-and-fixed this session lives in the commit messages
+for `9593281` and `1c0608f` (a nullable comparison bug, an admin form page-size mismatch, job expiry
+not enforced everywhere, two Gradle-plugin incompatibilities, an `AppColors` typo, a `file_picker` v12
+API change, and a save/unsave toggle that silently no-op'd outside the main list's state).
 
 ## Tests
 
-- Backend: `pytest -q` → **49 passed** (unchanged this pass — no backend code changed while building
-  mobile screens).
+- Backend: `pytest -q` → **58 passed** across 8 test files (health, auth, admin/companies, jobs,
+  scholarships, uploads, ATS, intelligence, applications).
 - Admin: no automated tests — verified by hand via live browser interaction.
-- Mobile: `flutter test` → 1 passing smoke test (unchanged — still just the app-boots-to-splash check).
-  Widget/unit tests for the new screens are a Next Task; verification so far is `analyze` (type/lint
-  correctness) + a full APK build (compiles and packages) + manual reasoning about data flow, not
-  automated behavioral tests of the new screens.
+- Mobile: `flutter test` → 1 passing smoke test (app boots to splash). Widget/unit tests for the
+  Phase 2-5 screens are still a Next Task — verification so far is `analyze` (type/lint correctness)
+  + real APK builds (compiles and packages) + manual reasoning about data flow, not automated
+  behavioral tests of the screens themselves.
 
 ## Known issues to revisit
 
-- `npm audit` on `admin/` reports advisories against Next.js 14.2.35 (mostly self-hosted DoS/SSRF/
-  cache-poisoning, fixed only as of Next 16) — revisit in Phase 11 or before any non-localhost exposure.
+- `npm audit` on `admin/` reports advisories against Next.js 14.2.35 (fixed only as of Next 16) —
+  revisit in Phase 11 or before any non-localhost exposure.
 - `ProfileUpdate` can't clear a field to null — `None`/omitted means "leave unchanged."
 - Admin web stores its JWT in `localStorage` — fine for local dev, revisit before non-localhost use.
 - `ScholarshipRepository.list_public`'s `degree_level` filter does a text-LIKE on the JSON column's
   string form rather than a real JSON containment query — fine at this scale.
 - The `recommended` job/scholarship sort is a documented placeholder (featured-first, then newest).
 - ATS job-title scoring is a keyword-overlap proxy, not structural CV parsing — documented as such.
-- Many `pubspec.yaml` versions are behind latest beyond what was bumped for Gradle-compat — fine.
 - No admin CMS UI for intelligence posts yet.
-- No mobile widget/unit tests for the new Phase 2/3/4 screens yet — only `analyze` + a real build +
-  manual data-flow review have verified them so far, not automated tests.
-- Mobile has no automated test coverage proving the save/unsave optimistic-update-with-rollback logic
-  actually rolls back correctly on a real API failure (only reasoned through, not tested).
+- No mobile widget/unit tests for any Phase 2-5 screens yet — see Tests section above.
+- `ApplicationUpdate` (`PUT /applications/{id}`) intentionally cannot change `current_stage` — only
+  `/stage` can, so every stage change leaves a timeline entry. Make sure any future mobile "quick
+  edit" form respects this and doesn't try to slip a stage change through the generic update.
 
 ## Next Tasks
 
-1. Commit the mobile Phase 2/3/4 screens (this pass) — currently uncommitted.
-2. Widget tests for the new screens, especially the save/unsave flows across all four entry points
-   (main list, detail screen, Saved Items, company Jobs tab) given the bug class found this session.
-3. Phase 5 (Applications) or whichever phase the user prioritizes next.
-4. Admin CMS UI for intelligence posts, to close out Phase 9's remaining gap for what's already built.
+1. Commit the Phase 5 (Applications) backend + mobile work — currently uncommitted.
+2. Widget tests for the save/unsave flows and the application stage-update flow, given how many real
+   bugs this session's manual review process has caught in exactly this kind of code.
+3. Phase 6 (Aptitude Testing) or Phase 7 (Interview Preparation) — whichever the user prioritizes,
+   or an admin CMS UI for intelligence posts to close out Phase 9's remaining gap.

@@ -7,6 +7,7 @@ from app.schemas.company import CompanyOut
 from app.schemas.job import JobListResponse
 from app.schemas.scholarship import ScholarshipListResponse
 from app.security.dependencies import get_current_user
+from app.services.application_service import ApplicationService
 from app.services.company_service import CompanyService
 from app.services.job_service import JobService
 from app.services.scholarship_service import ScholarshipService
@@ -41,3 +42,13 @@ async def list_followed_companies(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[CompanyOut]:
     return await CompanyService(db).list_followed(user.id)
+
+
+@router.get("/applications-summary")
+async def get_applications_summary(
+    db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict:
+    """Backs the Home dashboard's "Active Applications" card (spec §11) — a real count, not a
+    placeholder number."""
+    active_count = await ApplicationService(db).count_active_for_user(user.id)
+    return {"active_applications": active_count}

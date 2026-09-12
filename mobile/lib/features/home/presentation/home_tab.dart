@@ -1,6 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:go_router/go_router.dart";
 
+import "../../../theme/app_colors.dart";
+import "../../applications/presentation/application_providers.dart";
 import "../../profile/presentation/profile_providers.dart";
 
 /// Home dashboard (master spec §11). Only the greeting header is wired to real data in this
@@ -38,6 +41,8 @@ class HomeTab extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 32),
+          _ActiveApplicationsCard(activeCountAsync: ref.watch(activeApplicationsCountProvider)),
+          const SizedBox(height: 16),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -56,6 +61,51 @@ class HomeTab extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ActiveApplicationsCard extends StatelessWidget {
+  const _ActiveApplicationsCard({required this.activeCountAsync});
+
+  final AsyncValue<int> activeCountAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => context.push("/applications"),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
+                alignment: Alignment.center,
+                child: const Icon(Icons.timeline_outlined, color: AppColors.blue),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    activeCountAsync.when(
+                      loading: () => const Text("—", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                      error: (_, __) => const Text("—", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                      data: (count) => Text("$count", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    ),
+                    const Text("Active Applications", style: TextStyle(color: AppColors.muted)),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.muted),
+            ],
+          ),
+        ),
       ),
     );
   }

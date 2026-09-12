@@ -6,6 +6,7 @@ import "package:intl/intl.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
 import "../../../theme/app_colors.dart";
+import "../../applications/presentation/application_providers.dart";
 import "../../ats/presentation/ats_analyze_screen.dart";
 import "../data/job_models.dart";
 import "job_providers.dart";
@@ -121,6 +122,12 @@ class _JobDetailBody extends ConsumerWidget {
                     style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600),
                   ),
                 ],
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _trackApplication(context, ref),
+                  icon: const Icon(Icons.playlist_add_check_outlined, size: 18),
+                  label: const Text("Track This Application"),
+                ),
                 const SizedBox(height: 20),
                 TabBar(
                   controller: tabController,
@@ -160,6 +167,17 @@ class _JobDetailBody extends ConsumerWidget {
       await repo.save(job.id);
     }
     ref.invalidate(jobDetailProvider(job.slug));
+  }
+
+  Future<void> _trackApplication(BuildContext context, WidgetRef ref) async {
+    try {
+      final application = await ref.read(applicationRepositoryProvider).createFromJob(job.id);
+      if (context.mounted) context.push("/applications/${application.id}");
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.userMessage)));
+      }
+    }
   }
 }
 
