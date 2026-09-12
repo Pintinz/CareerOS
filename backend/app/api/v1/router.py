@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     admin_auth,
     applications,
+    aptitude,
     ats,
     auth,
     companies,
@@ -13,6 +14,7 @@ from app.api.v1 import (
     profile,
     scholarships,
 )
+from app.api.v1.admin import aptitude as admin_aptitude
 from app.api.v1.admin import companies as admin_companies
 from app.api.v1.admin import intelligence as admin_intelligence
 from app.api.v1.admin import jobs as admin_jobs
@@ -29,6 +31,7 @@ api_router.include_router(scholarships.router, prefix="/scholarships", tags=["sc
 api_router.include_router(ats.router, prefix="/ats", tags=["ats"])
 api_router.include_router(intelligence.router, prefix="/intelligence", tags=["intelligence"])
 api_router.include_router(applications.router, prefix="/applications", tags=["applications"])
+api_router.include_router(aptitude.router, prefix="/aptitude", tags=["aptitude"])
 api_router.include_router(me.router, prefix="/me", tags=["me"])
 
 api_router.include_router(admin_auth.router, prefix="/admin/auth", tags=["admin-auth"])
@@ -41,3 +44,4 @@ api_router.include_router(
     admin_intelligence.router, prefix="/admin/intelligence", tags=["admin-intelligence"]
 )
 api_router.include_router(admin_uploads.router, prefix="/admin/uploads", tags=["admin-uploads"])
+api_router.include_router(admin_aptitude.router, prefix="/admin/aptitude", tags=["admin-aptitude"])

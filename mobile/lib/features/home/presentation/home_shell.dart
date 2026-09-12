@@ -1,15 +1,16 @@
 import "package:flutter/material.dart";
 
 import "../../../theme/app_colors.dart";
-import "../../../widgets/phase_pending_placeholder.dart";
+import "../../aptitude/presentation/preparation_hub_screen.dart";
 import "../../intelligence/presentation/intelligence_feed_tab.dart";
 import "../../opportunities/presentation/opportunities_tab.dart";
 import "../../profile/presentation/profile_tab.dart";
 import "home_tab.dart";
 
 /// Main bottom navigation shell (master spec §6): Home, Opportunities, Prepare,
-/// Intelligence, Profile. Prepare (aptitude/interview prep, Phases 6-7) is still an honest
-/// empty state (§79 — never fabricate content); the rest now have real content.
+/// Intelligence, Profile. Prepare now has a real aptitude assessment engine (Phase 6);
+/// interview preparation (Phase 7) is surfaced honestly as "coming next" inside that tab
+/// rather than as a separate dead placeholder tab.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -23,11 +24,7 @@ class _HomeShellState extends State<HomeShell> {
   static const _tabs = [
     HomeTab(),
     OpportunitiesTab(),
-    PhasePendingPlaceholder(
-      icon: Icons.fact_check_outlined,
-      title: "Prepare",
-      message: "Aptitude tests and interview preparation arrive in Phases 6-7.",
-    ),
+    PreparationHubScreen(),
     IntelligenceFeedTab(),
     ProfileTab(),
   ];

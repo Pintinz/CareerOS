@@ -71,6 +71,45 @@ Implemented so far (migrations `1787363de7f0` → `e4a80fc268db`, `backend/migra
   `"EMAIL_CONFIRMED"` later without a schema change). Append-only: created automatically every time
   `current_stage` changes, never edited — the timeline is a true history, not an editable log.
 - `application_notes` — `id`, `application_id` (FK, CASCADE), `text`.
+- `question_categories` — `id`, `name`, `slug` (unique), `description`. The six fixed sections
+  (Numerical/Verbal/Abstract/Logical/Situational Judgement/Technical) — modeled as real rows, not a
+  hardcoded enum, so Phase 9's admin UI can rename/describe them without a schema change.
+- `question_topics` — `id`, `category_id` (FK, CASCADE), `name`, `slug` (unique), `field`/`industry`
+  (nullable — let a Technical topic be scoped, e.g. "Pumps" → Mechanical Engineering/Oil & Gas, so the
+  job-specific generation engine can match on them; see `app/aptitude/technical_topic_map.py`).
+- `questions` — `id`, `question_text`, `question_type` (`SINGLE_CHOICE`/`MULTIPLE_CHOICE`/`TRUE_FALSE`/
+  `NUMERIC`/`IMAGE_BASED`/`PASSAGE_BASED`), `question_image_url`, `passage_text` (repeated verbatim
+  across every question sharing a passage — no separate passages table, a documented simplification),
+  `category_id` (FK, CASCADE), `topic_id` (FK → `question_topics.id`, `SET NULL`), `field`/`industry`/
+  `job_role` (indexed, nullable), `difficulty` (`EASY`/`MEDIUM`/`HARD`/`EXPERT`), `explanation`,
+  `marks`/`negative_marks`, `estimated_seconds`, `correct_numeric_value`/`numeric_tolerance` (NUMERIC
+  type only), `is_active`, `is_demo`, `created_by_admin_id` (FK, `SET NULL`).
+- `question_options` — `id`, `question_id` (FK, CASCADE), `option_text`, `option_image_url`,
+  `is_correct`, `display_order`. **Never sent to a mobile client while a test is in progress** — see
+  `SessionQuestionOut`/`OptionOut` in `API.md`.
+- `test_sessions` — `id`, `user_id` (FK, CASCADE), `mode` (`PRACTICE`/`TIMED`/`MOCK`/`JOB_SPECIFIC`/
+  `FIELD_SPECIFIC`/`COMPANY_SPECIFIC` — the last modeled per spec but never exposed in the UI),
+  `status` (`CREATED`/`IN_PROGRESS`/`SUBMITTED`/`AUTO_SUBMITTED`/`ABANDONED`; creating a session moves
+  it straight to `IN_PROGRESS` — `CREATED` exists for schema completeness only), `application_id`/
+  `job_id` (FK, `SET NULL`), `config` (JSON — the exact request that created it, so Retake/Practice
+  Similar can reproduce it), `started_at`/`submitted_at`/`expires_at` (all nullable — `expires_at` is
+  null for untimed practice), `time_limit_seconds`/`time_used_seconds`, `auto_submitted`,
+  `question_count`/`total_marks`, `score`/`percentage`/`correct_count`/`incorrect_count`/
+  `unanswered_count` (all null until graded), `section_breakdown` (JSON, computed once at grading time).
+- `test_session_questions` — **the critical snapshot table.** A frozen, point-in-time copy of one
+  question as shown in one session: `question_text`, `question_type`, `question_image_url`,
+  `passage_text`, `difficulty`, `explanation`, `marks`, `negative_marks`, `category_slug`/
+  `category_name`, `topic_name`/`topic_slug`, `options_snapshot` (JSON list, deliberately **without**
+  `is_correct`), `correct_option_ids` (JSON, server-only grading reference),
+  `correct_numeric_value`/`numeric_tolerance`. `question_id` (FK → `questions.id`, `SET NULL`) is kept
+  only so "Practice Similar Questions" can jump back to the live topic — it is never re-read for
+  grading or display once the snapshot row exists. **Editing or deleting the master `questions` row
+  later can never change a past session's questions, answers, or grade** — every field a user saw, or
+  that grading depends on, lives in this table, copied at session-creation time.
+- `test_answers` — `id`, `session_id` (FK, CASCADE), `session_question_id` (FK →
+  `test_session_questions.id`, CASCADE), `selected_option_ids` (JSON)/`answer_numeric_value`,
+  `is_flagged`, `time_spent_seconds`, `is_correct`/`marks_awarded` (both null until submit-time
+  grading, so "has this been graded" is unambiguous).
 
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
@@ -90,10 +129,6 @@ application_documents (applications/application_stage_events/application_notes a
 see above — this is just the file-attachment side, blocked on the general document vault)
 
 email_connections, recruitment_email_events
-
-questions, question_options, question_categories, question_topics
-
-test_sessions, test_answers, test_results
 
 interview_questions, interview_sessions, star_stories
 

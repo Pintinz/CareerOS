@@ -35,6 +35,23 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
 - Settings expose `Disconnect Gmail`, `Disconnect Outlook`, and `Delete imported recruitment metadata`
   as first-class actions, not buried preferences.
 
+## Aptitude assessment data (Phase 6)
+
+- A test session's questions/options/answers are visible only to the user who owns the session — every
+  aptitude endpoint 404s (never 403) on a session that isn't the caller's, so existence isn't leaked
+  either (same isolation pattern as `applications`).
+- Correct answers (`is_correct` on an option) are **never** sent to the mobile client while a session is
+  in progress — only after submission, via the dedicated review endpoint. There is no route that
+  returns an answer key for an unsubmitted session, by construction of the response schemas
+  (`SessionQuestionOut`/`OptionOut` simply have no `is_correct` field at all).
+- Practicing an aptitude test **never** changes a linked application's real `current_stage` or its
+  `assessment_completed` state — CareerOS practice is explicitly not the employer's official
+  assessment, and the two are kept fully separate. Only the user's own `POST /applications/{id}/stage`
+  call can move a real application forward.
+- Locally cached exam data (see `ARCHITECTURE.md` → Mobile aptitude offline behavior) stays on-device
+  in the app's own SharedPreferences store and is cleared once a session is submitted; it is never
+  transmitted anywhere except back to this backend's own `/aptitude/*` endpoints.
+
 ## Account deletion
 
 Deleting an account removes profile data, documents, and application history; it is a real delete

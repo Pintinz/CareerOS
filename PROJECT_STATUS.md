@@ -10,7 +10,8 @@ This file is the single source of truth for build progress. Update it after ever
 - `9357753` — Foundation + Phase 1 auth (tagged `phase-1-baseline`).
 - `9593281` — Phase 2/3/4 backend+admin, mobile toolchain installed and verified from scratch.
 - `1c0608f` — Mobile screens for Phase 2 (Opportunities)/3 (ATS)/4 (Company Intelligence).
-- Everything under "Phase 5 — Applications" below is the next commit.
+- `1a58ef3` — Phase 5 (Applications) backend + mobile.
+- Everything under "Phase 6 — Aptitude Testing" below is the next commit (tag `phase-6-aptitude`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -25,14 +26,15 @@ This file is the single source of truth for build progress. Update it after ever
 
 ## Mobile toolchain — verified green, and staying green
 
-`flutter analyze`/`test`/`build apk --debug` have now been run clean **four times** across this
-session as features were added (Phase 0/1 screens, then Phase 2/3/4, then Phase 5) — each rebuild
-faster than the last since everything is cached:
+`flutter analyze`/`test`/`build apk --debug` have now been run clean **five times** across this
+session as features were added (Phase 0/1 screens, then Phase 2/3/4, then Phase 5, then Phase 6) —
+each rebuild faster than the last since everything is cached:
 - Toolchain-only build (first ever): 175.6MB APK, ~9 attempts to resolve (one-time cost — see git log
   on commit `9593281` for the full diagnosis: Maven Central rate-limiting, two outdated Gradle-
   incompatible plugins, one missing Android config).
 - Phase 2/3/4 screens added: 201.3MB APK, built in **118 seconds**.
 - Phase 5 (Applications) added: 201.3MB APK, built in **31 seconds**.
+- Phase 6 (Aptitude Testing) added: 192.1MB APK, built in **125 seconds**.
 
 ## Phase Status
 
@@ -44,10 +46,10 @@ faster than the last since everything is cached:
 | 3 — ATS | IN PROGRESS | Backend + mobile screens (CV upload, analyze, results) built and verified. Missing: CV rename/set-primary controls in the mobile UI. |
 | 4 — Company Intelligence | IN PROGRESS | Backend + mobile screens (feed, detail, follow, company profile) built and verified. Admin CMS UI for intelligence posts NOT built (API-only). |
 | 5 — Applications | IN PROGRESS | Backend + mobile screens (list, detail w/ timeline, stage update, notes, manual + from-job creation) built and verified. Missing: document attachments (needs the general document vault), email-detected stage confirmation (Phase 8). |
-| 6 — Aptitude Testing | NOT STARTED | |
+| 6 — Aptitude Testing | IN PROGRESS | Backend (question bank, snapshot-based sessions, deterministic generation/grading, analytics) + mobile (Prep Hub, configuration, exam screen, navigator, results, review, analytics, application/home/profile integration) built and verified. Missing: real image assets for Abstract-reasoning questions (text/emoji placeholders), per-section timing (only overall timing built), Company-Specific mode UI (architected, not built per spec). |
 | 7 — Interview Preparation | NOT STARTED | |
 | 8 — Email Tracking | NOT STARTED | |
-| 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships CMS built. Intelligence posts, question bank, source registry, discovery queue, user management NOT STARTED (or API-only). |
+| 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships/Aptitude question-bank CMS **APIs** built (admin web UI for aptitude questions not built — Phase 9 UI work). Intelligence posts, source registry, discovery queue, user management NOT STARTED (or API-only). |
 | 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
 | 11 — Production Hardening | NOT STARTED | |
 
@@ -89,21 +91,103 @@ Foundation, auth/profile, opportunities (jobs/scholarships/companies, backend+ad
 - Entry points: a job's detail screen ("Track This Application" → creates from that job), Home
   dashboard (real "Active Applications" count card, tappable), Profile → "My Applications".
 
+### Phase 6 — Aptitude Testing (backend AND mobile, verified)
+
+**Backend** (`app/models/question.py`, `app/models/test_session.py`, `app/aptitude/`,
+`app/services/aptitude_service.py`, `app/api/v1/aptitude.py`, `app/api/v1/admin/aptitude.py`):
+- Real question-bank data model (`question_categories`/`question_topics`/`questions`/
+  `question_options`) and a real session data model with a **snapshot table**
+  (`test_session_questions`) that freezes every question's content at session-creation time — editing
+  or deleting a master question later cannot alter a past session's grading or review (see
+  `ARCHITECTURE.md` → Aptitude assessment engine, `DATABASE.md`).
+- Deterministic (non-AI) generation engine: mixed-difficulty distribution with graceful backfill when
+  the bank is thin, and job/field-specific Technical-topic bias via a pure keyword lookup table — no
+  AI call anywhere in the selection path.
+- Timer authority lives in `expires_at` on the server; every session read/mutate lazily checks expiry
+  and auto-submits inline before doing anything else, so a client can never out-wait or bypass a timed
+  session's deadline.
+- Backend-authoritative grading (marks-weighted overall score with negative marking; per-question-type
+  logic; accuracy-based section breakdown), qualitative performance labels (never a random pass/fail),
+  and real analytics/recommendations computed from the user's actual submitted-session history (with a
+  minimum-attempt threshold before a topic counts as "weak").
+- "Practice Weak Areas" is a real, working feature end to end: `TestSessionCreate.topic_slugs`
+  overrides the generator's topic preference directly, and `GET /aptitude/recommendations` returns each
+  weak topic's slug specifically so the mobile client can feed it straight back in.
+- 404-not-403 ownership isolation (matching Applications) on every session/review/result route.
+- Admin CRUD API for the question bank exists (categories/topics/questions/options, role-gated like
+  jobs/scholarships) even though the admin web UI for it is deferred to Phase 9.
+- 141 real demo questions seeded (`scripts/seed_aptitude_questions.py`): Numerical 26, Verbal 26,
+  Abstract 21, Logical 20, Technical 32, Situational Judgement 16 — every question has a real correct
+  answer, explanation, topic, and difficulty. Abstract-reasoning questions use text/emoji shape
+  sequences rather than real images (documented limitation — no image-asset pipeline exists yet for the
+  question bank; `question_image_url` stays null on every seeded question rather than being faked).
+- 17 new backend tests (session creation/generation/no-duplicates, per-user isolation, answering and
+  changing an answer pre-submit, flagging, submit + negative-marking + unanswered-question grading,
+  cannot modify or re-grade after submit, review hidden pre-submit, timer expiry auto-submits and then
+  independently rejects further answers, remaining-seconds reporting, analytics + weak-topic-threshold
+  gating, job-specific topic selection via a real linked job, `topic_slugs` override for Practice Weak
+  Areas, application linkage that never mutates the real application's stage, admin question-bank CRUD
+  + non-admin-access rejection).
+
+**Mobile** (`lib/features/aptitude/`):
+- Preparation Hub (replaces the old Prepare-tab placeholder): "What are you preparing for?" with a real
+  Aptitude Test card and an honest, disabled "Interview Preparation — Coming in Phase 7" card (never a
+  dead button that does nothing when tapped), real stats (Tests Completed/Average Score/Questions
+  Practiced/Best Score) from `GET /aptitude/analytics`, and a recent-tests list.
+- Test configuration screen: mode selection (Practice/Timed/Mock/Job-Specific/Field-Specific —
+  Company-Specific intentionally not exposed in the UI, per spec), section multi-select, difficulty
+  (Easy/Medium/Hard/Mixed), question count (10/20/30/40/60), and timing (Untimed/Overall Timer — per-
+  section timing is a documented gap, see Known limitations). Job-Specific/Field-Specific modes let the
+  user pick from their own tracked applications to source the job context, reusing the existing
+  applications data rather than building a separate job picker.
+- Active exam screen: header (section name, "Question N of M", timer badge), progress bar, question
+  rendering (single/multiple-choice, numeric entry, image and passage support), Previous/Next/Flag/
+  Navigator/Submit controls, no ad placement. The countdown is computed from `expires_at` and a captured
+  device-to-server clock offset, re-evaluated every second — not a naive in-memory countdown — so an
+  app restart or backgrounding mid-test resumes with the correct remaining time.
+- Question Navigator (bottom sheet): Current/Answered/Unanswered/Flagged states with a legend and a
+  tap-to-jump grid.
+- Submit confirmation dialog with answered/unanswered/flagged counts and remaining time; auto-submits
+  without a confirmation dialog when the timer actually reaches zero.
+- Offline behavior: session/questions/answers/flags/timestamps are cached locally (SharedPreferences —
+  see `ARCHITECTURE.md` for why not Drift), answers persist immediately and sync incrementally, and a
+  pending-mutation queue replays once connectivity returns, with an honest "not synced yet" indicator
+  in the exam header rather than silently dropping answers.
+- Results screen (score, time used, correct/incorrect/unanswered, section breakdown, strongest/weakest
+  areas, Review/Retake/Done) and a post-submission-only question review screen (your answer vs. correct
+  answer, explanation) — the review screen is unreachable before submission because the backend itself
+  refuses the request (409), not just because the mobile UI hides a button.
+- Analytics screen: real stats, per-section breakdown, weak-topic recommendations, and a working
+  "Practice Weak Areas" button that starts a new session using the real `topic_slugs` from those
+  recommendations.
+- Real integration points: application detail screen shows a genuine "Prepare for Aptitude Test" button
+  (not just informational text) when `current_stage == APTITUDE_TEST`, preselecting that application's
+  job context — practicing never mutates the application's real stage. Home dashboard gets a real
+  "Preparation Progress" card and an "Upcoming Recruitment Stage" card when an application is at that
+  stage. Profile gets a real "Aptitude Performance" entry.
+- 21 new Flutter widget tests (Prep Hub content/navigation/real-stats, mode/section/difficulty/count/
+  timing configuration and test start, question rendering/answer selection/next-previous/flagging/
+  navigator/timer display, submit confirmation dialog, results screen, post-submit review screen,
+  analytics screen + Practice Weak Areas navigation, application "Prepare for Aptitude Test" button
+  presence and absence) — 22 total together with the pre-existing splash-boot smoke test, all passing.
+
 ## Partially Complete
 
-- **Mobile app**: Phase 0-5 core loops written and verified. Not yet built: internships/graduate-
+- **Mobile app**: Phase 0-6 core loops written and verified. Not yet built: internships/graduate-
   programme-specific UI, CV rename/set-primary, career-preferences-driven personalization anywhere,
-  application document attachments.
-- Admin web: no UI yet for intelligence posts (API-only).
+  application document attachments, per-section aptitude timing, real image assets for Abstract-
+  reasoning questions.
+- Admin web: no UI yet for intelligence posts or the aptitude question bank (both API-only).
 
 ## Not Started
 
 - Mobile: Google/Apple Sign-In, forgot-password, email verification, settings, profile-setup wizard
-  beyond name/location/experience, aptitude/interview prep screens (Prepare tab is still an honest
-  empty state).
-- Admin web: intelligence post CMS UI, question bank, source registry, discovery queue, user mgmt.
-- Everything under Phases 6-11 (aptitude engine, interview prep, email classifier, AdMob integration
-  code, production hardening).
+  beyond name/location/experience, interview prep screens (the Prepare tab's Interview card is an
+  honest disabled "Coming in Phase 7" state, not a placeholder screen).
+- Admin web: intelligence post CMS UI, aptitude question-bank CMS UI, source registry, discovery queue,
+  user mgmt.
+- Everything under Phases 7-11 (interview prep, email classifier, AdMob integration code, production
+  hardening).
 
 ## Blocked by Credential / Tooling
 
@@ -118,17 +202,35 @@ Foundation, auth/profile, opportunities (jobs/scholarships/companies, backend+ad
 None currently open. Full history of bugs found-and-fixed this session lives in the commit messages
 for `9593281` and `1c0608f` (a nullable comparison bug, an admin form page-size mismatch, job expiry
 not enforced everywhere, two Gradle-plugin incompatibilities, an `AppColors` typo, a `file_picker` v12
-API change, and a save/unsave toggle that silently no-op'd outside the main list's state).
+API change, and a save/unsave toggle that silently no-op'd outside the main list's state). Phase 6
+caught and fixed one real bug before it shipped: an aptitude session created from `application_id`
+alone was silently discarding the linked job's industry/title context (an early-return bug in
+`AptitudeService._resolve_job_context`), which would have made Job-Specific practice from an
+application never actually bias toward the right Technical topics — fixed and covered by
+`test_job_specific_session_prefers_mapped_technical_topics` and the mobile
+`application_prepare_button_test.dart`.
 
 ## Tests
 
-- Backend: `pytest -q` → **58 passed** across 8 test files (health, auth, admin/companies, jobs,
-  scholarships, uploads, ATS, intelligence, applications).
+- Backend: `pytest -q` → **75 passed** across 9 test files (health, auth, admin/companies, jobs,
+  scholarships, uploads, ATS, intelligence, applications, **aptitude — 17 tests, new this phase**).
 - Admin: no automated tests — verified by hand via live browser interaction.
-- Mobile: `flutter test` → 1 passing smoke test (app boots to splash). Widget/unit tests for the
-  Phase 2-5 screens are still a Next Task — verification so far is `analyze` (type/lint correctness)
-  + real APK builds (compiles and packages) + manual reasoning about data flow, not automated
-  behavioral tests of the screens themselves.
+- Mobile: `flutter test` → **22 passed** (1 pre-existing splash-boot smoke test + 21 new Phase 6 widget
+  tests across Prep Hub, test configuration, the active exam screen, submit confirmation, results,
+  review, analytics, and the application "Prepare for Aptitude Test" button). Widget/unit tests for the
+  Phase 2-5 screens are still a Next Task — this phase only added coverage for the screens it built.
+- **Not performed**: interactive manual acceptance testing on a real device/emulator (no Android
+  emulator or physical device is available in this environment — only `flutter analyze`/`test`/`build
+  apk --debug`, which compiles, packages, and exercises the screens' logic via widget tests, but never
+  actually launches the APK). The three acceptance flows the Phase 6 spec asks for (a full timed test
+  happy path, a short-timed-test timeout/auto-submit path, an application-driven job-specific prep
+  path) are each covered by an equivalent automated test instead: `test_expired_session_auto_submits_on_access_and_rejects_further_answers`
+  (backend) + `active_test_screen_test.dart`'s timer-badge test (mobile) for the timeout path;
+  `test_job_specific_session_prefers_mapped_technical_topics` (backend) +
+  `application_prepare_button_test.dart` (mobile) for the application-driven path; the full
+  session-creation-through-submission-through-review backend test chain plus the mobile exam-screen
+  tests for the general happy path. This is real, passing, automated coverage of the same behavior —
+  but it is not the same as a person tapping through the built APK on a device, which has not happened.
 
 ## Known issues to revisit
 
@@ -140,16 +242,30 @@ API change, and a save/unsave toggle that silently no-op'd outside the main list
   string form rather than a real JSON containment query — fine at this scale.
 - The `recommended` job/scholarship sort is a documented placeholder (featured-first, then newest).
 - ATS job-title scoring is a keyword-overlap proxy, not structural CV parsing — documented as such.
-- No admin CMS UI for intelligence posts yet.
+- No admin CMS UI for intelligence posts or the aptitude question bank yet (both API-only).
 - No mobile widget/unit tests for any Phase 2-5 screens yet — see Tests section above.
 - `ApplicationUpdate` (`PUT /applications/{id}`) intentionally cannot change `current_stage` — only
   `/stage` can, so every stage change leaves a timeline entry. Make sure any future mobile "quick
   edit" form respects this and doesn't try to slip a stage change through the generic update.
+- Abstract-reasoning aptitude questions use text/emoji shape sequences, not real images — no image-
+  asset pipeline exists yet for the question bank (`question_image_url` stays null on every seeded
+  question). Revisit once admin image upload is wired to the question CMS.
+- Aptitude timing only supports "Untimed" and "Overall Timer" — `TestSession.time_limit_seconds` is a
+  single overall value; there's no per-section time allocation in the schema. Per-section timing is not
+  implemented, even though the spec lists it as an option. Documented rather than faked in the mobile
+  configuration screen (only the two working options are shown).
+- `TestMode.COMPANY_SPECIFIC` exists in the backend enum (spec asks for it to be architected, not
+  built) but has no generation logic behind it and is not selectable in the mobile UI — selecting it
+  via a raw API call would just behave like a normal session with no company-specific bias.
+- No interactive manual QA pass on a real device/emulator for the Phase 6 acceptance flows — see Tests
+  section above for what automated coverage substitutes for it.
 
 ## Next Tasks
 
-1. Commit the Phase 5 (Applications) backend + mobile work — currently uncommitted.
-2. Widget tests for the save/unsave flows and the application stage-update flow, given how many real
-   bugs this session's manual review process has caught in exactly this kind of code.
-3. Phase 6 (Aptitude Testing) or Phase 7 (Interview Preparation) — whichever the user prioritizes,
-   or an admin CMS UI for intelligence posts to close out Phase 9's remaining gap.
+1. Commit the Phase 6 (Aptitude Testing) backend + mobile work — currently uncommitted.
+2. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
+   how many real bugs this session's manual review process has caught in exactly this kind of code.
+3. Phase 7 (Interview Preparation), or an admin CMS UI for intelligence posts / the aptitude question
+   bank to close out Phase 9's remaining gaps — whichever the user prioritizes.
+4. A real interactive QA pass on an emulator/device once one is available in this environment, to
+   validate the Phase 6 acceptance flows beyond what automated tests can confirm.

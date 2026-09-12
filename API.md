@@ -101,18 +101,42 @@ All require a consumer bearer token. Applications are strictly user-owned — ev
 | DELETE | `/api/v1/applications/{id}` | |
 | GET | `/api/v1/me/applications-summary` | `{"active_applications": <count>}` — excludes `HIRED`/`REJECTED`/`WITHDRAWN`/`EXPIRED`. Backs the Home dashboard's "Active Applications" card with a real number. |
 
+## Implemented endpoints (Phase 6 — Aptitude Testing)
+
+All consumer routes require a bearer token and are strictly per-user — a session that isn't yours
+404s (never 403), matching the isolation pattern established for `/applications`. Grading is always
+backend-authoritative; `is_correct` is never sent to the client before submission.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/aptitude/categories` | The six fixed sections (Numerical/Verbal/Abstract/Logical/Situational Judgement/Technical). |
+| GET | `/api/v1/aptitude/topics` | Optional `?category_id=`. |
+| POST | `/api/v1/aptitude/sessions` | Body (`TestSessionCreate`): `mode` (`PRACTICE`/`TIMED`/`MOCK`/`JOB_SPECIFIC`/`FIELD_SPECIFIC`), `sections` (category slugs; empty = all), `difficulty` (`EASY`/`MEDIUM`/`HARD`/`EXPERT`/`MIXED`, default `MIXED`), `question_count` (1-100), `timing` (`UNTIMED`/`OVERALL`), `time_limit_minutes` (required if `OVERALL`), optional `application_id`/`job_id` (resolves field/industry/job_role context for Technical-topic bias — see `technical_topic_map.py`), optional `topic_slugs` (explicit override, used by "Practice Weak Areas" — bypasses job/field inference entirely). Generates the question set deterministically (no AI), snapshots every question, and returns `TestSessionDetailOut` (includes `questions`, `server_time`, `remaining_seconds`). Creating a session starts it immediately (`status=IN_PROGRESS`). 422 if no active question matches the filters at all. |
+| GET | `/api/v1/aptitude/sessions` | Paginated history, `?status=` filter. |
+| GET | `/api/v1/aptitude/sessions/{id}` | Full detail. Lazily auto-submits and returns the post-expiry state if `expires_at` has passed — the client never needs to call submit itself on timeout, though it may. |
+| PUT | `/api/v1/aptitude/sessions/{id}/answers/{question_id}` | `question_id` here is the **snapshot** id (`test_session_questions.id`), returned as each question's `id` in the session payload. Body: `selected_option_ids`/`answer_numeric_value`/`time_spent_seconds`. 409 if the session is no longer `IN_PROGRESS` (submitted, or just auto-submitted by this same call's expiry check). |
+| POST | `/api/v1/aptitude/sessions/{id}/flag/{question_id}` | Toggles the flag on that question; returns the updated question. |
+| POST | `/api/v1/aptitude/sessions/{id}/submit` | Grades all answers (marks-weighted overall score; per-question-type: choice questions by exact selected-set match, numeric by tolerance comparison), computes `section_breakdown` (accuracy per category), and returns `TestResultOut`. Idempotent — calling it again after submission just returns the existing result rather than erroring. |
+| GET | `/api/v1/aptitude/sessions/{id}/results` | 409 until submitted. |
+| GET | `/api/v1/aptitude/sessions/{id}/review` | 409 until submitted — only then does the response include which option was correct (`ReviewOptionOut.is_correct`) alongside the user's answer and the stored explanation. |
+| GET | `/api/v1/aptitude/analytics` | `AptitudeAnalyticsOut` — tests completed, questions answered, average/best score, average time per question, `by_category`/`by_topic` breakdowns — computed from the user's own submitted sessions only. |
+| GET | `/api/v1/aptitude/recommendations` | Weak topics (accuracy < 60%, and only once a topic has at least 3 attempted questions — avoids drawing conclusions from a tiny sample) with each topic's slug, ready to feed straight back into `POST /sessions` as `topic_slugs`. |
+
+Admin question-bank CRUD (categories/topics/questions/options) exists under `/api/v1/admin/aptitude/*`
+(role-gated the same way as jobs/scholarships — EDITOR+ write, REVIEWER read) even though the admin
+web UI for it isn't built until Phase 9; it's never exposed to a normal consumer token.
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```
 /profile         career preferences, skills, experiences, education, certifications (beyond §10 basics)
 /applications    document attachments (CRUD/stage/notes already implemented above)
-/aptitude        section/question selection, test session lifecycle, submit, results, analytics
 /interview       question sets, sessions, STAR stories
 /documents       CV vault + document vault upload/list/rename/delete (signed URLs, private by default)
 /email           connect/disconnect Gmail/Outlook, pending-match confirmation queue
 /notifications   list, mark read, preferences
-/admin/*         news/company-follow publishing, question bank, source registry, discovery queue,
-                 user management (jobs/scholarships/companies admin already implemented above)
+/admin/*         news/company-follow publishing, source registry, discovery queue, user management
+                 (jobs/scholarships/companies/aptitude question-bank admin already implemented above)
 ```
 
 Each group gets its exact request/response schemas documented here when its phase is implemented —

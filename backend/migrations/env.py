@@ -19,7 +19,9 @@ from app.models import (  # noqa: F401
     intelligence_post,
     job,
     profile,
+    question,
     scholarship,
+    test_session,
     user,
 )
 

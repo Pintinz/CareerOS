@@ -6,6 +6,11 @@ import "../core/app_providers.dart";
 import "../features/applications/presentation/application_detail_screen.dart";
 import "../features/applications/presentation/application_list_screen.dart";
 import "../features/applications/presentation/create_application_screen.dart";
+import "../features/aptitude/presentation/active_test_screen.dart";
+import "../features/aptitude/presentation/aptitude_analytics_screen.dart";
+import "../features/aptitude/presentation/question_review_screen.dart";
+import "../features/aptitude/presentation/test_configuration_screen.dart";
+import "../features/aptitude/presentation/test_results_screen.dart";
 import "../features/ats/presentation/ats_analyze_screen.dart";
 import "../features/auth/presentation/login_screen.dart";
 import "../features/companies/presentation/company_detail_screen.dart";
@@ -90,6 +95,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: "/applications/:id",
         builder: (context, state) => ApplicationDetailScreen(applicationId: state.pathParameters["id"]!),
+      ),
+      GoRoute(
+        path: "/prepare/aptitude/configure",
+        builder: (context, state) =>
+            TestConfigurationScreen(args: state.extra as AptitudeConfigureArgs? ?? const AptitudeConfigureArgs()),
+      ),
+      GoRoute(
+        path: "/prepare/aptitude/analytics",
+        builder: (context, state) => const AptitudeAnalyticsScreen(),
+      ),
+      GoRoute(
+        path: "/prepare/aptitude/sessions/:id",
+        builder: (context, state) => ActiveTestScreen(sessionId: state.pathParameters["id"]!),
+      ),
+      GoRoute(
+        path: "/prepare/aptitude/sessions/:id/results",
+        builder: (context, state) => TestResultsScreen(sessionId: state.pathParameters["id"]!),
+      ),
+      GoRoute(
+        path: "/prepare/aptitude/sessions/:id/review",
+        builder: (context, state) => QuestionReviewScreen(sessionId: state.pathParameters["id"]!),
       ),
     ],
   );

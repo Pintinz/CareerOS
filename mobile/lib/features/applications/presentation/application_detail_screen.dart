@@ -6,6 +6,8 @@ import "package:intl/intl.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
 import "../../../theme/app_colors.dart";
+import "../../aptitude/data/aptitude_models.dart";
+import "../../aptitude/presentation/test_configuration_screen.dart";
 import "../data/application_models.dart";
 import "application_providers.dart";
 import "stage_badge.dart";
@@ -125,7 +127,51 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
                 ],
               ),
             ),
-            if (_stagePrepHint(application.currentStage) != null)
+            if (application.currentStage == ApplicationStage.aptitudeTest)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.blue.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.fact_check_outlined, size: 18, color: AppColors.blue),
+                          SizedBox(width: 8),
+                          Text("Upcoming: Aptitude Test", style: TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Practice with questions tailored to this role. Practicing here never changes this "
+                        "application's stage — update it yourself once you've taken the employer's real assessment.",
+                        style: TextStyle(fontSize: 12, color: AppColors.muted),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => context.push(
+                            "/prepare/aptitude/configure",
+                            extra: AptitudeConfigureArgs(
+                              initialMode: TestMode.jobSpecific,
+                              applicationId: application.id,
+                            ),
+                          ),
+                          child: const Text("Prepare for Aptitude Test"),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (_stagePrepHint(application.currentStage) != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                 child: Container(
@@ -195,12 +241,10 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
     );
   }
 
-  /// Spec §38: stage-aware preparation hints. Phases 6/7 (aptitude/interview prep) aren't built
-  /// yet, so this is informational text only — no dead "Prepare" button pointing nowhere.
+  /// Spec §38: stage-aware preparation hints. Aptitude (Phase 6) now gets a real button above;
+  /// interview prep (Phase 7) is still informational-only — no dead button pointing nowhere.
   String? _stagePrepHint(ApplicationStage stage) {
     switch (stage) {
-      case ApplicationStage.aptitudeTest:
-        return "Aptitude test preparation is coming in a future update.";
       case ApplicationStage.interview:
       case ApplicationStage.finalInterview:
         return "Interview preparation is coming in a future update.";
