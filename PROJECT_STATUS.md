@@ -12,8 +12,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `1c0608f` — Mobile screens for Phase 2 (Opportunities)/3 (ATS)/4 (Company Intelligence).
 - `1a58ef3` — Phase 5 (Applications) backend + mobile.
 - `6775869` — Phase 6 (Aptitude Testing) backend + mobile (tagged `phase-6-aptitude`).
-- Everything under "Phase 7 — Interview Preparation & STAR" below is the next commit (tag
-  `phase-7-interview`).
+- `d9fe06f` — Phase 7 (Interview Preparation & STAR) backend + mobile (tagged `phase-7-interview`).
 
 ## Environment notes (read before assuming anything is verified)
 
