@@ -126,17 +126,43 @@ Admin question-bank CRUD (categories/topics/questions/options) exists under `/ap
 (role-gated the same way as jobs/scholarships — EDITOR+ write, REVIEWER read) even though the admin
 web UI for it isn't built until Phase 9; it's never exposed to a normal consumer token.
 
+## Implemented endpoints (Phase 7 — Interview Preparation & STAR)
+
+All consumer routes require a bearer token and are strictly per-user (404, never 403, on a session/
+story that isn't yours). Practicing here **never** mutates a linked application's real
+`current_stage` or `assessment_completed` — see PRIVACY.md.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/interview/categories` | The ten fixed categories (spec §6). |
+| GET | `/api/v1/interview/topics` | Optional `?category_id=`. |
+| POST | `/api/v1/interview/sessions` | Body (`InterviewSessionCreate`): `mode` (`PRACTICE`/`MOCK`), `categories` (category slugs; empty = all), `category_counts` (optional category-slug → exact-count map, for a Mock Interview's "Technical 4 / Behavioral 3 / Safety 2 / HR 1" builder — overrides `categories`/`question_count`), `difficulty`, `question_count`, `time_per_question_seconds` (self-paced display only — never enforced server-side), optional `application_id`/`job_id`/`company_id` (resolves job/company context for Technical-topic and company-tagged-question bias), optional `experience_level` (excludes `EXPERT` questions from a `MIXED` session unless the difficulty is explicitly `EXPERT` — spec §7). Deterministic generation (no AI), immutable per-question snapshots. Creating a session starts it immediately. 422 if nothing matches. |
+| GET | `/api/v1/interview/sessions` | Paginated history. |
+| GET | `/api/v1/interview/sessions/{id}` | Full detail, including each question's `suggested_star_story_ids` (spec §16 — matched by the user's own STAR story categories against the question's `star_tags`, computed fresh on every read). |
+| PUT | `/api/v1/interview/sessions/{id}/answers/{question_id}` | `question_id` is the snapshot id. Body: `answer_text`/`notes`/`audio_path`/`audio_duration_seconds`/`self_rating` (1-5)/`used_star`/`gave_measurable_result`/`answered_exact_question`/`is_skipped`/`is_marked_practiced`/`is_saved`. Returns the updated question, including a deterministic `structure_check` (word count, metric-presence, STAR-keyword hints — spec §22-23's "Answer Structure Check", explicitly never called AI analysis) when `answer_text` is present. 409 once the session is no longer `IN_PROGRESS`. |
+| POST | `/api/v1/interview/sessions/{id}/complete` | Marks the session `COMPLETED` and returns `SessionCompletionOut` (questions completed/skipped, average self-rating, average answer length, STAR usage rate, per-category breakdown, areas practiced vs. still uncovered). Idempotent — safe to call again on an already-completed session, which just recomputes and returns the same stats. |
+| GET | `/api/v1/interview/analytics` | Sessions completed, questions practiced, average self-rating, STAR stories created/ready, company-prep-completed count, technical topics covered, per-category completion — all **system-calculated** from the user's own session/answer/STAR history. |
+| GET | `/api/v1/interview/readiness` | Optional `?application_id=` to scope Company/Job-Specific components to that application's linked job/company. Returns `overall` (weighted per spec §11's 25/25/15/15/15/5 split, renormalized across whichever components are applicable) plus the per-component breakdown, or `insufficient_data: true` with `overall: null` rather than inventing a number. |
+| GET | `/api/v1/interview/prep/company` | Requires `?application_id=`. Real company overview (from `companies`), recent developments (from `intelligence_posts`, company-scoped), likely topics (job-role keyword mapping), other open roles at that company, and a fixed disclaimer that this is CareerOS practice, not an official employer interview guide (spec §9/§35). |
+| GET / PUT | `/api/v1/interview/prep/progress`, `/prep/checklist`, `/prep/questions-to-ask`, `/prep/topics` | All accept optional `?application_id=` (omitted = the general, non-application-linked progress row). Checklist and questions-to-ask completion persist per spec §26-27; topic review persists which aptitude-taxonomy technical topics (by slug) the user has marked reviewed (spec §28). |
+| GET / POST | `/api/v1/star-stories` | List (optional `?category=`) / create a STAR story. Every response includes a `completeness` object (per-section status: `missing`/`brief`/`complete`/`strong`, plus named `gaps` like `missing_measurable_outcome`) computed deterministically (`app/interview/star_check.py`) — never AI-graded. |
+| GET / PUT / DELETE | `/api/v1/star-stories/{id}` | |
+
+Admin question-bank CRUD exists under `/api/v1/admin/interview/*` (categories/topics/questions,
+same EDITOR+/REVIEWER role split as aptitude/jobs), including assigning a question to a company,
+role, industry, or experience level — the admin web UI for it is deferred to Phase 9.
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```
 /profile         career preferences, skills, experiences, education, certifications (beyond §10 basics)
 /applications    document attachments (CRUD/stage/notes already implemented above)
-/interview       question sets, sessions, STAR stories
 /documents       CV vault + document vault upload/list/rename/delete (signed URLs, private by default)
 /email           connect/disconnect Gmail/Outlook, pending-match confirmation queue
 /notifications   list, mark read, preferences
 /admin/*         news/company-follow publishing, source registry, discovery queue, user management
-                 (jobs/scholarships/companies/aptitude question-bank admin already implemented above)
+                 (jobs/scholarships/companies/aptitude/interview question-bank admin already
+                 implemented above)
 ```
 
 Each group gets its exact request/response schemas documented here when its phase is implemented —

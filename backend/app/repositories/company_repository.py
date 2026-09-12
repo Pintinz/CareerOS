@@ -20,6 +20,13 @@ class CompanyRepository:
     async def get_by_id_or_slug(self, id_or_slug: str) -> Company | None:
         return await self.get_by_id(id_or_slug) or await self.get_by_slug(id_or_slug)
 
+    async def get_by_name(self, name: str) -> Company | None:
+        """Best-effort case-insensitive exact-name match — used only to resolve company-specific
+        interview prep for a manually-entered application (no job_id, so no company_id) whose
+        `company_name` happens to match a real company already in our database."""
+        result = await self.db.execute(select(Company).where(func.lower(Company.name) == name.lower()))
+        return result.scalars().first()
+
     async def generate_unique_slug(self, name: str) -> str:
         base_slug = slugify(name)
         slug = base_slug

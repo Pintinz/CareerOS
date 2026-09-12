@@ -7,8 +7,12 @@ import 'package:careeros/features/aptitude/data/aptitude_models.dart';
 import 'package:careeros/features/aptitude/data/aptitude_offline_cache.dart';
 import 'package:careeros/features/aptitude/data/aptitude_repository.dart';
 import 'package:careeros/features/aptitude/presentation/aptitude_providers.dart';
+import 'package:careeros/features/interview/data/interview_offline_cache.dart';
+import 'package:careeros/features/interview/presentation/interview_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../interview/interview_test_support.dart';
 
 /// Test double for [AptitudeRepository] — overrides every network-hitting method so widget tests
 /// never touch a real ApiClient/Dio. The base class is only extended (not reimplemented from
@@ -222,12 +226,19 @@ class FakeApplicationRepository extends ApplicationRepository {
 Future<List<Override>> aptitudeTestOverrides({
   required FakeAptitudeRepository repository,
   FakeApplicationRepository? applicationRepository,
+  FakeInterviewRepository? interviewRepository,
 }) async {
   SharedPreferences.setMockInitialValues({});
   final offlineCache = await AptitudeOfflineCache.create();
+  final interviewOfflineCache = await InterviewOfflineCache.create();
   return [
     aptitudeRepositoryProvider.overrideWithValue(repository),
     aptitudeOfflineCacheProvider.overrideWithValue(offlineCache),
     if (applicationRepository != null) applicationRepositoryProvider.overrideWithValue(applicationRepository),
+    // Screens shared across features (Prep Hub, Application Detail, Home) now also read
+    // interview providers — always wire a fake so those cross-feature widgets never hit a real
+    // ApiClient even in tests that only care about aptitude behavior.
+    interviewRepositoryProvider.overrideWithValue(interviewRepository ?? FakeInterviewRepository()),
+    interviewOfflineCacheProvider.overrideWithValue(interviewOfflineCache),
   ];
 }

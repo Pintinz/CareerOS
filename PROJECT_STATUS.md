@@ -1,6 +1,6 @@
 # CareerOS — Project Status
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 This file is the single source of truth for build progress. Update it after every phase.
 
@@ -12,6 +12,8 @@ This file is the single source of truth for build progress. Update it after ever
 - `1c0608f` — Mobile screens for Phase 2 (Opportunities)/3 (ATS)/4 (Company Intelligence).
 - `1a58ef3` — Phase 5 (Applications) backend + mobile.
 - `6775869` — Phase 6 (Aptitude Testing) backend + mobile (tagged `phase-6-aptitude`).
+- Everything under "Phase 7 — Interview Preparation & STAR" below is the next commit (tag
+  `phase-7-interview`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -26,15 +28,16 @@ This file is the single source of truth for build progress. Update it after ever
 
 ## Mobile toolchain — verified green, and staying green
 
-`flutter analyze`/`test`/`build apk --debug` have now been run clean **five times** across this
-session as features were added (Phase 0/1 screens, then Phase 2/3/4, then Phase 5, then Phase 6) —
-each rebuild faster than the last since everything is cached:
+`flutter analyze`/`test`/`build apk --debug` have now been run clean **six times** across this
+session as features were added (Phase 0/1 screens, then Phase 2/3/4, then Phase 5, then Phase 6,
+then Phase 7) — each rebuild faster than the last since everything is cached:
 - Toolchain-only build (first ever): 175.6MB APK, ~9 attempts to resolve (one-time cost — see git log
   on commit `9593281` for the full diagnosis: Maven Central rate-limiting, two outdated Gradle-
   incompatible plugins, one missing Android config).
 - Phase 2/3/4 screens added: 201.3MB APK, built in **118 seconds**.
 - Phase 5 (Applications) added: 201.3MB APK, built in **31 seconds**.
 - Phase 6 (Aptitude Testing) added: 192.1MB APK, built in **125 seconds**.
+- Phase 7 (Interview Preparation) added: 192.2MB APK, built in **86 seconds**.
 
 ## Phase Status
 
@@ -47,9 +50,9 @@ each rebuild faster than the last since everything is cached:
 | 4 — Company Intelligence | IN PROGRESS | Backend + mobile screens (feed, detail, follow, company profile) built and verified. Admin CMS UI for intelligence posts NOT built (API-only). |
 | 5 — Applications | IN PROGRESS | Backend + mobile screens (list, detail w/ timeline, stage update, notes, manual + from-job creation) built and verified. Missing: document attachments (needs the general document vault), email-detected stage confirmation (Phase 8). |
 | 6 — Aptitude Testing | IN PROGRESS | Backend (question bank, snapshot-based sessions, deterministic generation/grading, analytics) + mobile (Prep Hub, configuration, exam screen, navigator, results, review, analytics, application/home/profile integration) built and verified. Missing: real image assets for Abstract-reasoning questions (text/emoji placeholders), per-section timing (only overall timing built), Company-Specific mode UI (architected, not built per spec). |
-| 7 — Interview Preparation | NOT STARTED | |
+| 7 — Interview Preparation | IN PROGRESS | Backend (10-category question bank, snapshot-based sessions, deterministic generation/self-paced mock timer/company+job bias, STAR stories + completeness check + question matching, readiness/analytics, company-research prep) + mobile (Interview Home, configuration, session screen, results, STAR builder, analytics/readiness, company prep + checklist, application/home/profile integration) built and verified. Missing: real audio recording (UI is designed for it but not implemented — see Known limitations), per-category Mock Interview count builder UI (backend supports `category_counts`, mobile only exposes even category selection), offline caching of STAR stories/checklist/analytics (only the active session itself is offline-cached). |
 | 8 — Email Tracking | NOT STARTED | |
-| 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships/Aptitude question-bank CMS **APIs** built (admin web UI for aptitude questions not built — Phase 9 UI work). Intelligence posts, source registry, discovery queue, user management NOT STARTED (or API-only). |
+| 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships/Aptitude/Interview question-bank CMS **APIs** built (admin web UI for aptitude/interview questions not built — Phase 9 UI work). Intelligence posts, source registry, discovery queue, user management NOT STARTED (or API-only). |
 | 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
 | 11 — Production Hardening | NOT STARTED | |
 
@@ -171,23 +174,124 @@ Foundation, auth/profile, opportunities (jobs/scholarships/companies, backend+ad
   analytics screen + Practice Weak Areas navigation, application "Prepare for Aptitude Test" button
   presence and absence) — 22 total together with the pre-existing splash-boot smoke test, all passing.
 
+### Phase 7 — Interview Preparation & STAR (backend AND mobile, verified)
+
+**Backend** (`app/models/interview.py`, `app/interview/`, `app/services/interview_service.py`,
+`app/api/v1/interview.py`, `app/api/v1/admin/interview.py`):
+- Real question-bank data model (`interview_question_categories`/`interview_topics`/
+  `interview_questions`) with the ten fixed categories from spec §6, plus a real session data
+  model with the same **immutable snapshot pattern** as aptitude
+  (`interview_session_questions`) — editing a master interview question later can never alter a
+  past session's guidance, evaluation points, or STAR tags.
+- Deterministic (non-AI) generation: even distribution across selected categories, or an explicit
+  `category_counts` map for a Mock Interview's fixed "Technical 4 / Behavioral 3 / Safety 2 / HR 1"
+  style builder. Company bias (questions editorially tagged to a specific employer) and job-role
+  Technical-topic bias (a keyword map separate from aptitude's, since interview topics like "shift
+  handover" have no aptitude-question equivalent) are tried as independent fallback tiers rather
+  than ANDed together — a real bug caught and fixed during this phase (see Known Bugs).
+- Junior-candidate gating (spec §7): a `MIXED` session excludes `EXPERT` questions for declared
+  `ENTRY`/`JUNIOR` experience levels unless `EXPERT` difficulty is explicitly requested.
+- No server-enforced timer for Mock Interview — `time_per_question_seconds` is self-paced/
+  informational only, a deliberate and documented difference from the aptitude engine's
+  server-authoritative `expires_at` (open-ended interview answers aren't a fixed-choice grading
+  window). See ARCHITECTURE.md.
+- Deterministic "Answer Structure Check" (word count, metric-presence, STAR-keyword hints) and a
+  deterministic STAR completeness check (per-section `missing`/`brief`/`complete`/`strong` status
+  plus named gaps like `missing_measurable_outcome`) — neither is ever called "AI analysis" or "AI
+  grading" anywhere in code, schemas, or copy, per explicit spec instruction.
+- STAR-to-question matching: a question's `star_tags` are compared against the categories of the
+  user's own STAR stories to populate `suggested_star_story_ids` — pure tag comparison, no AI.
+- Readiness calculation with spec §11's exact six weighted components, each derived from real
+  stored activity and capped against a configurable target; components that don't apply (no
+  `application_id` given) are excluded and the remaining weights renormalized rather than treated
+  as zero; below a minimum-activity threshold, returns `insufficient_data: true` instead of a
+  fabricated number.
+- Company/role preparation reuses real CareerOS data (companies, company-scoped intelligence
+  posts, other open jobs at that company) with a fixed, honest disclaimer that this is CareerOS
+  practice, never a claim to know a company's actual interview questions (spec §9/§35).
+- A persisted company-research checklist (7 fixed items) and a curated "questions to ask the
+  interviewer" catalog (18 questions across 9 categories) that users can save/mark-planned/extend
+  with their own questions.
+- 404-not-403 ownership isolation on every session/STAR/progress route, matching aptitude/
+  applications. Admin CRUD API for the question bank exists, role-gated like aptitude/jobs, even
+  though the admin web UI for it is deferred to Phase 9.
+- 213 real demo questions seeded (`scripts/seed_interview_questions.py`): HR/General 27,
+  Behavioral 30, Technical 41 (Mechanical/Process, Data/Analytics, Software, General workplace),
+  Safety 20, Leadership 20, Management 20, Situational 20, Career Motivation 15, Company-Specific
+  10, Job-Specific 10 — every question has real, hand-written `answer_guidance`/
+  `evaluation_points`, never AI-generated or presented as employer-official.
+- 16 new backend tests (question generation and best-available-set behavior, per-user isolation,
+  answering + completion stat computation, cannot modify answers after completion, company-specific
+  question preference, job-specific topic preference via a real linked job, application-linked
+  session resolves job/company context and never mutates the real application's stage, readiness
+  insufficient-data-then-real-score transition, analytics reflecting real activity, STAR CRUD +
+  isolation, STAR completeness gap reporting, STAR-to-question matching, checklist/topic-review
+  persistence, admin question-bank CRUD + non-admin-access rejection).
+
+**Mobile** (`lib/features/interview/`):
+- Preparation Hub's Interview card is now real (replacing the Phase 6 "Coming in Phase 7" disabled
+  state) with its own "Start Preparing" entry point and real stats (Interview Sessions/Questions
+  Practiced/STAR Stories Ready/Interview Readiness) from live analytics/readiness endpoints.
+- Interview Home hub: Quick Start (Mock Interview/Question Practice/STAR Story Builder/Readiness &
+  Analytics) plus category tiles (Company-Specific/Job-Specific/Technical/Behavioral/HR-General/
+  Safety/Leadership/Management), each launching the configuration screen preselected.
+- Configuration screen: mode (Question Practice/Mock Interview), category multi-select, difficulty,
+  question count, and an optional self-paced per-question timer for Mock Interview (explicitly
+  labeled as reference-only, nothing auto-submits when it elapses).
+- Session screen (shared by both modes): question text, category/difficulty badges, Show/Hide
+  Guidance (what the interviewer is assessing, what a strong answer includes, common mistakes,
+  technical concepts to mention), a typed-answer field with a live Answer Structure Check, a notes
+  field, Mark as Practiced, Save (bookmark), a 1-5 self-rating row (Poor/Weak/Fair/Strong/
+  Excellent), and three yes/no self-checks (Used STAR? / Gave a measurable result? / Answered the
+  exact question?) — all explicitly user-declared, never system-inferred. Previous/Next/Skip/End
+  Interview controls; a Mock Interview session shows the countdown badge.
+- Results screen: questions completed/skipped, average self-rating, average answer length, STAR
+  usage rate, per-category breakdown, areas practiced vs. still uncovered.
+- STAR Story Builder: list screen with a completeness indicator per story; an editor with a live
+  completeness card (Situation/Task/Action/Result status plus named gaps) that recomputes on save.
+- Analytics/Readiness screen: the same "not enough activity" honesty pattern as aptitude when data
+  is insufficient; otherwise a real overall percentage plus the six-component breakdown and
+  activity stats.
+- Company Preparation screen (application-linked): company overview, recent developments, role
+  relevance, likely topics, other open roles, the persisted research checklist, and the curated
+  questions-to-ask catalog with Save/Planned toggles and a custom-question composer.
+- Real integration points: application detail screen shows a genuine "Interview Preparation" card
+  (readiness/questions-practiced/STAR-ready stats, Company Research + Continue Preparation buttons)
+  for Interview/Final Interview/Recruiter Screen/Assessment Centre stages — practicing never
+  mutates the application's real stage. Home dashboard gets a real "Upcoming Interview Preparation"
+  card with that application's actual readiness percentage. Profile gets a real "Interview
+  Preparation" entry.
+- Offline behavior: the active session (questions/answers/notes/self-ratings/flags) is cached
+  locally and answers sync incrementally with a pending-mutation queue, mirroring the aptitude
+  engine's approach — see Known limitations for what is *not* offline-cached (STAR stories,
+  checklist, analytics).
+- 16 new Flutter widget tests (Interview Home quick actions/category-tile navigation, mode/category
+  configuration and session start, question rendering/guidance-reveal/answer+self-rating sync/
+  next-previous/mock-timer-display, STAR story creation with concrete completeness gaps + list
+  completeness indicator, company prep overview/disclaimer/checklist persistence, readiness
+  insufficient-data-then-real-score + activity stats, application "Interview Preparation" card
+  presence across all four interview-related stages, an already-cached session continuing to work
+  when the server is unreachable) — 39 Flutter tests total together with Phases 6 and the original
+  smoke test, all passing.
+
 ## Partially Complete
 
-- **Mobile app**: Phase 0-6 core loops written and verified. Not yet built: internships/graduate-
+- **Mobile app**: Phase 0-7 core loops written and verified. Not yet built: internships/graduate-
   programme-specific UI, CV rename/set-primary, career-preferences-driven personalization anywhere,
   application document attachments, per-section aptitude timing, real image assets for Abstract-
-  reasoning questions.
-- Admin web: no UI yet for intelligence posts or the aptitude question bank (both API-only).
+  reasoning questions, real interview audio recording, offline caching of STAR stories/checklist/
+  interview analytics.
+- Admin web: no UI yet for intelligence posts, the aptitude question bank, or the interview
+  question bank (all three API-only).
 
 ## Not Started
 
 - Mobile: Google/Apple Sign-In, forgot-password, email verification, settings, profile-setup wizard
-  beyond name/location/experience, interview prep screens (the Prepare tab's Interview card is an
-  honest disabled "Coming in Phase 7" state, not a placeholder screen).
-- Admin web: intelligence post CMS UI, aptitude question-bank CMS UI, source registry, discovery queue,
-  user mgmt.
-- Everything under Phases 7-11 (interview prep, email classifier, AdMob integration code, production
-  hardening).
+  beyond name/location/experience, real audio recording for interview practice (data model and UI
+  hooks exist; no recording plugin is wired up — see Known limitations).
+- Admin web: intelligence post CMS UI, aptitude question-bank CMS UI, interview question-bank CMS UI,
+  source registry, discovery queue, user mgmt.
+- Everything under Phases 8-11 (email classifier, AdMob integration code, production hardening).
 
 ## Blocked by Credential / Tooling
 
@@ -208,29 +312,42 @@ alone was silently discarding the linked job's industry/title context (an early-
 `AptitudeService._resolve_job_context`), which would have made Job-Specific practice from an
 application never actually bias toward the right Technical topics — fixed and covered by
 `test_job_specific_session_prefers_mapped_technical_topics` and the mobile
-`application_prepare_button_test.dart`.
+`application_prepare_button_test.dart`. Phase 7 caught and fixed one real bug before it shipped: the
+interview generator's `_select_with_preference` combined topic bias and company bias into a single
+ANDed database filter, so a job-specific session would fail to prefer topic-matched questions (e.g.
+"Pumps") whenever none of them happened to also be tagged to that job's specific company — fixed by
+trying topic+company, topic-only, company-only, and general as independent fallback tiers, covered
+by `test_job_specific_generation_prefers_mapped_topics`.
 
 ## Tests
 
-- Backend: `pytest -q` → **75 passed** across 9 test files (health, auth, admin/companies, jobs,
-  scholarships, uploads, ATS, intelligence, applications, **aptitude — 17 tests, new this phase**).
+- Backend: `pytest -q` → **91 passed** across 10 test files (health, auth, admin/companies, jobs,
+  scholarships, uploads, ATS, intelligence, applications, aptitude, **interview — 16 tests, new this
+  phase**).
 - Admin: no automated tests — verified by hand via live browser interaction.
-- Mobile: `flutter test` → **22 passed** (1 pre-existing splash-boot smoke test + 21 new Phase 6 widget
-  tests across Prep Hub, test configuration, the active exam screen, submit confirmation, results,
-  review, analytics, and the application "Prepare for Aptitude Test" button). Widget/unit tests for the
-  Phase 2-5 screens are still a Next Task — this phase only added coverage for the screens it built.
-- **Not performed**: interactive manual acceptance testing on a real device/emulator (no Android
-  emulator or physical device is available in this environment — only `flutter analyze`/`test`/`build
-  apk --debug`, which compiles, packages, and exercises the screens' logic via widget tests, but never
-  actually launches the APK). The three acceptance flows the Phase 6 spec asks for (a full timed test
-  happy path, a short-timed-test timeout/auto-submit path, an application-driven job-specific prep
-  path) are each covered by an equivalent automated test instead: `test_expired_session_auto_submits_on_access_and_rejects_further_answers`
-  (backend) + `active_test_screen_test.dart`'s timer-badge test (mobile) for the timeout path;
-  `test_job_specific_session_prefers_mapped_technical_topics` (backend) +
-  `application_prepare_button_test.dart` (mobile) for the application-driven path; the full
-  session-creation-through-submission-through-review backend test chain plus the mobile exam-screen
-  tests for the general happy path. This is real, passing, automated coverage of the same behavior —
-  but it is not the same as a person tapping through the built APK on a device, which has not happened.
+- Mobile: `flutter test` → **39 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
+  tests + **16 new Phase 7 widget tests** across Interview Home, configuration, the session screen
+  (practice + mock + guidance + answering + self-rating + navigation + timer), STAR story creation/
+  completeness/list, company preparation + checklist, readiness/analytics, the application
+  "Interview Preparation" card across all four interview-related stages, and an offline-cached
+  session continuing to work when the server is unreachable). Widget/unit tests for the Phase 2-5
+  screens are still a Next Task — this phase only added coverage for the screens it built.
+- **Not performed**: interactive manual acceptance testing on a real device/emulator, for the same
+  reason as Phase 6 (no Android emulator or physical device available in this environment). The four
+  acceptance flows Phase 7 asks for are each covered by an equivalent automated test instead:
+  Flow 1 (Behavioral practice → self-rating → completion → analytics update) by
+  `test_answering_and_completion_computes_stats` + `test_analytics_reflects_completed_session_activity`
+  (backend) and `interview_session_screen_test.dart` (mobile); Flow 2 (application-driven,
+  job-specific, company+role preselected) by
+  `test_application_linked_session_resolves_job_and_does_not_mutate_stage` +
+  `test_job_specific_generation_prefers_mapped_topics` (backend) and
+  `application_interview_prep_test.dart` (mobile); Flow 3 (STAR story creation → suggested for a
+  matching question) by `test_question_to_star_matching_suggests_relevant_stories` (backend) and
+  `star_story_editor_screen_test.dart` (mobile); Flow 4 (Mock Interview → answer/skip → completion →
+  readiness/activity update) by the same completion + readiness backend tests and
+  `interview_session_screen_test.dart`'s mock-mode test. This is real, passing, automated coverage of
+  the same behavior — not the same as a person tapping through the built APK on a device, which has
+  not happened for any phase in this session.
 
 ## Known issues to revisit
 
@@ -257,15 +374,62 @@ application never actually bias toward the right Technical topics — fixed and 
 - `TestMode.COMPANY_SPECIFIC` exists in the backend enum (spec asks for it to be architected, not
   built) but has no generation logic behind it and is not selectable in the mobile UI — selecting it
   via a raw API call would just behave like a normal session with no company-specific bias.
-- No interactive manual QA pass on a real device/emulator for the Phase 6 acceptance flows — see Tests
-  section above for what automated coverage substitutes for it.
+- No interactive manual QA pass on a real device/emulator for the Phase 6 or 7 acceptance flows —
+  see Tests section above for what automated coverage substitutes for it.
+- **Interview audio recording is not implemented.** The data model (`interview_answers.audio_path`/
+  `audio_duration_seconds`) and API support exist, but no mobile recording plugin is wired up — the
+  session screen currently offers a typed-answer field and notes only, not Start/Stop Recording or
+  Play/Rename/Delete controls. This is a real, acknowledged gap against spec §18-19, not a silent
+  omission: recording requires adding a platform audio plugin, requesting microphone permission, and
+  building playback UI, which didn't fit this pass. Revisit before claiming audio-based mock
+  interviews are complete.
+- The Mock Interview per-category count builder (spec §17's "Technical 4 / Behavioral 3 / Safety 2 /
+  HR 1" style configuration) is fully supported by the backend (`category_counts` on
+  `InterviewSessionCreate`) but the mobile configuration screen only exposes even-distribution
+  category multi-select, not a per-category count stepper UI. A real, working simplification — not
+  a fake feature — but narrower than the spec's example.
+- Interview offline caching covers only the active session (questions/answers/notes/self-ratings) —
+  STAR stories, the preparation checklist, and analytics/readiness are always fetched fresh and will
+  show a loading/error state rather than cached data when offline. Spec §36 lists all of these as
+  things to cache; only the highest-value piece (the in-progress session itself) was built this pass.
+- Interview readiness/analytics use targets (e.g. 30 questions practiced, 5 ready STAR stories) that
+  are configured constants (`app/interview/scoring.py`), not derived from any research — same
+  category of documented simplification as the aptitude engine's targets.
+
+## Metrics: what's system-calculated vs. user self-rated vs. editorially tagged
+
+Spec §46 requires this distinction never be blurred. As of Phase 7:
+
+**System-calculated** (derived by backend code from stored activity, never user-editable):
+Aptitude score/percentage/section breakdown/performance label; aptitude analytics (tests
+completed, average/best score, category/topic accuracy) and weak-topic recommendations; interview
+`Answer Structure Check` (word count, metric-presence, STAR-keyword hints); STAR completeness
+(`sections`, `gaps`, `is_complete`); interview readiness (`overall` and all six components);
+interview analytics (sessions completed, questions practiced, average self-rating *as an average
+of user-submitted ratings*, STAR stories ready, company-prep-completed count, technical topics
+covered, per-category completion); STAR-to-question `suggested_star_story_ids` matching.
+
+**User self-rated** (the backend stores exactly what the user selects and never infers or
+overrides it): interview answer `self_rating` (1-5), `used_star`, `gave_measurable_result`,
+`answered_exact_question`; STAR story field content itself (situation/task/action/result/lessons/
+metrics — the user writes these, the system only checks their *structure*, never their factual
+truth or quality of writing).
+
+**Editorially tagged** (admin-entered metadata, not evidence of anything factual): a question's
+`company_id` (means "recommended practice for this company/role," never "this employer actually
+asks this"); a question's `field`/`industry`/`job_role`/`experience_level`/`difficulty`; a
+question's `star_tags` (which STAR categories it's a good match for — an editorial judgment, not a
+computed similarity score); `answer_guidance`/`evaluation_points` (hand-written by whoever created
+the question, deterministic content, never AI-generated or claimed to be employer-official).
 
 ## Next Tasks
 
-1. Commit the Phase 6 (Aptitude Testing) backend + mobile work — currently uncommitted.
+1. Commit the Phase 7 (Interview Preparation & STAR) backend + mobile work — currently uncommitted.
 2. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
    how many real bugs this session's manual review process has caught in exactly this kind of code.
-3. Phase 7 (Interview Preparation), or an admin CMS UI for intelligence posts / the aptitude question
-   bank to close out Phase 9's remaining gaps — whichever the user prioritizes.
+3. Real interview audio recording (plugin integration, permission flow, playback UI) to close the
+   most significant Phase 7 gap, or Phase 8 (Email Tracking), or an admin CMS UI for intelligence
+   posts / the aptitude+interview question banks to close out Phase 9's remaining gaps — whichever
+   the user prioritizes.
 4. A real interactive QA pass on an emulator/device once one is available in this environment, to
-   validate the Phase 6 acceptance flows beyond what automated tests can confirm.
+   validate the Phase 6 and 7 acceptance flows beyond what automated tests can confirm.

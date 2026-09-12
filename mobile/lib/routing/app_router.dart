@@ -17,6 +17,14 @@ import "../features/companies/presentation/company_detail_screen.dart";
 import "../features/auth/presentation/register_screen.dart";
 import "../features/home/presentation/home_shell.dart";
 import "../features/intelligence/presentation/intelligence_detail_screen.dart";
+import "../features/interview/presentation/company_prep_screen.dart";
+import "../features/interview/presentation/interview_analytics_screen.dart";
+import "../features/interview/presentation/interview_configuration_screen.dart";
+import "../features/interview/presentation/interview_home_screen.dart";
+import "../features/interview/presentation/interview_results_screen.dart";
+import "../features/interview/presentation/interview_session_screen.dart";
+import "../features/interview/presentation/star_story_editor_screen.dart";
+import "../features/interview/presentation/star_story_list_screen.dart";
 import "../features/jobs/presentation/job_detail_screen.dart";
 import "../features/onboarding/presentation/onboarding_screen.dart";
 import "../features/profile/presentation/saved_items_screen.dart";
@@ -116,6 +124,31 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: "/prepare/aptitude/sessions/:id/review",
         builder: (context, state) => QuestionReviewScreen(sessionId: state.pathParameters["id"]!),
+      ),
+      GoRoute(path: "/prepare/interview", builder: (context, state) => const InterviewHomeScreen()),
+      GoRoute(
+        path: "/prepare/interview/configure",
+        builder: (context, state) =>
+            InterviewConfigurationScreen(args: state.extra as InterviewConfigureArgs? ?? const InterviewConfigureArgs()),
+      ),
+      GoRoute(path: "/prepare/interview/analytics", builder: (context, state) => const InterviewAnalyticsScreen()),
+      GoRoute(
+        path: "/prepare/interview/sessions/:id",
+        builder: (context, state) => InterviewSessionScreen(sessionId: state.pathParameters["id"]!),
+      ),
+      GoRoute(
+        path: "/prepare/interview/sessions/:id/results",
+        builder: (context, state) => InterviewResultsScreen(sessionId: state.pathParameters["id"]!),
+      ),
+      GoRoute(path: "/prepare/interview/star-stories", builder: (context, state) => const StarStoryListScreen()),
+      GoRoute(path: "/prepare/interview/star-stories/new", builder: (context, state) => const StarStoryEditorScreen()),
+      GoRoute(
+        path: "/prepare/interview/star-stories/:id",
+        builder: (context, state) => StarStoryEditorScreen(storyId: state.pathParameters["id"]!),
+      ),
+      GoRoute(
+        path: "/prepare/interview/company-prep/:applicationId",
+        builder: (context, state) => CompanyPrepScreen(applicationId: state.pathParameters["applicationId"]!),
       ),
     ],
   );

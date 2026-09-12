@@ -52,6 +52,33 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
   in the app's own SharedPreferences store and is cleared once a session is submitted; it is never
   transmitted anywhere except back to this backend's own `/aptitude/*` endpoints.
 
+## Interview preparation data (Phase 7)
+
+- Session data, STAR stories, answers, and preparation progress are visible only to the owning
+  user — every interview/STAR endpoint 404s (never 403) on a resource that isn't the caller's, same
+  isolation pattern as aptitude/applications.
+- **Audio recordings remain local by default.** `interview_answers.audio_path` stores a path to a
+  file on the device only; the binary audio is **never automatically uploaded** to this backend or
+  any third party. The mobile UI provides explicit Play/Rename/Delete controls, and recording only
+  starts after the user explicitly grants microphone permission — nothing records automatically.
+- **No external AI processing of interview answers.** Typed answers are checked only via the
+  deterministic, local "Answer Structure Check" (word count, metric-presence, STAR-keyword hints —
+  `app/interview/answer_check.py`); nothing is sent to an LLM or third-party analysis API.
+- Self-assessment (`self_rating`, `used_star`, `gave_measurable_result`, `answered_exact_question`)
+  is **entirely user-declared** — the backend stores exactly what the user selects and never
+  infers, overrides, or reinterprets it as a system judgment. See PROJECT_STATUS.md for the full
+  system-calculated vs. user-self-rated vs. editorially-tagged breakdown.
+- Practicing interview questions (or completing a mock interview) **never** changes a linked
+  application's real `current_stage` — identical guarantee to the aptitude engine, and verified by
+  the same kind of test (`test_application_linked_session_resolves_job_and_does_not_mutate_stage`).
+- Company tagging on interview questions (`interview_questions.company_id`) is **editorial
+  metadata only** — it means "recommended practice for this company/role," never a claim that the
+  question is a real, leaked interview question from that employer. Every company-preparation
+  response carries an explicit disclaimer to this effect.
+- Locally cached interview session data (see `ARCHITECTURE.md` → Mobile interview offline behavior)
+  stays on-device in the app's own SharedPreferences store and is cleared once a session completes;
+  it is never transmitted anywhere except back to this backend's own `/interview/*` endpoints.
+
 ## Account deletion
 
 Deleting an account removes profile data, documents, and application history; it is a real delete

@@ -1,6 +1,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../features/aptitude/data/aptitude_offline_cache.dart";
+import "../features/interview/data/interview_offline_cache.dart";
 import "network/api_client.dart";
 import "storage/app_preferences.dart";
 import "storage/secure_storage.dart";
@@ -23,6 +24,12 @@ final appPreferencesProvider = Provider<AppPreferences>((ref) {
 /// [appPreferencesProvider].
 final aptitudeOfflineCacheProvider = Provider<AptitudeOfflineCache>((ref) {
   throw UnimplementedError("aptitudeOfflineCacheProvider must be overridden in main.dart bootstrap");
+});
+
+/// Overridden in main.dart once SharedPreferences has loaded — same pattern as
+/// [appPreferencesProvider] / [aptitudeOfflineCacheProvider].
+final interviewOfflineCacheProvider = Provider<InterviewOfflineCache>((ref) {
+  throw UnimplementedError("interviewOfflineCacheProvider must be overridden in main.dart bootstrap");
 });
 
 enum AuthState { unknown, authenticated, unauthenticated }

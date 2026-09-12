@@ -9,6 +9,7 @@ from app.api.v1 import (
     companies,
     health,
     intelligence,
+    interview,
     jobs,
     me,
     profile,
@@ -17,6 +18,7 @@ from app.api.v1 import (
 from app.api.v1.admin import aptitude as admin_aptitude
 from app.api.v1.admin import companies as admin_companies
 from app.api.v1.admin import intelligence as admin_intelligence
+from app.api.v1.admin import interview as admin_interview
 from app.api.v1.admin import jobs as admin_jobs
 from app.api.v1.admin import scholarships as admin_scholarships
 from app.api.v1.admin import uploads as admin_uploads
@@ -32,6 +34,8 @@ api_router.include_router(ats.router, prefix="/ats", tags=["ats"])
 api_router.include_router(intelligence.router, prefix="/intelligence", tags=["intelligence"])
 api_router.include_router(applications.router, prefix="/applications", tags=["applications"])
 api_router.include_router(aptitude.router, prefix="/aptitude", tags=["aptitude"])
+api_router.include_router(interview.router, prefix="/interview", tags=["interview"])
+api_router.include_router(interview.star_router, prefix="/star-stories", tags=["star-stories"])
 api_router.include_router(me.router, prefix="/me", tags=["me"])
 
 api_router.include_router(admin_auth.router, prefix="/admin/auth", tags=["admin-auth"])
@@ -45,3 +49,4 @@ api_router.include_router(
 )
 api_router.include_router(admin_uploads.router, prefix="/admin/uploads", tags=["admin-uploads"])
 api_router.include_router(admin_aptitude.router, prefix="/admin/aptitude", tags=["admin-aptitude"])
+api_router.include_router(admin_interview.router, prefix="/admin/interview", tags=["admin-interview"])

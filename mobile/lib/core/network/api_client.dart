@@ -38,8 +38,8 @@ class ApiClient {
   Future<Response<T>> post<T>(String path, {dynamic data}) =>
       _wrap(() => _dio.post<T>(path, data: data));
 
-  Future<Response<T>> put<T>(String path, {dynamic data}) =>
-      _wrap(() => _dio.put<T>(path, data: data));
+  Future<Response<T>> put<T>(String path, {dynamic data, Map<String, dynamic>? queryParameters}) =>
+      _wrap(() => _dio.put<T>(path, data: data, queryParameters: queryParameters));
 
   Future<Response<T>> delete<T>(String path) => _wrap(() => _dio.delete<T>(path));
 

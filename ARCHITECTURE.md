@@ -132,6 +132,71 @@ backgrounded/restarted (spec §20-21):
   genuine relational local storage (e.g. an offline job feed) — at that point migrating this cache onto
   the same mechanism becomes worthwhile.
 
+## Mobile interview offline behavior (`mobile/lib/features/interview/`)
+
+Mirrors `AptitudeOfflineCache`'s approach almost exactly (spec §36): `InterviewOfflineCache`
+(SharedPreferences-backed, same rationale for not using the unwired `drift` dependency — see
+"Mobile aptitude offline behavior" above) caches the full session detail and a pending-mutation
+queue for answers made while offline, replayed opportunistically on load and before each new
+mutation. Since there's no server-enforced timer to keep synchronized, the offline story is
+simpler than aptitude's: there's nothing analogous to a clock-offset calculation, only "keep
+working from the cache, sync when possible." STAR stories, the preparation checklist, and
+analytics are fetched fresh each time rather than offline-cached — a narrower scope than the
+active session itself, and a documented gap (see PROJECT_STATUS.md).
+
+## Interview preparation engine (`app/interview/`, Phase 7)
+
+Also deterministic/rules-based, structurally similar to the aptitude engine but a separate,
+uncoupled implementation (per explicit spec instruction — "reuse the aptitude taxonomy where
+appropriate without coupling the two engines incorrectly"):
+
+- **Generation** (`app/interview/generator.py`) — selects questions per category (evenly across
+  selected categories, or per an explicit `category_counts` map for the Mock Interview builder's
+  "Technical 4 / Behavioral 3 / Safety 2 / HR 1" style configuration). Job-specific Technical-topic
+  bias uses its own keyword lookup table (`app/interview/job_role_topic_map.py`) — deliberately not
+  the aptitude engine's `technical_topic_map.py`, since interview prep needs process/behavioral
+  topics (shift handover, emergency response) with no aptitude-question equivalent. Company bias
+  (preferring questions editorially tagged to a specific `company_id`) and topic bias are tried as
+  independent, progressively looser fallback tiers (topic+company → topic-only → company-only →
+  general) rather than ANDed into one filter — a job-specific session shouldn't fail to prefer
+  "Pumps" questions just because none of them happen to be tagged to that job's company.
+- **Junior gating** (spec §7) — a `MIXED`-difficulty session excludes `EXPERT` questions when the
+  caller declares `ENTRY`/`JUNIOR` experience level; explicitly requesting `EXPERT` difficulty always
+  overrides this.
+- **Snapshot-then-grade-free** — same rationale as aptitude's `test_session_questions`:
+  `interview_session_questions` freezes every question's guidance/evaluation points/STAR tags at
+  session-creation time, so editing the master bank never changes a past session.
+- **No server-enforced timer** — `time_per_question_seconds` is shown to the user during a Mock
+  Interview but is purely self-paced/informational; unlike the aptitude engine's `expires_at`
+  authority, nothing here auto-submits or rejects an answer when it elapses. This is a deliberate,
+  documented difference: interview answers are open-ended text/audio a person is still composing,
+  not a fixed multiple-choice grading window.
+- **Answer Structure Check** (`app/interview/answer_check.py`, spec §22-23) — deterministic word
+  count, metric-presence (regex digit check), and STAR-keyword-hint detection on a typed answer.
+  Explicitly never labeled "AI analysis" anywhere in code, schemas, or UI copy.
+- **STAR completeness check** (`app/interview/star_check.py`, spec §15) — each of
+  Situation/Task/Action/Result is independently classified `missing`/`brief`/`complete`(/`strong`
+  for Action with a detected first-person pronoun), plus named gaps (`missing_measurable_outcome`,
+  `very_short_action`, `no_clear_personal_contribution`, ...). Computed fresh on every read from the
+  stored text — never cached, so it can't go stale relative to an edit. No AI grading.
+- **STAR-to-question matching** (spec §16) — a question's `star_tags` (lowercase snake_case values
+  matching `StarCategory`, e.g. `"equipment_failure"`) are compared against the categories of the
+  user's own STAR stories; any match surfaces that story's id in `suggested_star_story_ids`. Pure
+  tag/category comparison, no AI.
+- **Readiness** (`app/interview/readiness.py`, spec §11/§25) — six weighted components (Question
+  Practice 25%, STAR Coverage 25%, Company Prep 15%, Job-Specific Prep 15%, Technical Prep 15%,
+  Recent Consistency 5%), each a real activity count capped against a configurable target
+  (`app/interview/scoring.py`). When Company/Job-Specific components don't apply (no
+  `application_id` given), they're **excluded and the remaining weights renormalized** — never
+  silently treated as zero, which would otherwise understate general (non-application-linked)
+  readiness. Below `MIN_ACTIVITY_FOR_READINESS` combined signal, returns `insufficient_data: true`
+  and `overall: null` rather than a fabricated number.
+- **Company/role preparation** (spec §9) reuses existing CareerOS data — `companies`,
+  `intelligence_posts` (company-scoped, via the same `IntelligenceRepository.list_public` the
+  public `/intelligence` feed uses), and `jobs` (other open roles at that company) — plus the
+  job-role topic map for "likely topics." It never claims to know a company's actual interview
+  questions; every response carries a fixed disclaimer (spec §35, see also PRIVACY.md).
+
 ## Recruitment email classification
 
 Deterministic rule-based keyword/phrase classifier (`app/services/email_classifier.py`), not an LLM

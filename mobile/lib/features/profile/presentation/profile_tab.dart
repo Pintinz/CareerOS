@@ -68,6 +68,11 @@ class ProfileTab extends ConsumerWidget {
           label: "Aptitude Performance",
           onTap: () => context.push("/prepare/aptitude/analytics"),
         ),
+        _ProfileMenuItem(
+          icon: Icons.groups_2_outlined,
+          label: "Interview Preparation",
+          onTap: () => context.push("/prepare/interview/analytics"),
+        ),
         const _ProfileMenuItem(icon: Icons.tune_rounded, label: "Career Preferences"),
         const _ProfileMenuItem(icon: Icons.notifications_outlined, label: "Notifications"),
         const _ProfileMenuItem(icon: Icons.settings_outlined, label: "Settings"),

@@ -39,7 +39,10 @@ void main() {
   });
 
   testWidgets('Does not show the Aptitude button for an unrelated stage', (tester) async {
-    final applicationRepo = FakeApplicationRepository(items: [_applicationAtStage(ApplicationStage.interview)]);
+    // Medical is the one stage with neither a real aptitude nor a real interview prep flow —
+    // Interview itself now has a real card (see application_interview_prep_test.dart), so it no
+    // longer counts as "unrelated" for this assertion.
+    final applicationRepo = FakeApplicationRepository(items: [_applicationAtStage(ApplicationStage.medical)]);
     final aptitudeRepo = FakeAptitudeRepository();
     final overrides = await aptitudeTestOverrides(repository: aptitudeRepo, applicationRepository: applicationRepo);
 
@@ -52,6 +55,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Prepare for Aptitude Test'), findsNothing);
-    expect(find.textContaining('Interview preparation is coming'), findsOneWidget);
+    expect(find.text('Interview Preparation'), findsNothing);
+    expect(find.textContaining('medical/documentation'), findsOneWidget);
   });
 }

@@ -4,12 +4,13 @@ import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
 import "../../../theme/app_colors.dart";
+import "../../interview/presentation/interview_providers.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";
 import "test_configuration_screen.dart";
 
-/// The Prepare tab body (spec §6/§26): "What are you preparing for?" with a real Aptitude Test
-/// path and an honest "Coming in Phase 7" Interview Preparation card — never a dead button.
+/// The Prepare tab body (spec §2/§6): "What are you preparing for?" with both a real Aptitude
+/// Test path and a real Interview Preparation path (Phase 7).
 class PreparationHubScreen extends ConsumerWidget {
   const PreparationHubScreen({super.key});
 
@@ -17,11 +18,15 @@ class PreparationHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final analyticsAsync = ref.watch(aptitudeAnalyticsProvider);
     final historyAsync = ref.watch(aptitudeSessionHistoryProvider);
+    final interviewAnalyticsAsync = ref.watch(interviewAnalyticsProvider);
+    final readinessAsync = ref.watch(interviewReadinessProvider(null));
 
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(aptitudeAnalyticsProvider);
         ref.invalidate(aptitudeSessionHistoryProvider);
+        ref.invalidate(interviewAnalyticsProvider);
+        ref.invalidate(interviewReadinessProvider);
       },
       child: ListView(
         padding: const EdgeInsets.all(24),
@@ -39,13 +44,55 @@ class PreparationHubScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 16),
-          const _PrepCard(
+          _PrepCard(
             icon: Icons.groups_2_outlined,
             title: "Interview Preparation",
-            description: "Mock interviews and question banks by role.",
-            color: AppColors.muted,
-            badge: "Coming next",
-            action: OutlinedButton(onPressed: null, child: Text("Coming in Phase 7")),
+            description: "Company, job, technical, behavioral, and STAR interview practice.",
+            color: AppColors.purple,
+            action: ElevatedButton(
+              onPressed: () => context.push("/prepare/interview"),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple),
+              child: const Text("Start Preparing"),
+            ),
+          ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Interview Progress", style: Theme.of(context).textTheme.titleLarge),
+              TextButton(onPressed: () => context.push("/prepare/interview/analytics"), child: const Text("View All")),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.6,
+            children: [
+              interviewAnalyticsAsync.when(
+                loading: () => const _StatCard(label: "Interview Sessions", value: "—"),
+                error: (_, __) => const _StatCard(label: "Interview Sessions", value: "—"),
+                data: (a) => _StatCard(label: "Interview Sessions", value: "${a.sessionsCompleted}"),
+              ),
+              interviewAnalyticsAsync.when(
+                loading: () => const _StatCard(label: "Questions Practiced", value: "—"),
+                error: (_, __) => const _StatCard(label: "Questions Practiced", value: "—"),
+                data: (a) => _StatCard(label: "Questions Practiced", value: "${a.questionsPracticed}"),
+              ),
+              interviewAnalyticsAsync.when(
+                loading: () => const _StatCard(label: "STAR Stories Ready", value: "—"),
+                error: (_, __) => const _StatCard(label: "STAR Stories Ready", value: "—"),
+                data: (a) => _StatCard(label: "STAR Stories Ready", value: "${a.starStoriesReady}"),
+              ),
+              readinessAsync.when(
+                loading: () => const _StatCard(label: "Interview Readiness", value: "—"),
+                error: (_, __) => const _StatCard(label: "Interview Readiness", value: "—"),
+                data: (r) => _StatCard(label: "Interview Readiness", value: r.insufficientData || r.overall == null ? "N/A" : "${r.overall!.round()}%"),
+              ),
+            ],
           ),
           const SizedBox(height: 32),
           Row(
@@ -113,7 +160,6 @@ class _PrepCard extends StatelessWidget {
     required this.description,
     required this.color,
     required this.action,
-    this.badge,
   });
 
   final IconData icon;
@@ -121,7 +167,6 @@ class _PrepCard extends StatelessWidget {
   final String description;
   final Color color;
   final Widget action;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -145,14 +190,6 @@ class _PrepCard extends StatelessWidget {
                   child: Row(
                     children: [
                       Flexible(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-                      if (badge != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(color: AppColors.muted.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                          child: Text(badge!, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
-                        ),
-                      ],
                     ],
                   ),
                 ),

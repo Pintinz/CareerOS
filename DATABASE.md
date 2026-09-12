@@ -110,6 +110,50 @@ Implemented so far (migrations `1787363de7f0` → `e4a80fc268db`, `backend/migra
   `test_session_questions.id`, CASCADE), `selected_option_ids` (JSON)/`answer_numeric_value`,
   `is_flagged`, `time_spent_seconds`, `is_correct`/`marks_awarded` (both null until submit-time
   grading, so "has this been graded" is unambiguous).
+- `interview_question_categories` — `id`, `name`, `slug` (unique), `description`. The ten fixed
+  categories from spec §6 (hr_general/behavioral/technical/company_specific/job_specific/safety/
+  leadership/management/situational/career_motivation) — real rows, same convention as aptitude's
+  `question_categories`.
+- `interview_topics` — `id`, `category_id` (FK, CASCADE), `name`, `slug` (unique), `field`/
+  `industry` (nullable, for job-specific Technical-topic bias — see
+  `app/interview/job_role_topic_map.py`).
+- `interview_questions` — `id`, `question_text`, `category_id` (FK, CASCADE), `topic_id` (FK,
+  `SET NULL`), `field`/`industry`/`job_role` (indexed, nullable), `company_id` (FK →
+  `companies.id`, `SET NULL` — **editorial tagging only**, never evidence of a real leaked
+  interview question from that employer; see PRIVACY.md), `experience_level` (nullable, reuses
+  `jobs.ExperienceLevel`), `difficulty` (`EASY`/`MEDIUM`/`HARD`/`EXPERT`), `answer_guidance` (JSON:
+  `{assessing, strong_answer_includes[], common_mistakes[], technical_concepts[]}` — deterministic,
+  hand-authored, never AI-generated), `evaluation_points` (JSON list), `follow_up_prompt`,
+  `star_tags` (JSON list of STAR category slugs this question matches, for spec §16's suggestion
+  feature), `is_active`, `is_demo`, `created_by_admin_id` (FK, `SET NULL`).
+- `interview_sessions` — `id`, `user_id` (FK, CASCADE), `mode` (`PRACTICE`/`MOCK`), `status`
+  (`IN_PROGRESS`/`COMPLETED`/`ABANDONED`), `application_id`/`job_id`/`company_id` (FK, `SET NULL`),
+  `config` (JSON), `categories_requested` (JSON), `time_per_question_seconds` (nullable —
+  **self-paced/informational only, never server-enforced**, unlike the aptitude engine's overall
+  timer; see ARCHITECTURE.md), `started_at`/`completed_at`, `question_count`.
+- `interview_session_questions` — the same snapshot pattern as `test_session_questions`: a frozen
+  copy of `question_text`/`category_slug`/`category_name`/`topic_name`/`difficulty`/
+  `answer_guidance`/`evaluation_points`/`follow_up_prompt`/`star_tags`/`time_limit_seconds` taken
+  at session-creation time, so editing the master question bank later never changes a past
+  session. `question_id` (FK, `SET NULL`) is kept only for future "practice similar" navigation.
+- `interview_answers` — `id`, `session_id` (FK, CASCADE), `session_question_id` (FK, CASCADE),
+  `answer_text`/`notes`, `audio_path`/`audio_duration_seconds` (local file reference only — the
+  binary is never uploaded to this backend, see PRIVACY.md), `self_rating` (1-5, **user-declared**,
+  never system-computed), `used_star`/`gave_measurable_result`/`answered_exact_question` (all
+  **user self-rated** booleans), `is_skipped`/`is_marked_practiced`/`is_saved`, `word_count`
+  (**system-computed** deterministically from `answer_text` at save time).
+- `star_stories` — `id`, `user_id` (FK, CASCADE), `title`, `category` (14-value `StarCategory` enum
+  from spec §14), `situation`/`task`/`action`/`result`/`lessons` (free text), `skills_demonstrated`/
+  `relevant_roles`/`relevant_questions` (JSON lists), `metrics`, `company_context`. Completeness
+  (spec §15) is **never stored** — it's recomputed deterministically from the four STAR fields on
+  every read (`app/interview/star_check.py`), so it can never go stale relative to edits.
+- `interview_preparation_progress` — `id`, `user_id` (FK, CASCADE), `application_id` (FK, CASCADE,
+  nullable — `NULL` is the general, non-application-linked progress row), `checklist` (JSON dict of
+  the 7 fixed company-research items from spec §26), `questions_to_ask` (JSON list of
+  `{id, text, category, status, is_custom}` — the curated catalog from spec §27 plus any
+  user-added custom questions), `reviewed_topics` (JSON list of technical topic slugs the user has
+  marked reviewed, reusing the aptitude engine's topic taxonomy by slug only — no FK coupling
+  between the two engines).
 
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
@@ -129,8 +173,6 @@ application_documents (applications/application_stage_events/application_notes a
 see above — this is just the file-attachment side, blocked on the general document vault)
 
 email_connections, recruitment_email_events
-
-interview_questions, interview_sessions, star_stories
 
 notifications
 

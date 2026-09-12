@@ -5,19 +5,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../test_utils.dart';
 import 'aptitude_test_support.dart';
 
 Widget _wrap(Widget child, List<Override> overrides) {
   final router = GoRouter(routes: [
     GoRoute(path: '/', builder: (context, state) => child),
-    GoRoute(path: '/prepare/aptitude/configure', builder: (context, state) => const Scaffold(body: Text('Configure Screen'))),
+    GoRoute(path: '/prepare/aptitude/configure', builder: (context, state) => const Scaffold(body: Text('Aptitude Configure Screen'))),
     GoRoute(path: '/prepare/aptitude/analytics', builder: (context, state) => const Scaffold(body: Text('Analytics Screen'))),
+    GoRoute(path: '/prepare/interview', builder: (context, state) => const Scaffold(body: Text('Interview Home Screen'))),
+    GoRoute(path: '/prepare/interview/analytics', builder: (context, state) => const Scaffold(body: Text('Interview Analytics Screen'))),
   ]);
   return ProviderScope(overrides: overrides, child: MaterialApp.router(routerConfig: router));
 }
 
 void main() {
-  testWidgets('Prep Hub shows the "what are you preparing for" header and both cards', (tester) async {
+  testWidgets('Prep Hub shows the "what are you preparing for" header and both real cards', (tester) async {
+    useLargeTestViewport(tester);
     final repo = FakeAptitudeRepository();
     final overrides = await aptitudeTestOverrides(repository: repo);
 
@@ -26,17 +30,13 @@ void main() {
 
     expect(find.text('What are you preparing for?'), findsOneWidget);
     expect(find.text('Aptitude Test'), findsOneWidget);
-    expect(find.text('Start Preparing'), findsOneWidget);
     expect(find.text('Interview Preparation'), findsOneWidget);
-    expect(find.text('Coming in Phase 7'), findsOneWidget);
-
-    // The disabled Interview button must never navigate anywhere — no dead button that does
-    // something unexpected either.
-    final interviewButton = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Coming in Phase 7'));
-    expect(interviewButton.onPressed, isNull);
+    // Both cards are real now — each gets its own working "Start Preparing" entry point.
+    expect(find.text('Start Preparing'), findsNWidgets(2));
   });
 
-  testWidgets('Prep Hub shows real stats from analytics, not placeholders', (tester) async {
+  testWidgets('Prep Hub shows real aptitude stats from analytics, not placeholders', (tester) async {
+    useLargeTestViewport(tester);
     final repo = FakeAptitudeRepository()
       ..analyticsOverride = const AptitudeAnalytics(
         testsCompleted: 4,
@@ -57,16 +57,31 @@ void main() {
     expect(find.text('90%'), findsOneWidget); // Best Score
   });
 
-  testWidgets('Tapping Start Preparing navigates to the configuration screen', (tester) async {
+  testWidgets('Tapping the Aptitude Start Preparing navigates to the aptitude configuration screen', (tester) async {
+    useLargeTestViewport(tester);
     final repo = FakeAptitudeRepository();
     final overrides = await aptitudeTestOverrides(repository: repo);
 
     await tester.pumpWidget(_wrap(const PreparationHubScreen(), overrides));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Start Preparing'));
+    await tester.tap(find.text('Start Preparing').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('Configure Screen'), findsOneWidget);
+    expect(find.text('Aptitude Configure Screen'), findsOneWidget);
+  });
+
+  testWidgets('Tapping the Interview Start Preparing navigates to the interview home screen', (tester) async {
+    useLargeTestViewport(tester);
+    final repo = FakeAptitudeRepository();
+    final overrides = await aptitudeTestOverrides(repository: repo);
+
+    await tester.pumpWidget(_wrap(const PreparationHubScreen(), overrides));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start Preparing').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Interview Home Screen'), findsOneWidget);
   });
 }

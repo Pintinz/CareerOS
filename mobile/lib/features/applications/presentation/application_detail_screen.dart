@@ -8,6 +8,9 @@ import "../../../core/utils/url_launcher_helper.dart";
 import "../../../theme/app_colors.dart";
 import "../../aptitude/data/aptitude_models.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
+import "../../interview/data/interview_models.dart";
+import "../../interview/presentation/interview_configuration_screen.dart";
+import "../../interview/presentation/interview_providers.dart";
 import "../data/application_models.dart";
 import "application_providers.dart";
 import "stage_badge.dart";
@@ -171,6 +174,11 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
                   ),
                 ),
               )
+            else if (_isInterviewStage(application.currentStage))
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: _InterviewPrepCard(application: application),
+              )
             else if (_stagePrepHint(application.currentStage) != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
@@ -241,18 +249,130 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
     );
   }
 
-  /// Spec §38: stage-aware preparation hints. Aptitude (Phase 6) now gets a real button above;
-  /// interview prep (Phase 7) is still informational-only — no dead button pointing nowhere.
+  bool _isInterviewStage(ApplicationStage stage) => const {
+        ApplicationStage.interview,
+        ApplicationStage.finalInterview,
+        ApplicationStage.recruiterScreen,
+        ApplicationStage.assessmentCentre,
+      }.contains(stage);
+
+  /// Spec §38: stage-aware preparation hints. Aptitude (Phase 6) and Interview (Phase 7) now get
+  /// real cards above; only stages with no dedicated preparation flow fall back to plain text.
   String? _stagePrepHint(ApplicationStage stage) {
     switch (stage) {
-      case ApplicationStage.interview:
-      case ApplicationStage.finalInterview:
-        return "Interview preparation is coming in a future update.";
       case ApplicationStage.medical:
         return "Keep any requested medical/documentation paperwork ready for this stage.";
       default:
         return null;
     }
+  }
+}
+
+/// Real "Interview Preparation" card (spec §29) for interview/final-interview/recruiter-screen/
+/// assessment-centre stages: readiness, questions practiced, STAR stories ready, and a
+/// "Continue Preparation" button — preparing here never mutates the application's real stage.
+class _InterviewPrepCard extends ConsumerWidget {
+  const _InterviewPrepCard({required this.application});
+
+  final Application application;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final readinessAsync = ref.watch(interviewReadinessProvider(application.id));
+    final analyticsAsync = ref.watch(interviewAnalyticsProvider);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.purple.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.groups_2_outlined, size: 18, color: AppColors.purple),
+              SizedBox(width: 8),
+              Text("Interview Preparation", style: TextStyle(fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            "Practicing here never changes this application's stage — update it yourself once you've "
+            "completed the employer's real interview.",
+            style: TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: readinessAsync.when(
+                  loading: () => const _MiniPrepStat(label: "Readiness", value: "—"),
+                  error: (_, __) => const _MiniPrepStat(label: "Readiness", value: "—"),
+                  data: (r) => _MiniPrepStat(label: "Readiness", value: r.insufficientData || r.overall == null ? "N/A" : "${r.overall!.round()}%"),
+                ),
+              ),
+              Expanded(
+                child: analyticsAsync.when(
+                  loading: () => const _MiniPrepStat(label: "Questions", value: "—"),
+                  error: (_, __) => const _MiniPrepStat(label: "Questions", value: "—"),
+                  data: (a) => _MiniPrepStat(label: "Questions", value: "${a.questionsPracticed}"),
+                ),
+              ),
+              Expanded(
+                child: analyticsAsync.when(
+                  loading: () => const _MiniPrepStat(label: "STAR Ready", value: "—"),
+                  error: (_, __) => const _MiniPrepStat(label: "STAR Ready", value: "—"),
+                  data: (a) => _MiniPrepStat(label: "STAR Ready", value: "${a.starStoriesReady}"),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (application.jobId != null) ...[
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => context.push("/prepare/interview/company-prep/${application.id}"),
+                    child: const Text("Company Research"),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: () => context.push(
+                    "/prepare/interview/configure",
+                    extra: InterviewConfigureArgs(initialMode: InterviewSessionMode.practice, applicationId: application.id),
+                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple),
+                  child: const Text("Continue Preparation"),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniPrepStat extends StatelessWidget {
+  const _MiniPrepStat({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+        Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 10)),
+      ],
+    );
   }
 }
 

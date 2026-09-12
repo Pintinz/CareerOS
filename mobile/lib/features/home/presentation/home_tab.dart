@@ -8,6 +8,9 @@ import "../../applications/presentation/application_providers.dart";
 import "../../aptitude/data/aptitude_models.dart";
 import "../../aptitude/presentation/aptitude_providers.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
+import "../../interview/data/interview_models.dart";
+import "../../interview/presentation/interview_configuration_screen.dart";
+import "../../interview/presentation/interview_providers.dart";
 import "../../profile/presentation/profile_providers.dart";
 
 /// Home dashboard (master spec §11). Only the greeting header is wired to real data in this
@@ -48,6 +51,7 @@ class HomeTab extends ConsumerWidget {
           _ActiveApplicationsCard(activeCountAsync: ref.watch(activeApplicationsCountProvider)),
           const SizedBox(height: 16),
           const _UpcomingAptitudeStageCard(),
+          const _UpcomingInterviewStageCard(),
           const _PreparationProgressCard(),
           Card(
             child: Padding(
@@ -160,6 +164,73 @@ class _UpcomingAptitudeStageCard extends ConsumerWidget {
                 onPressed: () => context.push(
                   "/prepare/aptitude/configure",
                   extra: AptitudeConfigureArgs(initialMode: TestMode.jobSpecific, applicationId: upcoming!.id),
+                ),
+                child: const Text("Prepare Now"),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown only when a tracked application is at an interview-related stage (spec §30) — a real
+/// readiness percentage from that application's own prep activity, never an inferred date.
+class _UpcomingInterviewStageCard extends ConsumerWidget {
+  const _UpcomingInterviewStageCard();
+
+  static const _interviewStages = {
+    ApplicationStage.interview,
+    ApplicationStage.finalInterview,
+    ApplicationStage.recruiterScreen,
+    ApplicationStage.assessmentCentre,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final applications = ref.watch(applicationListProvider).items;
+    Application? upcoming;
+    for (final application in applications) {
+      if (_interviewStages.contains(application.currentStage)) {
+        upcoming = application;
+        break;
+      }
+    }
+    if (upcoming == null) return const SizedBox.shrink();
+
+    final readinessAsync = ref.watch(interviewReadinessProvider(upcoming.id));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        color: AppColors.purple.withValues(alpha: 0.06),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.groups_2_outlined, color: AppColors.purple),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Upcoming Interview Preparation", style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text("${upcoming.roleTitle} at ${upcoming.companyName}", style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                    readinessAsync.when(
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (r) => r.insufficientData || r.overall == null
+                          ? const SizedBox.shrink()
+                          : Text("Readiness: ${r.overall!.round()}%", style: const TextStyle(color: AppColors.purple, fontSize: 12, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.push(
+                  "/prepare/interview/configure",
+                  extra: InterviewConfigureArgs(initialMode: InterviewSessionMode.practice, applicationId: upcoming!.id),
                 ),
                 child: const Text("Prepare Now"),
               ),
