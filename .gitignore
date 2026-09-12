@@ -1,0 +1,66 @@
+# Env
+.env
+.env.local
+*.env
+!.env.example
+
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+backend/.pytest_cache/
+backend/careeros_dev.db
+backend/*.db
+
+# Admin (Next.js)
+admin/node_modules/
+admin/.next/
+admin/out/
+admin/.turbo/
+
+# Mobile (Flutter)
+mobile/.dart_tool/
+mobile/.packages
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.pub-cache/
+mobile/.pub/
+mobile/*.iml
+
+# Android signing / build artifacts (never commit keystores or their passwords)
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/key.properties
+mobile/android/**/*.jks
+mobile/android/**/*.keystore
+mobile/**/google-services.json
+
+# iOS signing / generated project artifacts (never commit certs, profiles, or private keys)
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/Flutter/Generated.xcconfig
+mobile/ios/Runner.xcworkspace/xcuserdata/
+mobile/ios/Runner.xcodeproj/xcuserdata/
+mobile/**/*.mobileprovision
+mobile/**/*.p12
+mobile/**/*.cer
+mobile/**/ExportOptions.plist
+mobile/**/GoogleService-Info.plist
+
+# Generic secrets / credentials — should never be committed regardless of where they land
+*.pem
+*.key
+*.p8
+*.p12
+*credentials*.json
+*service-account*.json
+secrets.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
