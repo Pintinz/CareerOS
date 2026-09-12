@@ -20,6 +20,11 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000,http://localhost:8080"
 
+    # Local-disk media storage (spec §12/§74). Swap for a cloud StorageProvider implementation
+    # once object storage credentials exist — see app/services/storage_provider.py.
+    upload_dir: str = "uploads"
+    public_base_url: str = "http://localhost:8000"
+
     google_client_id: str | None = None
     apple_client_id: str | None = None
     gmail_oauth_client_id: str | None = None
@@ -28,6 +33,11 @@ class Settings(BaseSettings):
     outlook_oauth_client_secret: str | None = None
     admob_app_id: str | None = None
     redis_url: str | None = None
+
+    # First-run bootstrap only: if set and no admin_users row exists yet, one SUPER_ADMIN is
+    # created with these credentials at startup. Leave unset after the first admin exists.
+    admin_seed_email: str | None = None
+    admin_seed_password: str | None = None
 
     @property
     def cors_origins_list(self) -> list[str]:

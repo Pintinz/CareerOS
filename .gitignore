@@ -12,6 +12,7 @@ backend/*.egg-info/
 backend/.pytest_cache/
 backend/careeros_dev.db
 backend/*.db
+backend/uploads/
 
 # Admin (Next.js)
 admin/node_modules/
@@ -31,6 +32,9 @@ mobile/*.iml
 
 # Android signing / build artifacts (never commit keystores or their passwords)
 mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/*/build/
 mobile/android/local.properties
 mobile/android/key.properties
 mobile/android/**/*.jks
@@ -58,6 +62,9 @@ mobile/**/GoogleService-Info.plist
 *credentials*.json
 *service-account*.json
 secrets.*
+
+# Local machine-specific dev tooling paths (not portable across machines)
+dev-env.sh
 
 # OS / editor
 .DS_Store

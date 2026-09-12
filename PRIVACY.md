@@ -14,6 +14,11 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
   No document is ever publicly listable or accessible without authentication.
 - Uploads are validated by content-type and size before storage (see `API.md` → `/documents`, and
   spec §74 Image Handling for images specifically).
+- **CVs specifically** (`cv_documents` table, Phase 3 ATS): the uploaded file's binary is never
+  persisted — only the plain text extracted from it server-side (`app/services/document_extraction.py`)
+  and never sent anywhere outside this backend. `GET /ats/cv` and `POST /ats/analyze` both require the
+  owning user's bearer token; there is no route that returns another user's CV text or analysis
+  history. A real document vault for the original files is a later phase — see `DATABASE.md`.
 
 ## Email integration (Gmail/Outlook) — opt-in only
 
@@ -47,6 +52,8 @@ exceptions), not a soft "deactivate" that leaves data recoverable indefinitely.
 
 ## Demo/seed data
 
-All seed content (jobs, scholarships, companies, questions, applications, news) used in development is
-clearly flagged in the database (`is_demo` style flag, to be added with the relevant migration) and
-must never be presented to a production user as a real, current vacancy or opportunity.
+All seed content used in development is clearly flagged in the database. `companies`, `jobs`, and
+`scholarships` already carry an `is_demo` boolean column (see `scripts/seed_demo_data.py`); the same
+convention applies to questions/applications/news once those tables exist. Demo content must never be
+presented to a production user as a real, current vacancy or opportunity — the mobile/admin UI should
+visibly badge `is_demo` records once real-vs-demo content coexists in the same environment.

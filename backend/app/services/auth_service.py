@@ -49,13 +49,13 @@ class AuthService:
 
     async def refresh(self, refresh_token: str) -> TokenResponse:
         try:
-            user_id = decode_token(refresh_token, TokenType.REFRESH)
+            decoded = decode_token(refresh_token, TokenType.REFRESH)
         except InvalidTokenError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token"
             ) from exc
 
-        user = await self.users.get_by_id(user_id)
+        user = await self.users.get_by_id(decoded.subject)
         if user is None or not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 

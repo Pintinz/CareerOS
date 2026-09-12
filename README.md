@@ -26,7 +26,7 @@ CareerOS/
 |---|---|---|
 | Python 3.11+ | backend | available |
 | Node.js 18+ | admin | available |
-| Flutter 3.x / Dart | mobile | **not installed** — install from https://flutter.dev before working on `mobile/` |
+| Flutter 3.x / Dart + Android SDK + JDK 17 | mobile | installed and verified — see `DEPLOYMENT.md` → "Mobile toolchain setup" for the exact working setup (including a gotcha: use a JDK **zip**, not an installer) |
 | Docker + Docker Compose | Postgres/local stack | **not installed** — install Docker Desktop to use `docker-compose.yml` |
 
 ## Quick start
@@ -56,14 +56,17 @@ npm run dev
 
 Open http://localhost:3000
 
-### Mobile (Flutter) — once Flutter SDK is installed
+### Mobile (Flutter)
+
+`android/`/`ios/` platform folders are already generated and committed. Just:
 
 ```bash
 cd mobile
-flutter create . --org com.careeros --project-name careeros   # generates android/ ios/ platform folders
 flutter pub get
 flutter run
 ```
+
+To rebuild from scratch on a new machine, see `DEPLOYMENT.md` → "Mobile toolchain setup".
 
 ### Full stack via Docker (once Docker is installed)
 

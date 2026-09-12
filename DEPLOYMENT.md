@@ -7,10 +7,39 @@ See `README.md` → Quick start. Summary:
 - Backend: Python venv + `uvicorn app.main:app --reload`, SQLite fallback if `DATABASE_URL` is unset
   or Postgres/Docker is unavailable.
 - Admin: `npm run dev` (Next.js dev server, port 3000).
-- Mobile: requires Flutter SDK (not installed on the reference dev machine as of Phase 0 — see
-  `PROJECT_STATUS.md`).
+- Mobile: requires Flutter SDK + Android SDK + a JDK. See "Mobile toolchain setup" below.
 - Full stack: `docker compose up` (requires Docker Desktop — not installed on the reference dev
   machine as of Phase 0).
+
+## Mobile toolchain setup (Windows)
+
+Verified working combination for Flutter 3.47.4 on this project (as of this writing):
+
+1. **Flutter SDK**: download the stable Windows zip from
+   https://docs.flutter.dev/get-started/install/windows and extract to e.g. `C:\flutter`.
+2. **JDK 17**: use a **zip distribution** (e.g. Eclipse Temurin), not the installer. An MSI-based
+   JDK installer run non-interactively can hang indefinitely waiting on a UAC elevation prompt with
+   no one to answer it — this happened during initial setup and had to be killed and replaced with
+   the zip approach. Extract to e.g. `C:\jdk17`.
+3. **Android SDK**: download "Command line tools only" from
+   https://developer.android.com/studio#command-line-tools-only (do not need full Android Studio for
+   CLI builds). Extract so the layout is `<ANDROID_HOME>\cmdline-tools\latest\...` (the zip extracts to
+   a `cmdline-tools` folder that must be renamed/moved to `latest`). Then:
+   ```bash
+   sdkmanager.bat --licenses          # accept all
+   sdkmanager.bat "platform-tools" "platforms;android-36" "build-tools;28.0.3"
+   ```
+   Flutter 3.47.4 specifically wants Android SDK 36 + Build-Tools 28.0.3 — `flutter doctor -v` names
+   its current required versions explicitly if these are ever out of date for a newer Flutter release.
+4. Set environment variables (System Properties → Environment Variables, for a permanent setup):
+   - `JAVA_HOME` = the JDK folder (e.g. `C:\jdk17\jdk-17.0.20.1+1`)
+   - `ANDROID_HOME` / `ANDROID_SDK_ROOT` = the SDK folder (e.g. `C:\Android`)
+   - Add to `PATH`: `%JAVA_HOME%\bin`, `C:\flutter\bin`, `%ANDROID_HOME%\cmdline-tools\latest\bin`,
+     `%ANDROID_HOME%\platform-tools`
+   - Then: `flutter config --android-sdk C:\Android` and `flutter doctor -v` to confirm.
+5. Verify with, in order: `flutter pub get`, `flutter analyze`, `flutter test`,
+   `flutter build apk --debug` (see `PROJECT_STATUS.md` for this project's actual results).
+6. iOS builds require a Mac with Xcode — cannot be done or verified on Windows at all.
 
 ## Environment variables
 

@@ -72,7 +72,8 @@ class ApiException implements Exception {
       401 => ApiException(ApiErrorKind.unauthorized, detail ?? "Session expired. Please log in again."),
       404 => ApiException(ApiErrorKind.notFound, detail ?? "Not found."),
       422 => ApiException(ApiErrorKind.validation, detail ?? "Please check your input."),
-      >= 500 => ApiException(ApiErrorKind.server, detail ?? "Something went wrong. Please try again."),
+      final code? when code >= 500 =>
+        ApiException(ApiErrorKind.server, detail ?? "Something went wrong. Please try again."),
       _ => ApiException(ApiErrorKind.unknown, detail ?? "Something went wrong."),
     };
   }

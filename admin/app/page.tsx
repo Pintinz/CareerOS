@@ -1,8 +1,13 @@
-import { OverviewCard } from "@/components/OverviewCard";
-import { getBackendHealth } from "@/lib/api";
+"use client";
 
-// Phase 0: overview counts are not wired to real tables yet (no domain models exist).
-// Showing "—" rather than a fabricated number until Phase 9 admin content endpoints exist.
+import { useEffect, useState } from "react";
+
+import { useAdminGuard } from "@/components/useAdminGuard";
+import { OverviewCard } from "@/components/OverviewCard";
+import { getBackendHealth, HealthStatus } from "@/lib/api";
+
+// Phase 2: overview counts aren't wired to real aggregate endpoints yet (no admin "stats"
+// route exists). Showing "—" rather than a fabricated number until that endpoint exists.
 const OVERVIEW_CARDS = [
   "Active Users",
   "Jobs Published",
@@ -12,8 +17,15 @@ const OVERVIEW_CARDS = [
   "Questions",
 ];
 
-export default async function DashboardPage() {
-  const health = await getBackendHealth();
+export default function DashboardPage() {
+  const { checked } = useAdminGuard();
+  const [health, setHealth] = useState<HealthStatus | null>(null);
+
+  useEffect(() => {
+    if (checked) getBackendHealth().then(setHealth);
+  }, [checked]);
+
+  if (!checked) return null;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -40,8 +52,8 @@ export default async function DashboardPage() {
       </div>
 
       <p className="mt-8 text-sm text-muted">
-        Content review queues, publishing tools, question bank, and source registry land in
-        Phase 9 — see <code>PROJECT_STATUS.md</code>.
+        Companies and Jobs are live in the nav above. News, Scholarships, and the Question Bank
+        land in later phases — see <code>PROJECT_STATUS.md</code>.
       </p>
     </main>
   );

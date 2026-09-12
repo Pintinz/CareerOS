@@ -61,12 +61,16 @@ Three engines compute their scores from explicit, documented weights stored in b
 
 1. **Job Match Score** — role/title similarity, skill overlap, industry, experience level, location,
    work-mode preference, education, keyword similarity (TF-IDF/cosine where useful).
-2. **ATS Readiness Score** — keyword coverage, technical skills, experience relevance, job-title
-   similarity, education, formatting, completeness, keyword placement (weights in
-   `app/matching/ats_weights.py`, configurable, documented in `API.md`).
-3. **Scholarship Eligibility Match** — nationality, degree, field, academic level, experience, age,
-   language, test requirements, country eligibility — expressed as ✓ / △ / ✕ per criterion, never as a
-   blanket "you are eligible."
+2. **ATS Readiness Score** — **implemented** (`app/matching/ats_engine.py`), weights in
+   `app/matching/ats_weights.py` (keyword coverage 25%, technical skills 20%, experience 20%,
+   job title 10%, formatting 10%, education 5%, completeness 5%, placement 5% — see `API.md`).
+   Keyword extraction is frequency-ranked unigrams/bigrams (`app/matching/text_utils.py`), with a
+   small explicit synonym table (`app/matching/synonyms.py`, e.g. PLC ↔ "programmable logic
+   controller") so a CV and JD using different wording for the same concept still match. Every
+   response includes the full per-component breakdown, never a bare percentage.
+3. **Scholarship Eligibility Match** — not yet implemented. Nationality, degree, field, academic
+   level, experience, age, language, test requirements, country eligibility — expressed as
+   ✓ / △ / ✕ per criterion, never as a blanket "you are eligible."
 
 All three must describe themselves accurately as rules/similarity-based, per spec Rule 8 (no fake AI).
 
