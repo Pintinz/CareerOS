@@ -11,7 +11,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `9593281` — Phase 2/3/4 backend+admin, mobile toolchain installed and verified from scratch.
 - `1c0608f` — Mobile screens for Phase 2 (Opportunities)/3 (ATS)/4 (Company Intelligence).
 - `1a58ef3` — Phase 5 (Applications) backend + mobile.
-- Everything under "Phase 6 — Aptitude Testing" below is the next commit (tag `phase-6-aptitude`).
+- `6775869` — Phase 6 (Aptitude Testing) backend + mobile (tagged `phase-6-aptitude`).
 
 ## Environment notes (read before assuming anything is verified)
 
