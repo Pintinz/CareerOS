@@ -3,10 +3,16 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../core/app_providers.dart";
+import "../features/ats/presentation/ats_analyze_screen.dart";
 import "../features/auth/presentation/login_screen.dart";
+import "../features/companies/presentation/company_detail_screen.dart";
 import "../features/auth/presentation/register_screen.dart";
 import "../features/home/presentation/home_shell.dart";
+import "../features/intelligence/presentation/intelligence_detail_screen.dart";
+import "../features/jobs/presentation/job_detail_screen.dart";
 import "../features/onboarding/presentation/onboarding_screen.dart";
+import "../features/profile/presentation/saved_items_screen.dart";
+import "../features/scholarships/presentation/scholarship_detail_screen.dart";
 import "../features/splash/presentation/splash_screen.dart";
 
 class _RouterRefreshNotifier extends ChangeNotifier {
@@ -55,6 +61,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: "/login", builder: (context, state) => const LoginScreen()),
       GoRoute(path: "/register", builder: (context, state) => const RegisterScreen()),
       GoRoute(path: "/home", builder: (context, state) => const HomeShell()),
+      GoRoute(
+        path: "/jobs/:idOrSlug",
+        builder: (context, state) => JobDetailScreen(idOrSlug: state.pathParameters["idOrSlug"]!),
+      ),
+      GoRoute(
+        path: "/scholarships/:idOrSlug",
+        builder: (context, state) => ScholarshipDetailScreen(idOrSlug: state.pathParameters["idOrSlug"]!),
+      ),
+      GoRoute(
+        path: "/companies/:idOrSlug",
+        builder: (context, state) => CompanyDetailScreen(idOrSlug: state.pathParameters["idOrSlug"]!),
+      ),
+      GoRoute(
+        path: "/intelligence/:idOrSlug",
+        builder: (context, state) => IntelligenceDetailScreen(idOrSlug: state.pathParameters["idOrSlug"]!),
+      ),
+      GoRoute(
+        path: "/ats/analyze",
+        builder: (context, state) => AtsAnalyzeScreen(args: state.extra as AtsAnalyzeArgs?),
+      ),
+      GoRoute(path: "/saved", builder: (context, state) => const SavedItemsScreen()),
     ],
   );
 });

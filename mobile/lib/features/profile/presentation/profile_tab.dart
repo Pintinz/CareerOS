@@ -1,5 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:go_router/go_router.dart";
 
 import "../../../theme/app_colors.dart";
 import "../../auth/presentation/auth_controller.dart";
@@ -47,7 +48,16 @@ class ProfileTab extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 32),
-        const _ProfileMenuItem(icon: Icons.description_outlined, label: "Resume & Documents"),
+        _ProfileMenuItem(
+          icon: Icons.bookmark_border,
+          label: "Saved Jobs & Scholarships",
+          onTap: () => context.push("/saved"),
+        ),
+        _ProfileMenuItem(
+          icon: Icons.description_outlined,
+          label: "CVs & ATS Analysis",
+          onTap: () => context.push("/ats/analyze"),
+        ),
         const _ProfileMenuItem(icon: Icons.tune_rounded, label: "Career Preferences"),
         const _ProfileMenuItem(icon: Icons.notifications_outlined, label: "Notifications"),
         const _ProfileMenuItem(icon: Icons.settings_outlined, label: "Settings"),
@@ -63,10 +73,11 @@ class ProfileTab extends ConsumerWidget {
 }
 
 class _ProfileMenuItem extends StatelessWidget {
-  const _ProfileMenuItem({required this.icon, required this.label});
+  const _ProfileMenuItem({required this.icon, required this.label, this.onTap});
 
   final IconData icon;
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +87,7 @@ class _ProfileMenuItem extends StatelessWidget {
         leading: Icon(icon, color: AppColors.blue),
         title: Text(label),
         trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
-        onTap: null, // wired up as each destination's phase is built
+        onTap: onTap, // null until that destination's phase is built
       ),
     );
   }

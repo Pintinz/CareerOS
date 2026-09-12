@@ -2,12 +2,14 @@ import "package:flutter/material.dart";
 
 import "../../../theme/app_colors.dart";
 import "../../../widgets/phase_pending_placeholder.dart";
+import "../../intelligence/presentation/intelligence_feed_tab.dart";
+import "../../opportunities/presentation/opportunities_tab.dart";
 import "../../profile/presentation/profile_tab.dart";
 import "home_tab.dart";
 
 /// Main bottom navigation shell (master spec §6): Home, Opportunities, Prepare,
-/// Intelligence, Profile. Only Home and Profile have real content this phase; the rest are
-/// honest empty states until their build phase lands (§79 — never fabricate content).
+/// Intelligence, Profile. Prepare (aptitude/interview prep, Phases 6-7) is still an honest
+/// empty state (§79 — never fabricate content); the rest now have real content.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -20,21 +22,13 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _tabs = [
     HomeTab(),
-    PhasePendingPlaceholder(
-      icon: Icons.work_outline_rounded,
-      title: "Opportunities",
-      message: "Jobs, scholarships, internships and graduate programmes arrive in Phase 2.",
-    ),
+    OpportunitiesTab(),
     PhasePendingPlaceholder(
       icon: Icons.fact_check_outlined,
       title: "Prepare",
       message: "Aptitude tests and interview preparation arrive in Phases 6-7.",
     ),
-    PhasePendingPlaceholder(
-      icon: Icons.newspaper_outlined,
-      title: "Intelligence",
-      message: "Company intelligence and news feed arrive in Phase 4.",
-    ),
+    IntelligenceFeedTab(),
     ProfileTab(),
   ];
 
