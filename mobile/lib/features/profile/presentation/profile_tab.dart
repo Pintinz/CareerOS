@@ -75,7 +75,11 @@ class ProfileTab extends ConsumerWidget {
         ),
         const _ProfileMenuItem(icon: Icons.tune_rounded, label: "Career Preferences"),
         const _ProfileMenuItem(icon: Icons.notifications_outlined, label: "Notifications"),
-        const _ProfileMenuItem(icon: Icons.settings_outlined, label: "Settings"),
+        _ProfileMenuItem(
+          icon: Icons.settings_outlined,
+          label: "Settings",
+          onTap: () => context.push("/settings"),
+        ),
         const SizedBox(height: 24),
         OutlinedButton(
           onPressed: () => ref.read(authControllerProvider.notifier).logout(),

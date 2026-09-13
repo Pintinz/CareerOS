@@ -7,6 +7,7 @@ from app.api.v1 import (
     ats,
     auth,
     companies,
+    email_tracking,
     health,
     intelligence,
     interview,
@@ -14,6 +15,7 @@ from app.api.v1 import (
     me,
     profile,
     scholarships,
+    webhooks,
 )
 from app.api.v1.admin import aptitude as admin_aptitude
 from app.api.v1.admin import companies as admin_companies
@@ -37,6 +39,8 @@ api_router.include_router(aptitude.router, prefix="/aptitude", tags=["aptitude"]
 api_router.include_router(interview.router, prefix="/interview", tags=["interview"])
 api_router.include_router(interview.star_router, prefix="/star-stories", tags=["star-stories"])
 api_router.include_router(me.router, prefix="/me", tags=["me"])
+api_router.include_router(email_tracking.router, prefix="/email-tracking", tags=["email-tracking"])
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 api_router.include_router(admin_auth.router, prefix="/admin/auth", tags=["admin-auth"])
 api_router.include_router(admin_companies.router, prefix="/admin/companies", tags=["admin-companies"])

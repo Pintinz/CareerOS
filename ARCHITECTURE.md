@@ -274,12 +274,156 @@ conflict to the user rather than silently overwriting) is not yet built — see 
   upload code path exists (by design, not by omission) — only the metadata row (duration, title,
   which question) is synced, never the audio bytes themselves.
 
-## Recruitment email classification
+## Smart Recruitment Email Tracking (`app/email_tracking/`, `app/services/email_tracking_*.py`, Phase 8)
 
-Deterministic rule-based keyword/phrase classifier (`app/services/email_classifier.py`), not an LLM
-call to an external API. Confidence-scored match against a specific `applications` row using company,
-job title, reference number, and timing signals — the app **never** silently changes an application's
-stage; it always asks for user confirmation (see `PRIVACY.md`).
+**Security-sensitive by design — read this section before touching any of this code.** The single
+governing rule: nothing outside `POST /email-tracking/events/{id}/confirm` may ever write to
+`Application.current_stage`, and that endpoint only ever gets there by calling the *existing* Phase 5
+`ApplicationService.update_stage` — there is no second, parallel transition implementation anywhere
+in this phase. The full data flow, matching spec's own diagram exactly:
+
+```
+Recruitment email detected (webhook or reconciliation sync)
+        ↓
+Recruitment pre-filter (app/email_tracking/classifier.py — is this even recruitment-related?)
+        ↓
+Application matching (app/email_tracking/matcher.py — weighted signals, config in matching_config.py)
+        ↓
+Stage classification (app/email_tracking/classifier.py — phrase dictionaries, config-driven)
+        ↓
+Confidence calculation (app/email_tracking/confidence.py — combines classifier + matcher signals)
+        ↓
+RecruitmentEmailEvent persisted (status: SUGGESTED / AMBIGUOUS / UNMATCHED / DETECTED)
+        ↓
+User reviews it on the "Recruitment Update Detected" screen
+        ↓
+USER CONFIRMS (or picks the right application first, if AMBIGUOUS)
+        ↓
+EmailTrackingService.confirm_event() → ApplicationService.update_stage(..., source="EMAIL_CONFIRMED")
+        ↓
+ApplicationStageEvent appended (same table/mechanism as every manual stage change)
+```
+
+### Provider abstraction (`app/services/email_tracking_providers.py`)
+
+One `EmailTrackingProvider` interface — `build_authorization_url`, `exchange_code`,
+`refresh_access_token`, `establish_watch`/`renew_watch`, `list_changed_message_ids`,
+`fetch_message`, `revoke` — with three implementations:
+
+- `GmailTrackingProvider` / `OutlookTrackingProvider` — structurally real (genuine OAuth endpoints,
+  genuine Gmail/Graph API calls via `httpx`), but **never exercised against a real Google or
+  Microsoft account in this environment** — no production OAuth credentials are configured here.
+  Gmail requests only `gmail.readonly`; Outlook requests only delegated `Mail.Read`/`User.Read`/
+  `offline_access` for the signed-in user's own mailbox — no write/send/modify/delete scope is ever
+  requested, and Outlook auth targets `common` (personal + work/school accounts), never a
+  tenant-wide application permission.
+- `MockEmailTrackingProvider` — a fully in-memory, deterministic double used by every automated test
+  in this codebase and by the "mock connect flow" the mobile app's OAuth screens actually complete
+  against in this environment. `EmailTrackingService.get_provider()` falls back to this
+  automatically whenever a provider's real credentials aren't configured (see
+  `Settings.gmail_tracking_available`/`outlook_tracking_available` in `app/core/config.py`) — the
+  feature stays fully usable in dev with zero credentials, per explicit spec instruction.
+
+### OAuth state (CSRF protection)
+
+The provider's OAuth callback is hit directly by the user's browser — it carries no CareerOS bearer
+token. A dedicated `oauth_states` table (random, single-use, 15-minute-lived, bound to
+`(user_id, provider)`) is what lets the callback recover which CareerOS user initiated the flow
+safely; an unknown, expired, or already-consumed state value is rejected with 400, never silently
+accepted. This is the mobile-OAuth equivalent of a server-side session, deliberately not a JWT,
+since it must be usable by an unauthenticated request.
+
+### Token encryption (`app/services/token_encryption_service.py`)
+
+`TokenEncryptionService` wraps `cryptography`'s `MultiFernet` (AES-128-CBC + HMAC-SHA256,
+authenticated — not homemade crypto). Every access/refresh token is encrypted before it's written to
+`email_connections`; `EmailConnectionOut` has no token field, encrypted or otherwise, so a normal API
+response cannot leak one even by mistake. The key comes from `TOKEN_ENCRYPTION_KEYS` (a
+comma-separated list, newest first) — `MultiFernet` encrypts with the first key and can decrypt with
+any of them, which is what makes rotation possible without breaking already-stored ciphertexts.
+
+### Deterministic classification (no generative AI anywhere)
+
+`app/email_tracking/classifier.py` normalizes subject+body text and phrase-matches it against
+`stage_phrases.STAGE_PHRASES`, a config-driven dictionary keyed directly by the **existing**
+`ApplicationStage` enum values (spec §20 — no separate taxonomy to keep in sync; a detected stage
+feeds straight into the Phase 5 stage endpoint with zero translation). A fixed priority order
+resolves overlapping phrases (e.g. "final interview" language always wins over generic "interview"
+language). Critically, `NEGATIVE_CONTEXT_PATTERNS` — general/aggregate phrasing like "only
+shortlisted candidates will be contacted" — is checked independently and penalizes confidence
+heavily (spec §23's mandatory rule: general recruitment information must never be read as a direct
+statement about the recipient).
+
+### Application matching (`app/email_tracking/matcher.py`, weights in `matching_config.py`)
+
+A pure-function weighted scorer (`ApplicationSignal` dataclasses in, no ORM/database dependency) —
+job/reference-id match (35), company/domain match (20), job-title word-overlap (20), an explicit
+"Reference:"-labeled id (15), timing plausibility (5), location (5), normalized to 0–1. Returns
+`matched` only when exactly one candidate clears `MATCH_MIN_SCORE` and beats every rival by more
+than `MATCH_AMBIGUITY_MARGIN`; returns `ambiguous` with the full candidate list when several are too
+close to call (spec §25's "three Shell applications" scenario); returns `unmatched` rather than ever
+guessing. All weights and thresholds live in one module — spec §24's explicit "do not scatter
+weights through code."
+
+### Confidence model (`app/email_tracking/confidence.py`)
+
+Combines the classifier's text-only signals (stage-language strength, recipient-directed phrasing,
+known-ATS-domain sender) with the matcher's per-candidate signals (identifier/company/role/timing
+match) into one 0–1 score, labeled HIGH/MEDIUM/LOW off centrally configured thresholds
+(`matching_config.CONFIDENCE_HIGH`/`CONFIDENCE_MEDIUM`/`SUGGEST_MIN_CONFIDENCE`). A LOW-confidence
+or sub-`SUGGEST_MIN_CONFIDENCE` event never becomes an intrusive suggestion — see
+`EmailTrackingService.process_message`. Mobile copy is always phrased as a possibility ("CareerOS
+detected a possible interview invitation"), never a certainty ("You passed!") — spec §27.
+
+### Webhook processing (spec §13-14) and background-task abstraction
+
+`POST /webhooks/gmail`/`/webhooks/microsoft`/`/webhooks/microsoft/lifecycle` (`app/api/v1/
+webhooks.py`) each validate → deduplicate → acknowledge → enqueue, never running classification
+before returning a response to the provider. `app/services/background_tasks.py`'s
+`BackgroundTaskRunner` interface has exactly one implementation today, `InlineTaskRunner` (runs the
+enqueued work immediately, in-process) — no Redis/Celery is wired up anywhere in this codebase yet
+(same pre-existing gap as every other background-job mention in this file). Swapping to a real
+queue later means writing one new `BackgroundTaskRunner` implementation; none of the webhook routes
+need to change.
+
+A Gmail Pub/Sub notification means "this mailbox changed," never "this is a recruitment email" —
+the webhook handler fetches the connection matching the notified address, then defers to
+`EmailTrackingService.sync_connection`, which calls `history.list` from the connection's own stored
+`gmail_history_id` before anything is classified. A notification for an unknown or inactive mailbox
+is a quiet no-op (spec §9/§43 — not an error, never a hint to the caller about which mailboxes exist
+in the system). Microsoft's subscription-creation `validationToken` handshake is implemented exactly
+per Graph's requirement; lifecycle events (`reauthorizationRequired`, `subscriptionRemoved`,
+`missed`) mark the connection, attempt safe resubscription, or trigger a reconciliation sync
+respectively (spec §12) — tracking never just silently stops.
+
+### Idempotency
+
+The database itself enforces "the same provider message never creates two events": `
+recruitment_email_events` has a `UniqueConstraint(user_id, provider, provider_message_id)`, and
+`RecruitmentEmailEventRepository.try_add` catches the resulting `IntegrityError` inside a SAVEPOINT
+and returns `None` rather than raising — a redelivered webhook is a safe no-op, not a duplicate
+suggestion or a crash. The confirm endpoint is separately idempotent: a second confirm attempt on an
+already-`CONFIRMED` event returns 409, and `ApplicationService.update_stage(..., commit=False)`
+combined with `EmailTrackingService.confirm_event`'s single final commit means the stage change and
+the event's confirmed flag either both land or neither does — see `PROJECT_STATUS.md`'s Known Bugs
+for the real atomicity bug this caught before it shipped.
+
+### Watch/subscription renewal (spec §58-59)
+
+`EmailTrackingService.renew_expiring_watches()` is a real, tested method a daily scheduler would
+call — it re-establishes any Gmail watch or Outlook subscription within 24 hours of expiry, and
+marks a connection `REAUTHORIZATION_REQUIRED` outright if its stored token can't even be decrypted.
+Nothing in this codebase currently invokes it on a timer (no APScheduler/Celery is wired up anywhere
+yet — see the background-task note above); a production deployment needs to schedule it, e.g. daily.
+
+### Forward-to-CareerOS (spec §36)
+
+`EmailForwardingAlias` gives each user a random opaque token (`apply+<token>@<configured domain>`),
+never a sequential/guessable id — implemented as a real table + repository. No inbound-mail provider
+(an inbound-parse webhook from a transactional-email vendor, for instance) is configured in this
+environment, so `Settings.forward_email_available` stays `false` and the feature is inert end to
+end — exactly the "implement the architecture, don't block the phase" outcome the spec itself asks
+for when a provider isn't available (spec §36's explicit fallback instruction).
 
 ## Environment-gated integrations
 

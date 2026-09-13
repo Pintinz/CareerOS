@@ -175,16 +175,49 @@ detection — omit it to update unconditionally (the pre-Phase-7.5 behavior), or
 structural alt text, immutably snapshotted per session like every other question field (see
 ARCHITECTURE.md and DATABASE.md).
 
+## Implemented endpoints (Phase 8 — Smart Recruitment Email Tracking)
+
+All `/email-tracking/*` routes require a consumer bearer token and are strictly per-user (404,
+never 403, on a connection/event that isn't the caller's). **Never call
+`POST /applications/{id}/stage` as a side effect of anything in this section from new code** — the
+only place a recruitment-email suggestion may change a real stage is `confirm`, below, which itself
+just calls the existing Phase 5 stage service. See ARCHITECTURE.md for the full data-flow diagram
+and PRIVACY.md for what is/isn't retained from a message.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/email-tracking/providers` | `ProviderAvailabilityOut` — `gmail_available`/`outlook_available`/`forward_email_available` (each `true` only when its feature flag is on **and** its credentials are configured — always `false` for Gmail/Outlook in this environment) plus `forward_email_alias` when forwarding is available. Backs the settings screen's "Connect" vs. "In Development" provider cards. |
+| GET | `/api/v1/email-tracking/connections` | The caller's non-disconnected connections. Response schema (`EmailConnectionOut`) has **no token field at all** — not even encrypted. |
+| POST | `/api/v1/email-tracking/gmail/connect` | Generates a single-use OAuth `state` bound to (user, GMAIL), returns `{"authorization_url"}`. 503 if Gmail tracking isn't available in this environment (see `providers` above) — never a crash. |
+| GET | `/api/v1/email-tracking/gmail/callback` | Hit directly by the browser after Google's consent screen (`?code=&state=`) — no bearer token on this request; the `state` is what recovers the CareerOS user. Rejects an unknown/expired/already-consumed state with 400. Exchanges the code, encrypts and stores the tokens, establishes a Gmail watch. |
+| POST / GET | `/api/v1/email-tracking/outlook/connect` / `/outlook/callback` | Same shape as the Gmail pair, for Microsoft/Outlook. |
+| DELETE | `/api/v1/email-tracking/connections/{id}` | Disconnect: best-effort provider-side revoke, clears the stored (encrypted) tokens, marks the connection `DISCONNECTED`. Confirmed application timeline history is never touched. |
+| DELETE | `/api/v1/email-tracking/data` | Spec §35 — deletes the caller's `recruitment_email_events` rows only (`{"deleted_events": <count>}`). Confirmed `ApplicationStageEvent` rows are untouched — they live on `applications`, not here. |
+| GET | `/api/v1/email-tracking/events` | Optional `?application_id=` to scope to one application (backs the application detail "Emails" tab, spec §32). |
+| GET | `/api/v1/email-tracking/events/{id}` | Full detail including `classification_reason_json`'s evidence list (spec §29's "Detected because..." explainability). |
+| POST | `/api/v1/email-tracking/events/{id}/confirm` | **The only endpoint in this codebase that may change `current_stage` on behalf of a recruitment email.** 404 if the event or its matched application isn't the caller's; 409 if already confirmed/ignored; 422 if no application is matched yet or no stage was detected. Calls `ApplicationService.update_stage(..., source="EMAIL_CONFIRMED", commit=False)` and marks the event `CONFIRMED` in one transaction, committing once — either both happen or neither does. |
+| POST | `/api/v1/email-tracking/events/{id}/ignore` | Marks `IGNORED`. 409 if already confirmed/ignored. |
+| POST | `/api/v1/email-tracking/events/{id}/assign-application` | Body: `application_id`, which **must** be one of the event's own `candidate_application_ids` (spec §25 — never accepts an arbitrary application, never guesses). Resolves an `AMBIGUOUS` event to `SUGGESTED`. |
+| GET | `/api/v1/email-tracking/events/{id}/prep-hint` | `{"prep_flow": "aptitude" \| "interview" \| null}` — lets the mobile client offer "Prepare for Aptitude Test"/"Prepare for Interview" after a confirm, reusing the Phase 6/7 flows (spec §30/§62) rather than building a duplicate one. |
+| POST | `/api/v1/webhooks/gmail` | Google Pub/Sub push-subscription endpoint. Validates the expected topic when `GOOGLE_PUBSUB_TOPIC` is configured, finds the connection matching the notified mailbox (an unknown/inactive mailbox is a quiet 204, never an error), enqueues a history sync. Never classifies anything before returning to the caller. |
+| POST | `/api/v1/webhooks/microsoft` | Microsoft Graph change-notification endpoint. Echoes `?validationToken=` verbatim during subscription creation (Graph's required handshake); otherwise enqueues a sync per notified subscription. |
+| POST | `/api/v1/webhooks/microsoft/lifecycle` | Graph lifecycle-notification endpoint. Same validation handshake; handles `reauthorizationRequired` (marks the connection), `subscriptionRemoved` (attempts safe resubscription), and `missed` (triggers a reconciliation sync). |
+
+Admin operational metrics for email tracking (spec §64: active watches/subscriptions, reauth-needed
+count, events processed/matched/ambiguous, webhook failures) are **not implemented** this phase —
+admin web work stayed out of scope, consistent with the Phase 9 boundary every other admin CMS gap
+in this file already respects. There is no admin inbox-viewer and none is planned (spec §63).
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```
 /profile         career preferences, skills, experiences, education, certifications (beyond §10 basics)
 /applications    document attachments (CRUD/stage/notes already implemented above)
 /documents       CV vault + document vault upload/list/rename/delete (signed URLs, private by default)
-/email           connect/disconnect Gmail/Outlook, pending-match confirmation queue
 /notifications   list, mark read, preferences
-/admin/*         news/company-follow publishing, source registry, discovery queue, user management
-                 (jobs/scholarships/companies/aptitude/interview question-bank admin already
+/admin/*         news/company-follow publishing, source registry, discovery queue, user management,
+                 email-tracking operational metrics (jobs/scholarships/companies/aptitude/interview
+                 question-bank admin, and email-tracking connect/webhook endpoints, already
                  implemented above)
 ```
 

@@ -24,20 +24,92 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
   owning user's bearer token; there is no route that returns another user's CV text or analysis
   history. A real document vault for the original files is a later phase — see `DATABASE.md`.
 
-## Email integration (Gmail/Outlook) — opt-in only
+## Smart Recruitment Email Tracking (Gmail/Outlook/Forward-to-CareerOS — Phase 8, opt-in only)
 
-- Manual application tracking is fully functional with **no** email connection at all; connecting
-  email is an enhancement, never a requirement.
-- OAuth scope requested is the minimum needed to read recruitment-relevant messages (read-only mail
-  scope), never full mailbox management/send scopes.
-- The classifier extracts only what it needs to match a message to an application (sender domain,
-  subject/body keywords, detected stage, confidence score) — it does not ingest or retain the full
-  body of unrelated mail.
-- **No automatic stage change is ever applied.** Every detected update is surfaced to the user as a
-  confirmation card (`Confirm Update` / `Wrong Application` / `Ignore`); only a user action writes to
-  `application_stage_events`.
-- Settings expose `Disconnect Gmail`, `Disconnect Outlook`, and `Delete imported recruitment metadata`
-  as first-class actions, not buried preferences.
+**CareerOS is fully usable with zero email connection.** Manual application tracking (Phase 5) is
+never degraded, hidden, or gated behind connecting a mailbox — Smart Application Tracking is
+strictly an optional enhancement layered on top of it.
+
+### Why mailbox access is requested
+
+CareerOS asks for read-only mailbox access for one purpose only: to identify recruitment-related
+messages and suggest updates to applications you're already tracking. It is never used to read your
+mail for any other purpose, and never for advertising.
+
+### What is requested (and what is deliberately *not* requested)
+
+- **Gmail**: only the `gmail.readonly` OAuth scope. No `gmail.send`, `gmail.compose`,
+  `gmail.modify`, or full mailbox-management scope is ever requested.
+- **Outlook/Microsoft 365**: only delegated `Mail.Read` + `User.Read` + `offline_access`, scoped to
+  the signed-in user's own mailbox. No `Mail.ReadWrite`/`Mail.Send`, and no tenant-wide application
+  permission — CareerOS never asks an organization's admin to grant it broad access to every
+  mailbox in a tenant.
+- Both connections can be revoked by you at any time from Settings → Application Tracking, and
+  disconnecting also stops CareerOS's own future processing (see Disconnect, below).
+
+### What is processed (transiently) vs. what is retained
+
+- The full email body is read transiently, in memory, to run the deterministic classifier — it is
+  **never** written to CareerOS's database. This is not a shadow mailbox: CareerOS does not build,
+  and cannot produce, a copy of your inbox.
+- What *is* retained, per matched message (`recruitment_email_events` — see DATABASE.md): the
+  provider's own message id (for deduplication), sender email/domain/name, subject line, received
+  timestamp, which application (if any) it matched, the detected stage guess, the confidence score,
+  a short (≤240 character) sanitized excerpt of *why* it matched (e.g. `"invited to complete an
+  online assessment" was detected`), and the review status. No attachments are ever ingested.
+- OAuth tokens are encrypted at rest (`TokenEncryptionService`, see ARCHITECTURE.md) and are never
+  included in any API response, log line, or exception message.
+
+### No automatic stage change — ever
+
+This is the single non-negotiable rule of this entire feature: **CareerOS will never change an
+application's stage without your explicit confirmation.** A detected update becomes a suggestion
+you review on the "Recruitment Update Detected" screen (`Confirm Stage` / `Wrong Application` /
+`Ignore` / `View Email Details`); only tapping `Confirm Stage` writes anything to
+`application_stage_events`, and it does so by calling the exact same stage-transition endpoint a
+manual update uses (`ApplicationService.update_stage`) — there is no separate, weaker code path.
+Low-confidence detections don't even reach a push notification; they sit quietly under review status
+rather than interrupting you.
+
+### Explainability
+
+Before confirming anything, you can always see *why* CareerOS suggested it — a short "Detected
+because: • Company domain matched • Role title matched • '...phrase...' was detected" breakdown, not
+a bare percentage. CareerOS never recreates a full email reader inside the app; only From/Subject/
+Date/a short excerpt/the detection reasons are ever shown.
+
+### Disconnect
+
+Disconnecting a provider (Settings → Application Tracking → Disconnect): revokes CareerOS's access
+on the provider's side where the provider supports it, stops the Gmail watch / deletes the Outlook
+Graph subscription, clears CareerOS's own stored (encrypted) tokens, and marks the connection
+disconnected so no further processing happens. It does **not** delete previously confirmed
+application-stage history — that lives on the application itself, independent of any mailbox
+connection, and is controlled separately (see below).
+
+### Delete Recruitment Email Data
+
+A separate "Delete Recruitment Email Data" control (Settings → Application Tracking) deletes every
+stored `recruitment_email_events` row for your account — the metadata and suggestions described
+above. It explicitly does **not** touch any already-confirmed application timeline entry; if you
+want to undo a stage change you confirmed, edit the application itself.
+
+### Forward Recruitment Email (the most private option)
+
+Spec's fourth, privacy-friendly tracking method: forward any recruitment email yourself to a
+personal, non-guessable CareerOS alias (`apply+<opaque-token>@...` — never a sequential or
+otherwise-guessable identifier). This requires no account connection, no OAuth, and no standing
+mailbox access at all. The alias and its data model exist; actually receiving and processing
+forwarded mail requires an inbound-mail provider that is not configured in this environment, so this
+method currently shows as unavailable rather than functioning end to end — see PROJECT_STATUS.md.
+
+### What was NOT tested against a real provider
+
+Everything above describes the real, implemented behavior — but it has only ever been exercised
+against `MockEmailTrackingProvider` and hand-built webhook payloads in this environment, never a
+genuine Gmail or Outlook account. See PROJECT_STATUS.md's Phase 8 completion report for the exact
+implemented / mock-verified / blocked-by-credentials breakdown before treating any of this as
+production-verified.
 
 ## Aptitude assessment data (Phase 6)
 
@@ -90,6 +162,16 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
 - Locally cached interview session data (see `ARCHITECTURE.md` → Mobile interview offline behavior)
   stays on-device in the app's own SharedPreferences store and is cleared once a session completes;
   it is never transmitted anywhere except back to this backend's own `/interview/*` endpoints.
+
+### Logging and webhook security
+
+Structured logs for this feature may contain provider name, connection id, event id, processing
+status, and error category — never an email body, OAuth access/refresh token, authorization code, or
+full webhook payload. Webhook endpoints treat every inbound payload as untrusted: a Gmail Pub/Sub
+notification for an address with no matching active connection is a quiet no-op, and Microsoft Graph
+notification/lifecycle endpoints implement Graph's own required validation handshake before
+accepting anything. Email content itself is never rendered as raw HTML in the app — only sanitized,
+short plain-text excerpts are ever displayed.
 
 ## Account deletion
 

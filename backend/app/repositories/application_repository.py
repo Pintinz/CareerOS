@@ -30,6 +30,12 @@ class ApplicationRepository:
         items = (await self.db.execute(query)).scalars().all()
         return list(items), total
 
+    async def list_all_for_user(self, user_id: str) -> list[Application]:
+        """Unpaginated — used by the email-tracking matcher (spec §24), which needs every
+        candidate application to score against, not one page of them."""
+        result = await self.db.execute(select(Application).where(Application.user_id == user_id))
+        return list(result.scalars().all())
+
     async def count_active_for_user(self, user_id: str, *, terminal_stages: set[ApplicationStage]) -> int:
         result = await self.db.execute(
             select(func.count())

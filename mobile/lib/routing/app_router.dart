@@ -15,6 +15,9 @@ import "../features/ats/presentation/ats_analyze_screen.dart";
 import "../features/auth/presentation/login_screen.dart";
 import "../features/companies/presentation/company_detail_screen.dart";
 import "../features/auth/presentation/register_screen.dart";
+import "../features/email_tracking/presentation/recruitment_event_detail_screen.dart";
+import "../features/email_tracking/presentation/recruitment_events_screen.dart";
+import "../features/email_tracking/presentation/smart_tracking_settings_screen.dart";
 import "../features/home/presentation/home_shell.dart";
 import "../features/intelligence/presentation/intelligence_detail_screen.dart";
 import "../features/interview/presentation/company_prep_screen.dart";
@@ -29,6 +32,7 @@ import "../features/jobs/presentation/job_detail_screen.dart";
 import "../features/onboarding/presentation/onboarding_screen.dart";
 import "../features/profile/presentation/saved_items_screen.dart";
 import "../features/scholarships/presentation/scholarship_detail_screen.dart";
+import "../features/settings/presentation/settings_screen.dart";
 import "../features/splash/presentation/splash_screen.dart";
 
 class _RouterRefreshNotifier extends ChangeNotifier {
@@ -98,6 +102,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AtsAnalyzeScreen(args: state.extra as AtsAnalyzeArgs?),
       ),
       GoRoute(path: "/saved", builder: (context, state) => const SavedItemsScreen()),
+      GoRoute(path: "/settings", builder: (context, state) => const SettingsScreen()),
+      GoRoute(path: "/settings/tracking", builder: (context, state) => const SmartTrackingSettingsScreen()),
+      GoRoute(path: "/settings/tracking/events", builder: (context, state) => const RecruitmentEventsScreen()),
+      GoRoute(
+        path: "/settings/tracking/events/:id",
+        builder: (context, state) => RecruitmentEventDetailScreen(eventId: state.pathParameters["id"]!),
+      ),
       GoRoute(path: "/applications", builder: (context, state) => const ApplicationListScreen()),
       GoRoute(path: "/applications/new", builder: (context, state) => const CreateApplicationScreen()),
       GoRoute(

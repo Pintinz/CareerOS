@@ -27,12 +27,37 @@ class Settings(BaseSettings):
 
     google_client_id: str | None = None
     apple_client_id: str | None = None
-    gmail_oauth_client_id: str | None = None
-    gmail_oauth_client_secret: str | None = None
-    outlook_oauth_client_id: str | None = None
-    outlook_oauth_client_secret: str | None = None
     admob_app_id: str | None = None
     redis_url: str | None = None
+
+    # Phase 8 — Smart Recruitment Email Tracking. All optional: the feature is fully architected
+    # (provider interfaces, OAuth endpoints, mock provider) and usable end-to-end in dev without
+    # any of these, per spec §39/§40 "do not stop development merely because production
+    # credentials are absent." Availability of a specific provider is `flag AND credentials
+    # present` — see EmailTrackingSettings below.
+    email_tracking_enabled: bool = True
+    gmail_tracking_enabled: bool = True
+    outlook_tracking_enabled: bool = True
+    forward_email_enabled: bool = False  # no inbound-mail provider configured yet — see §36.
+
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    google_pubsub_topic: str | None = None
+
+    microsoft_client_id: str | None = None
+    microsoft_client_secret: str | None = None
+    microsoft_tenant: str = "common"  # "common" supports both personal + work/school accounts.
+    microsoft_redirect_uri: str | None = None
+    microsoft_webhook_url: str | None = None
+    microsoft_lifecycle_webhook_url: str | None = None
+
+    forward_email_domain: str = "mail.careeros.app"
+
+    # Fernet key (44-char urlsafe-base64) for encrypting OAuth tokens at rest (spec §16). A dev
+    # default is provided so the app runs out of the box; production MUST set a real generated
+    # key (`Fernet.generate_key()`) via environment/secret manager. Comma-separate multiple keys
+    # (newest first) to support rotation — old ciphertexts still decrypt with a retired key.
+    token_encryption_keys: str = "UuQmhsXcogUgfZv-VKXGPr1jS2C5Y0EIytlAc77syfg="  # dev-only, publicly committed on purpose — override in production.
 
     # First-run bootstrap only: if set and no admin_users row exists yet, one SUPER_ADMIN is
     # created with these credentials at startup. Leave unset after the first admin exists.
@@ -46,6 +71,33 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
+
+    @property
+    def gmail_credentials_configured(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret and self.google_redirect_uri)
+
+    @property
+    def gmail_tracking_available(self) -> bool:
+        return self.email_tracking_enabled and self.gmail_tracking_enabled and self.gmail_credentials_configured
+
+    @property
+    def outlook_credentials_configured(self) -> bool:
+        return bool(self.microsoft_client_id and self.microsoft_client_secret and self.microsoft_redirect_uri)
+
+    @property
+    def outlook_tracking_available(self) -> bool:
+        return self.email_tracking_enabled and self.outlook_tracking_enabled and self.outlook_credentials_configured
+
+    @property
+    def forward_email_available(self) -> bool:
+        # Also gated on an inbound-mail processor actually being configured — see
+        # app/services/email_tracking_providers.py's ForwardEmailProvider docstring. No such
+        # provider is wired up in this environment (spec §36: "do not block Phase 8").
+        return self.email_tracking_enabled and self.forward_email_enabled
+
+    @property
+    def token_encryption_key_list(self) -> list[str]:
+        return [k.strip() for k in self.token_encryption_keys.split(",") if k.strip()]
 
 
 @lru_cache

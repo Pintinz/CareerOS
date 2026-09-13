@@ -107,8 +107,21 @@ class ApplicationService:
         return ApplicationOut.model_validate(application)
 
     async def update_stage(
-        self, user_id: str, application_id: str, payload: ApplicationStageUpdate
+        self,
+        user_id: str,
+        application_id: str,
+        payload: ApplicationStageUpdate,
+        *,
+        source: str = "MANUAL",
+        commit: bool = True,
     ) -> ApplicationDetailOut:
+        """The *only* code path that changes `current_stage` (spec §42/Phase 8's "never silently
+        change a stage" rule) — Phase 8's email-confirmation flow calls this exact method with
+        `source="EMAIL_CONFIRMED", commit=False` rather than duplicating any transition logic, per
+        its own explicit instruction not to. `commit=False` leaves the change staged in the
+        caller's own transaction so it can mark the email event confirmed in the *same* transaction
+        and commit once — if that second write fails, this stage change rolls back with it, and if
+        it never runs at all, nothing here was ever persisted (spec §41's atomicity requirement)."""
         application = await self.repo.get_owned(application_id, user_id)
         if application is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
@@ -120,10 +133,13 @@ class ApplicationService:
                 stage=payload.stage,
                 occurred_at=payload.occurred_at or datetime.now(timezone.utc),
                 note=payload.note,
-                source="MANUAL",
+                source=source,
             )
         )
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
         return await self.get_for_user(user_id, application_id)
 
     async def delete(self, user_id: str, application_id: str) -> None:

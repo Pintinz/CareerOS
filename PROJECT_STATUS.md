@@ -14,6 +14,9 @@ This file is the single source of truth for build progress. Update it after ever
 - `6775869` — Phase 6 (Aptitude Testing) backend + mobile (tagged `phase-6-aptitude`).
 - `d9fe06f` — Phase 7 (Interview Preparation & STAR) backend + mobile (tagged `phase-7-interview`).
 - `5d221b3` — Phase 7.5 (Media, Assessment & Interview Hardening) backend + mobile (tagged `phase-7.5-media-hardening`).
+- `27d23bb` — Phase 7.5 commit-hash doc fix.
+- `0ece72a` — Phase 7.5 follow-up: Mock Interview Automatic/Custom Mix builder UI.
+- Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -43,6 +46,8 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
   built in **~5 minutes** cold (Maven Central intermittently 403'd mid-resolution on the new
   `permission_handler_android`/AGP-8.0.0-buildscript transitive tree; retried clean).
 - Phase 7.5 follow-up (Mock Interview Mix UI) added: 192.4MB APK, built in **39 seconds**.
+- Phase 8 (Smart Recruitment Email Tracking) added: 192.4MB APK, built in **34 seconds** — no new
+  Flutter dependencies were needed (Clipboard/url_launcher/intl were already in use).
 
 ## Phase Status
 
@@ -53,11 +58,11 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 | 2 — Opportunities | IN PROGRESS | Backend + admin web + mobile screens all built and verified (real APK build). Missing: internships/graduate-programme sub-tabs (reuse the jobs model), career-preferences-driven "recommended" scoring. |
 | 3 — ATS | IN PROGRESS | Backend + mobile screens (CV upload, analyze, results) built and verified. Missing: CV rename/set-primary controls in the mobile UI. |
 | 4 — Company Intelligence | IN PROGRESS | Backend + mobile screens (feed, detail, follow, company profile) built and verified. Admin CMS UI for intelligence posts NOT built (API-only). |
-| 5 — Applications | IN PROGRESS | Backend + mobile screens (list, detail w/ timeline, stage update, notes, manual + from-job creation) built and verified. Missing: document attachments (needs the general document vault), email-detected stage confirmation (Phase 8). |
+| 5 — Applications | IN PROGRESS | Backend + mobile screens (list, detail w/ timeline, stage update, notes, manual + from-job creation) built and verified. Email-detected stage confirmation landed in Phase 8 (an "Emails" tab now exists on the application detail screen). Still missing: document attachments (needs the general document vault). |
 | 6 — Aptitude Testing | IN PROGRESS | Backend (question bank, snapshot-based sessions, deterministic generation/grading, analytics) + mobile (Prep Hub, configuration, exam screen, navigator, results, review, analytics, application/home/profile integration) built and verified. Missing: real image assets for Abstract-reasoning questions (text/emoji placeholders), per-section timing (only overall timing built), Company-Specific mode UI (architected, not built per spec). |
 | 7 — Interview Preparation | IN PROGRESS | Backend (10-category question bank, snapshot-based sessions, deterministic generation/self-paced mock timer/company+job bias, STAR stories + completeness check + question matching, readiness/analytics, company-research prep) + mobile (Interview Home, configuration, session screen, results, STAR builder, analytics/readiness, company prep + checklist, application/home/profile integration) built and verified. Real audio recording landed in Phase 7.5 (see below); still missing: per-category Mock Interview count builder **UI** (backend now fully supports it, see Phase 7.5), offline caching of STAR stories/checklist/analytics (only the active session itself is offline-cached). |
 | 7.5 — Media, Assessment & Interview Hardening | IN PROGRESS | Backend: shared image-upload pipeline hardened with real Pillow decode validation + `MediaAsset` audit rows, `question_image_alt_text`/`option_image_alt_text` (immutably snapshotted like every other question field), 30 real procedurally-generated (non-AI, non-copyrighted) abstract-reasoning images seeded, `StarStory.version`/`InterviewPreparationProgress.version` for offline conflict detection (409 on stale `expected_version`), `InterviewRecording` metadata model + CRUD, centralized role-specific Mock Interview mix config (`app/interview/role_mix.py`) + preview endpoint. Mobile: real microphone recording/playback wired into the interview session screen (record/stop/play/delete, consent dialog, every failure mode mapped to a message, never a crash), `version`-aware STAR/PreparationProgress models ready for offline sync, and (follow-up) a real Automatic Mix / Custom Mix builder in the Mock Interview configuration screen. Missing (see Known limitations): abstract-image rendering/caching/zoom in the aptitude UI, offline STAR/checklist CRUD with conflict resolution, cache-management screen, Recordings Manager screen, retention settings, resume-active-activity, unified preparation history. |
-| 8 — Email Tracking | NOT STARTED | |
+| 8 — Smart Recruitment Email Tracking | IN PROGRESS | Backend: full provider abstraction (`EmailTrackingProvider`/`GmailTrackingProvider`/`OutlookTrackingProvider`/`MockEmailTrackingProvider`), OAuth authorization/callback/state, Fernet token encryption, `email_connections`/`recruitment_email_events`/`oauth_states`/`email_forwarding_aliases` tables, a deterministic phrase-based classifier + weighted application matcher (both config-driven), webhook endpoints (Gmail Pub/Sub, Microsoft Graph notifications + lifecycle) with validate→dedupe→acknowledge→process, watch/subscription renewal, and the atomic confirm-flow that is the *only* code path allowed to call the Phase 5 stage-transition service. Mobile: Smart Application Tracking settings screen, privacy-first Gmail/Outlook consent screens, provider cards (connected/reauthorization/in-development), Recruitment Update Detected confirm/ignore/ambiguous-application-picker screen, Home "Application Updates" card, application detail "Emails" tab. **Verified only against the mock provider and mocked webhook payloads — no real Google/Microsoft OAuth credentials exist in this environment**, see the Phase 8 completion report for the full implemented/mock-verified/blocked-by-credentials breakdown. |
 | 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships/Aptitude/Interview question-bank CMS **APIs** built (admin web UI for aptitude/interview questions not built — Phase 9 UI work). Intelligence posts, source registry, discovery queue, user management NOT STARTED (or API-only). |
 | 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
 | 11 — Production Hardening | NOT STARTED | |
@@ -387,9 +392,139 @@ Automatic Mix vs. Custom Mix there).
   Custom Mix disables Start until counts sum correctly, then enables it once they do — 47 Flutter
   tests total (up from 45).
 
+### Phase 8 — Smart Recruitment Email Tracking (backend AND mobile, mock-verified)
+
+**The critical product rule holds throughout: nothing in this phase can change
+`Application.current_stage` except a user tapping "Confirm Stage," which calls the existing Phase 5
+`ApplicationService.update_stage` — no parallel transition logic was written.** See
+ARCHITECTURE.md for the full data-flow diagram.
+
+**Backend** (`app/models/email_tracking.py`, `app/email_tracking/`, `app/services/
+email_tracking_service.py`, `app/services/email_tracking_providers.py`, `app/services/
+token_encryption_service.py`, `app/api/v1/email_tracking.py`, `app/api/v1/webhooks.py`):
+- `EmailTrackingProvider` abstraction (`GmailTrackingProvider`/`OutlookTrackingProvider`/
+  `MockEmailTrackingProvider`) — one interface for OAuth authorization/token-exchange/refresh,
+  watch/subscription establish+renew, message listing/fetching, and revoke. Gmail requests only
+  `gmail.readonly`; Outlook requests only delegated `Mail.Read`/`User.Read`/`offline_access` for the
+  signed-in user's own mailbox — no write/send/modify/delete scope, no tenant-wide application
+  permission, anywhere in the code.
+- OAuth state (`oauth_states` table): a random, single-use, 15-minute-lived token bound to
+  (user, provider); the callback endpoint — which the browser hits directly, with no CareerOS
+  bearer token available — recovers the initiating user from it and rejects unknown/expired/
+  already-consumed state values with 400, never silently proceeding.
+- `TokenEncryptionService`: `cryptography`'s `MultiFernet` (AES-128-CBC + HMAC-SHA256, authenticated
+  encryption, not homemade crypto) encrypts every access/refresh token before it touches the
+  database; `EmailConnectionOut` has no token field at all, encrypted or otherwise, so there is no
+  way for a normal API response to leak one. Key comes from `TOKEN_ENCRYPTION_KEYS` (comma-separated
+  for rotation) with a checked-in dev-only default — production must generate and set a real key.
+- `email_connections`/`recruitment_email_events`/`email_forwarding_aliases`/`oauth_states` tables
+  (migration `bd5f9ea36fd1`) — see DATABASE.md for the exact column set, which matches spec §15/§17
+  closely, plus a `candidate_application_ids` JSON column for the ambiguous-match flow (spec §25)
+  and a `(user_id, provider, provider_message_id)` unique constraint that is the actual mechanism
+  behind "the same provider message can never create two events" (spec §9/§42), enforced by the
+  database, not just application logic.
+- Deterministic classifier (`app/email_tracking/classifier.py`, `stage_phrases.py`,
+  `ats_domains.py`) — no generative AI anywhere. Phrase-matches normalized subject+body text against
+  a config-driven dictionary keyed by the *existing* `ApplicationStage` enum values (no separate
+  taxonomy to keep in sync), with an explicit priority order so "final interview" language is never
+  miscategorized as plain "interview." Critically, a config-driven `NEGATIVE_CONTEXT_PATTERNS` list
+  ("only shortlisted candidates will be contacted," "shortlisted candidates may be invited," etc.)
+  is checked independently and penalizes confidence heavily — verified by a dedicated test that
+  those exact phrases produce **no stage at all**, not just a low-confidence one.
+- Weighted application matcher (`app/email_tracking/matcher.py`, weights centralized in
+  `matching_config.py`: job/reference-id 35, company/domain 20, job title 20, explicit reference
+  label 15, timing 5, location 5) — returns `matched` only when exactly one candidate clears the
+  minimum score and beats every rival by more than the ambiguity margin; returns `ambiguous` with
+  the full candidate list when two or more are too close to call (spec §25's exact "three Shell
+  applications" scenario is a passing test); returns `unmatched` rather than ever guessing.
+- Confidence model (`app/email_tracking/confidence.py`) combines classifier signals (stage-language
+  strength, recipient-directed phrasing, known-ATS-domain) with matcher signals
+  (identifier/company/role/timing matches) into one 0–1 score, labeled HIGH/MEDIUM/LOW off
+  centrally configured thresholds — never displayed as a false-certainty statement like "You
+  passed!"; mobile copy is always "CareerOS detected a possible X" (spec §27).
+- `POST /email-tracking/events/{id}/confirm` — the *only* place a stage can move — verifies
+  ownership of both the event and its matched application, rejects an already-confirmed/ignored
+  event with 409, then calls `ApplicationService.update_stage(..., source="EMAIL_CONFIRMED",
+  commit=False)` and marks the event confirmed **in the same database transaction**, committing
+  once. If either half fails, both roll back — verified by a test that confirms an event and asserts
+  exactly one timeline entry exists even after attempting to confirm it again.
+- Idempotent, background-abstracted webhook processing (`app/services/background_tasks.py`'s
+  `BackgroundTaskRunner`/`InlineTaskRunner`, swappable for a real Celery/RQ runner later without
+  touching the routes): `POST /webhooks/gmail` validates the Pub/Sub envelope's topic when
+  configured, finds the matching connection by notified mailbox address (a forged notification for
+  an unknown/inactive mailbox is a quiet no-op, never an error or a leak), and enqueues a sync;
+  `POST /webhooks/microsoft` and `/webhooks/microsoft/lifecycle` implement Graph's
+  `validationToken` handshake exactly, and handle `reauthorizationRequired` (marks the connection),
+  `subscriptionRemoved` (attempts safe recreation), and missed notifications (triggers a
+  reconciliation sync) rather than silently going dark.
+- `renew_expiring_watches()` (spec §58-59) — a real service method a daily scheduler would call
+  (no APScheduler/Celery is actually wired up anywhere in this codebase yet, consistent with
+  ARCHITECTURE.md's existing `workers/` note; this method exists and is tested, just not
+  auto-invoked on a timer in this environment) — renews Gmail watches/Outlook subscriptions nearing
+  expiry and marks a connection `REAUTHORIZATION_REQUIRED` if its stored token can't even be
+  decrypted, rather than looping forever.
+- `DELETE /email-tracking/data` (spec §35) deletes only `recruitment_email_events` rows; confirmed
+  `ApplicationStageEvent` timeline rows live on the `applications` aggregate and are never touched
+  by this call — verified by a test that deletes tracking data after a confirmed update and asserts
+  the application's timeline is unchanged.
+- 39 new backend tests: the full classifier corpus (10 positive stage phrases + the 3 mandatory
+  negative-context phrases spec §48 names explicitly + unrelated-mail rejection), the matcher
+  (single match / ambiguous-three-way-tie / exact-reference-id-breaks-a-tie / unmatched /
+  no-applications), token encryption round-trip + tamper detection, OAuth state
+  invalid/expired/reused/success, cross-user isolation on connections and events, the full
+  connect→classify→match→suggest→confirm→real-stage-change pipeline, confirm idempotency
+  (second confirm = 409, only one timeline entry), duplicate-provider-message idempotency (database
+  constraint, not just application logic), the ambiguous-match user-picks-the-application flow,
+  the mandatory false-positive flow (spec §68's exact wording), ignore-then-cannot-confirm, disconnect
+  clearing tokens, delete-tracking-data preserving history, a forged/unknown-mailbox Gmail webhook
+  being a safe no-op, a malformed Gmail payload rejection, and the Microsoft webhook validation
+  handshake + `reauthorizationRequired` lifecycle event.
+
+**Mobile** (`lib/features/email_tracking/`, `lib/features/settings/`):
+- Profile → Settings → Application Tracking → **Smart Application Tracking** screen (spec §2) with
+  the exact required explanatory copy, provider cards (Gmail/Outlook/Forward Email/Manual Tracking),
+  and a "Delete Recruitment Email Data" action with the exact required explanation.
+- Privacy-first consent screen (spec §3) shown before every OAuth handoff, for both providers, with
+  the exact required copy and Continue/Not Now buttons — the system browser opens only after this
+  screen's explicit "Continue" tap, via the existing `openExternalUrl` helper (no in-app WebView
+  capturing credentials).
+- Provider cards reflect real state: `GET /email-tracking/providers` drives "In Development" (no
+  real credentials configured — true everywhere in this environment) vs. a working "Connect"
+  button; a connected provider shows its email, "Connected"/"Reauthorization Required," last-synced
+  time, and Disconnect/Reconnect.
+- **Recruitment Update Detected** screen (spec §28-29): possible new stage, confidence label,
+  "Detected from: Recruitment email received [date]," Confirm Stage / Wrong Application / Ignore /
+  View Email Details — the details view shows only From/Subject/Date/a short excerpt/the bullet-list
+  detection reasons, never a recreated email reader. Confirming shows "Stage updated." plus a
+  real "Prepare for Aptitude Test"/"Prepare for Interview" button when applicable (spec §30/§62,
+  reusing the Phase 6/7 configuration screens directly — no duplicate preparation flow).
+- Ambiguous-match picker (spec §25): lists only the matcher's actual candidate applications plus
+  "None of These" — never a free-text guess.
+- Home dashboard "Application Updates" card (spec §31): a count plus, once a real application is
+  matched, that application's company name and possible stage — never the email's raw subject.
+- Application detail "Emails" tab (spec §32): only events matched to *that* application, each
+  showing date/stage/confidence/status — not a raw mailbox view.
+- 10 new Flutter widget tests: settings screen privacy copy + Manual Tracking always available,
+  unavailable providers show "In Development" with a disabled Connect button, a connected provider
+  shows its email/status, a reauthorization-required connection shows Reconnect, disconnect removes
+  the connection, the forward-email alias renders when available, the suggested-event
+  confirm/wrong-application/ignore flow, View Email Details' explainability content, and the full
+  ambiguous-application-picker flow — 57 Flutter tests total (up from 47).
+
+**What is explicitly mock-verified, not provider-verified** (see the completion report for the full
+breakdown): every acceptance flow above was exercised against `MockEmailTrackingProvider` and
+hand-built webhook payloads, in an environment with **no real Google or Microsoft OAuth credentials
+configured**. The OAuth endpoints, Gmail/Graph API calls, Pub/Sub topic validation, and watch/
+subscription renewal are real, structurally complete code — none of it has run against an actual
+Google or Microsoft account. Forward-to-CareerOS (spec §36) has its data model
+(`EmailForwardingAlias`, non-guessable `apply+<token>@...` aliases), settings-screen UI, and feature
+flag in place, but no inbound-mail provider is configured, so `forward_email_available` stays
+`false` end to end — exactly the "implement the architecture, don't block the phase" outcome spec
+§36 asks for when a provider isn't configured.
+
 ## Partially Complete
 
-- **Mobile app**: Phase 0-7.5 core loops written and verified. Not yet built: internships/graduate-
+- **Mobile app**: Phase 0-8 core loops written and verified. Not yet built: internships/graduate-
   programme-specific UI, CV rename/set-primary, career-preferences-driven personalization anywhere,
   application document attachments, per-section aptitude timing, abstract-reasoning image rendering
   in the active-test/review UI (the images/alt-text now exist end-to-end on the backend — see Phase
@@ -397,23 +532,38 @@ Automatic Mix vs. Custom Mix there).
   `Image.network`, not yet swapped to a caching+zoom widget), offline caching/sync of STAR
   stories/checklist/interview analytics, cache-management screen, Recordings Manager screen,
   recording retention settings, resume-active-activity on the Preparation Hub, unified preparation
-  history.
-- Admin web: no UI yet for intelligence posts, the aptitude question bank, or the interview
-  question bank (all three API-only).
+  history. Settings screen (Phase 8) is intentionally minimal — only "Application Tracking" exists;
+  the other settings categories (notifications, career preferences, account) remain future work.
+- Admin web: no UI yet for intelligence posts, the aptitude question bank, the interview question
+  bank, or email-tracking operational metrics (all API-only, or in the case of metrics, not built at
+  all this phase — see Known limitations).
+- Email tracking (Phase 8): implemented and mock-verified end to end, but **never run against a real
+  Gmail or Outlook account** — see the Phase 8 section above and Known limitations below for the
+  full implemented/mock-verified/blocked-by-credentials breakdown.
 
 ## Not Started
 
-- Mobile: Google/Apple Sign-In, forgot-password, email verification, settings, profile-setup wizard
-  beyond name/location/experience.
+- Mobile: Google/Apple Sign-In, forgot-password, email verification, profile-setup wizard beyond
+  name/location/experience, settings categories beyond Application Tracking.
 - Admin web: intelligence post CMS UI, aptitude question-bank CMS UI, interview question-bank CMS UI,
-  source registry, discovery queue, user mgmt.
-- Everything under Phases 8-11 (email classifier, AdMob integration code, production hardening).
+  source registry, discovery queue, user mgmt, email-tracking operational metrics dashboard.
+- Forward-to-CareerOS inbound mail processing (Phase 8 spec §36) — the data model, provider
+  interface, and mobile UI/feature-flag all exist, but no actual inbound-email provider (e.g. a
+  transactional-email vendor's inbound-parse webhook) is configured, so this stays `false`/inert.
+- Everything under Phases 9-11 (admin CMS, AdMob integration code, production hardening).
 
 ## Blocked by Credential / Tooling
 
 - Docker not installed → Postgres/compose stack unverified.
-- Google/Apple Sign-In, Gmail/Outlook OAuth, AdMob production IDs, FCM/APNs keys — none supplied;
-  provider abstraction + mocks land when those specific phases are reached (spec Rule 3).
+- Google/Apple Sign-In, AdMob production IDs, FCM/APNs keys — none supplied; provider abstraction +
+  mocks land when those specific phases are reached (spec Rule 3).
+- **Gmail/Outlook OAuth (Phase 8)**: `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`/
+  `GOOGLE_PUBSUB_TOPIC` and `MICROSOFT_CLIENT_ID`/`MICROSOFT_CLIENT_SECRET`/`MICROSOFT_REDIRECT_URI`/
+  `MICROSOFT_WEBHOOK_URL`/`MICROSOFT_LIFECYCLE_WEBHOOK_URL` are all unset in this environment. The
+  provider abstraction, OAuth endpoints, and mock provider are fully implemented and tested per spec
+  §39's explicit instruction to proceed without them — see DEPLOYMENT.md for exactly what a real
+  Google Cloud project / Microsoft Entra app registration would require, and PROJECT_STATUS.md's
+  Phase 8 completion report for what "mock-verified" does and doesn't cover.
 - Forgot-password needs a transactional email sender — not chosen/configured.
 - iOS build cannot be attempted or verified on this machine at all (Windows, no macOS/Xcode).
 
@@ -443,22 +593,36 @@ implement the newer `record_platform_interface` (1.6.0) another transitive depen
 Flutter's own `AudioRecorder`/`record_linux` version matrix was inconsistent, unrelated to any
 platform this app actually ships (Android/iOS) but still fatal to compilation since Flutter compiles
 all federated platform implementations. Fixed by bumping to `record: ^7.1.1` (no `RecordingService`
-API changes were needed — `flutter analyze`/`test` stayed clean before and after).
+API changes were needed — `flutter analyze`/`test` stayed clean before and after). Phase 8 caught
+and fixed two real bugs before it shipped: (1) `ApplicationService.update_stage` originally always
+committed internally, which would have let the email-confirm flow mark a `RecruitmentEmailEvent`
+CONFIRMED even if that commit silently succeeded but a later write failed outside it — fixed by
+adding a `commit: bool = True` parameter so the confirm flow can stage the stage-change and the
+event-status change in one transaction and commit exactly once (spec §41's atomicity requirement),
+covered by `test_confirm_is_idempotent_and_cannot_be_repeated`. (2) The initial application-matching
+threshold (`MATCH_MIN_SCORE = 0.25`) was higher than a company-name-only match's score (0.20) — the
+exact "three Shell applications, generic invitation" scenario spec §25 describes would have silently
+fallen through to `unmatched` instead of prompting the user to pick, defeating the ambiguous-match
+feature entirely. Fixed by lowering the threshold to 0.20 (still requires a real signal — an
+unrelated sender scores 0 and correctly stays unmatched) and documented why in
+`matching_config.py`, covered by `test_matcher_flags_ambiguous_when_multiple_roles_at_same_company`.
 
 ## Tests
 
-- Backend: `pytest -q` → **100 passed** across 11 test files (health, auth, admin/companies, jobs,
-  scholarships, uploads, ATS, intelligence, applications, aptitude, interview, **media & hardening —
-  9 tests, new this phase**, in `test_media_and_hardening.py`).
+- Backend: `pytest -q` → **139 passed** across 12 test files (health, auth, admin/companies, jobs,
+  scholarships, uploads, ATS, intelligence, applications, aptitude, interview, media & hardening,
+  **email tracking — 39 tests, new this phase**, in `test_email_tracking.py`).
 - Admin: no automated tests — verified by hand via live browser interaction.
-- Mobile: `flutter test` → **47 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
+- Mobile: `flutter test` → **57 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
   tests + 16 Phase 7 widget tests + 6 Phase 7.5 tests covering the recording state machine via a
   fully fake `RecordingService` — start/permission-denied/stop/stop-failure/delete/cancel; see the
   Phase 7.5 section above for why real `audioplayers` playback isn't similarly unit-tested — +
-  **2 new Mock Interview Mix UI tests** (Automatic Mix shows the real preview, Custom Mix gates
-  Start on counts summing correctly). Widget/unit tests for the Phase 2-5 screens are still a Next
-  Task — this phase only added coverage
-  for what it built.
+  2 Mock Interview Mix UI tests + **10 new Phase 8 tests** (settings-screen privacy copy/Manual
+  Tracking always available, unavailable-provider "In Development" state, connected/reauthorization
+  connection states, disconnect, forward-email alias display, the suggested-event confirm/wrong-
+  application/ignore flow, View Email Details' explainability content, the ambiguous-application-
+  picker flow). Widget/unit tests for the Phase 2-5 screens are still a Next Task — this phase only
+  added coverage for what it built.
 - **Not performed**: interactive manual acceptance testing on a real device/emulator, for the same
   reason as Phase 6 (no Android emulator or physical device available in this environment). The four
   acceptance flows Phase 7 asks for are each covered by an equivalent automated test instead:
@@ -534,11 +698,38 @@ API changes were needed — `flutter analyze`/`test` stayed clean before and aft
   category of documented simplification as the aptitude engine's targets. Phase 7.5 did not move
   these into a separate `readiness_config` module as one spec section suggested (a naming/location
   change only, not a behavior change) — deferred as low-value relative to the phase's real gaps.
+- **No real Gmail or Outlook account has ever exercised the Phase 8 OAuth/webhook/watch-renewal
+  code.** `GmailTrackingProvider`/`OutlookTrackingProvider` are structurally real (real OAuth
+  endpoints, real Gmail/Graph API calls) but untested against a live provider in this environment —
+  every automated test and every acceptance flow uses `MockEmailTrackingProvider` and hand-built
+  webhook payloads. Do not describe Gmail/Outlook tracking as "verified" without qualifying it as
+  mock-verified; see the Phase 8 completion report.
+- No retry/backoff policy (spec §60) is implemented for transient provider errors during watch/
+  subscription renewal — `_renew_one` catches any exception and marks the connection `ERROR`
+  immediately rather than distinguishing transient/authorization/configuration/outage failure
+  categories and retrying transient ones with exponential backoff+jitter. A real gap against spec
+  §60, not attempted this pass.
+- No admin-facing email-tracking operational metrics (spec §64: active watches/subscriptions,
+  reauth-required count, events processed/matched/ambiguous, classification/webhook failure counts)
+  were built — admin web work stayed entirely out of scope for Phase 8, consistent with every prior
+  phase's admin-CMS-is-Phase-9 boundary. No inbox-viewer or message-content admin access exists
+  either way (spec §63 — never attempted, not just deferred).
+- Forward-to-CareerOS (spec §36) has its full data model (`EmailForwardingAlias`, non-guessable
+  `apply+<opaque-token>@...` aliases), a provider-interface placeholder, mobile settings-screen UI,
+  and a feature flag (`FORWARD_EMAIL_ENABLED`, default `false`) — but no actual inbound-mail
+  provider (e.g. an inbound-parse webhook from a transactional-email vendor) is configured, so the
+  feature stays inert end to end. This is the explicit "implement the architecture, don't block the
+  phase" outcome spec §36 itself asks for when a provider isn't available.
+- No daily scheduler actually invokes `EmailTrackingService.renew_expiring_watches()` — the method
+  exists and is tested in isolation, but nothing in this codebase runs scheduled background jobs yet
+  (same pre-existing gap ARCHITECTURE.md's `workers/` section already documents for every other
+  phase). A production deployment needs to wire this into whatever job scheduler is chosen.
+- Mobile settings only has one category ("Application Tracking") — the Settings screen itself is
+  intentionally minimal for this phase, not a placeholder pretending to be complete.
 
 ## Metrics: what's system-calculated vs. user self-rated vs. editorially tagged
 
-Spec §46 requires this distinction never be blurred. As of Phase 7.5 (unchanged from Phase 7 —
-Phase 7.5 added no new AI-adjacent scoring, only real recording/media/versioning infrastructure):
+Spec §46 requires this distinction never be blurred. As of Phase 8:
 
 **System-calculated** (derived by backend code from stored activity, never user-editable):
 Aptitude score/percentage/section breakdown/performance label; aptitude analytics (tests
@@ -547,13 +738,13 @@ completed, average/best score, category/topic accuracy) and weak-topic recommend
 (`sections`, `gaps`, `is_complete`); interview readiness (`overall` and all six components);
 interview analytics (sessions completed, questions practiced, average self-rating *as an average
 of user-submitted ratings*, STAR stories ready, company-prep-completed count, technical topics
-covered, per-category completion); STAR-to-question `suggested_star_story_ids` matching.
+covered, per-category completion); STAR-to-question `suggested_star_story_ids` matching. **(Phase 8)** a recruitment email's `detected_stage`/`confidence_score`/`confidence_label`/classification evidence — all deterministic phrase/domain/weight matching (`app/email_tracking/`), never a generative-AI judgment, and never displayed as a certainty statement ("CareerOS detected a possible X," never "You passed!").
 
 **User self-rated** (the backend stores exactly what the user selects and never infers or
 overrides it): interview answer `self_rating` (1-5), `used_star`, `gave_measurable_result`,
 `answered_exact_question`; STAR story field content itself (situation/task/action/result/lessons/
 metrics — the user writes these, the system only checks their *structure*, never their factual
-truth or quality of writing).
+truth or quality of writing). **(Phase 8)** the *decision* to confirm, dismiss, or reassign a recruitment-email suggestion is entirely the user's — the classifier only ever suggests.
 
 **Editorially tagged** (admin-entered metadata, not evidence of anything factual): a question's
 `company_id` (means "recommended practice for this company/role," never "this employer actually
@@ -564,18 +755,28 @@ the question, deterministic content, never AI-generated or claimed to be employe
 
 ## Next Tasks
 
-1. Commit the Mock Interview Mix UI follow-up work — currently uncommitted.
-2. Remaining mobile UI for backend capabilities that still don't have a mobile surface:
+1. Commit the Phase 8 (Smart Recruitment Email Tracking) backend + mobile work — currently
+   uncommitted.
+2. Obtain real Google Cloud (OAuth client + Pub/Sub topic) and Microsoft Entra app-registration
+   credentials and run the Phase 8 acceptance flows against an actual Gmail/Outlook account — the
+   single highest-value remaining Phase 8 task, since everything today is mock-verified only. See
+   DEPLOYMENT.md for the exact setup steps.
+3. A daily-scheduler wiring for `EmailTrackingService.renew_expiring_watches()` once a job scheduler
+   (APScheduler/Celery) exists anywhere in this codebase — currently a tested but uninvoked method.
+4. Retry/backoff policy (spec §60) for transient provider errors during watch/subscription renewal,
+   and admin-facing email-tracking operational metrics (spec §64) — both explicitly deferred this
+   pass, not attempted.
+5. Remaining mobile UI for backend capabilities that still don't have a mobile surface:
    abstract-reasoning image rendering with caching + zoom in the aptitude screens, a Recordings
    Manager + retention settings screen, a cache-management ("Storage & Offline Data") screen.
-3. Offline STAR story + checklist editing with conflict resolution, now that the backend
+6. Offline STAR story + checklist editing with conflict resolution, now that the backend
    (`version`/`expected_version`, 409-on-stale-write) and mobile models are ready for it — the
    mutation queue and conflict UI are the remaining piece.
-4. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
+7. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
    how many real bugs this session's manual review process has caught in exactly this kind of code.
-5. Phase 8 (Email Tracking), or an admin CMS UI for intelligence posts / the aptitude+interview
-   question banks to close out Phase 9's remaining gaps — whichever the user prioritizes. Per the
-   user's explicit instruction, Phase 8 was NOT started automatically after Phase 7.5.
-6. A real interactive QA pass on an emulator/device once one is available in this environment, to
-   validate the Phase 6, 7, and 7.5 acceptance flows beyond what automated tests can confirm —
-   recording/playback against a real microphone/speaker especially.
+8. Phase 9 (Admin CMS / Content Operations), per the user's explicit instruction to stop after
+   Phase 8 and begin Phase 9 from a clean checkpoint.
+9. A real interactive QA pass on an emulator/device once one is available in this environment, to
+   validate the Phase 6-8 acceptance flows beyond what automated tests can confirm — recording/
+   playback against a real microphone/speaker, and Phase 8 against real Gmail/Outlook accounts,
+   especially.

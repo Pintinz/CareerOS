@@ -74,14 +74,84 @@ checked into source control.
 
 Backend (`backend/.env.example`): `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORITHM`,
 `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `CORS_ORIGINS`, `ENVIRONMENT`,
-`GOOGLE_CLIENT_ID` (optional), `APPLE_CLIENT_ID` (optional), `GMAIL_OAUTH_CLIENT_ID`/`SECRET`
-(optional), `OUTLOOK_OAUTH_CLIENT_ID`/`SECRET` (optional), `ADMOB_APP_ID` (optional), `REDIS_URL`
-(optional).
+`GOOGLE_CLIENT_ID` (optional), `APPLE_CLIENT_ID` (optional), `ADMOB_APP_ID` (optional), `REDIS_URL`
+(optional), plus the Phase 8 email-tracking variables documented below (all optional — the feature
+runs on a mock provider with none of them set).
 
 Admin (`admin/.env.example`): `NEXT_PUBLIC_API_BASE_URL`, `ADMIN_SESSION_SECRET`.
 
 Mobile: `mobile/lib/config/env.dart` reads compile-time `--dart-define` values (API base URL, AdMob
 unit IDs) — no `.env` file is bundled into the app binary.
+
+## Smart Recruitment Email Tracking — production setup (Phase 8)
+
+None of this is done in this environment — no Google Cloud project, Microsoft Entra app
+registration, or Pub/Sub topic exists here. Everything below is what a real deployment needs before
+Gmail/Outlook tracking can be anything more than mock-verified. See ARCHITECTURE.md for how the
+code uses each of these, and PRIVACY.md for what's actually done with the access once granted.
+
+### Gmail
+
+1. Create (or reuse) a Google Cloud project; enable the **Gmail API**.
+2. Configure the **OAuth consent screen** — scope `https://www.googleapis.com/auth/gmail.readonly`
+   only. **A commercial public release using this scope may require Google's OAuth verification
+   and, depending on the consent screen's publishing status and CareerOS's server-side handling of
+   this restricted-scope data, an additional security assessment** — this is a deployment/compliance
+   requirement Google imposes, not a code bug, and is not something this session can complete
+   without a real Google Workspace/Cloud identity. Budget real calendar time for it before a public
+   launch that uses Gmail tracking.
+3. Create an **OAuth 2.0 client ID** (type: Web application) — set its authorized redirect URI to
+   `GOOGLE_REDIRECT_URI` (the backend's `/api/v1/email-tracking/gmail/callback` URL, publicly
+   reachable). Set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` from it.
+4. Create a **Cloud Pub/Sub topic** for Gmail push notifications; grant the special Gmail service
+   account (`gmail-api-push@system.gserviceaccount.com`) the **Pub/Sub Publisher** role on that
+   topic. Set `GOOGLE_PUBSUB_TOPIC` to its full resource name
+   (`projects/<project>/topics/<topic>`).
+5. Create a **Pub/Sub push subscription** on that topic pointing at the backend's
+   `POST /api/v1/webhooks/gmail` endpoint (publicly reachable, HTTPS).
+6. Once a connection exists, `users.watch` (called automatically on connect, see
+   `EmailTrackingService.handle_oauth_callback`) registers the mailbox against that topic — this
+   expires (roughly every 7 days) and must be renewed; see "Watch/subscription renewal worker"
+   below.
+7. Production hardening this codebase does **not** yet implement: verifying the Pub/Sub push
+   request's JWT (Google signs each push request; the current webhook only validates the topic name
+   found inside the message envelope, not the request's own signature) — add JWT audience/issuer
+   verification before relying on this in production, per Google's Pub/Sub push-authentication docs.
+
+### Outlook / Microsoft 365
+
+1. Register an app in **Microsoft Entra ID** (formerly Azure AD) — supported account type
+   "Accounts in any organizational directory and personal Microsoft accounts" if consumer accounts
+   should work too (matches this codebase's default `MICROSOFT_TENANT=common`).
+2. Add a **Web** platform redirect URI matching `MICROSOFT_REDIRECT_URI` (the backend's
+   `/api/v1/email-tracking/outlook/callback`).
+3. Add delegated Microsoft Graph permissions: `Mail.Read`, `User.Read`, `offline_access` only — no
+   `Mail.ReadWrite`, no application (non-delegated) permissions of any kind.
+4. Create a client secret; set `MICROSOFT_CLIENT_ID`/`MICROSOFT_CLIENT_SECRET`.
+5. Expose two publicly reachable HTTPS endpoints for Graph change notifications: set
+   `MICROSOFT_WEBHOOK_URL` to `POST /api/v1/webhooks/microsoft` and
+   `MICROSOFT_LIFECYCLE_WEBHOOK_URL` to `POST /api/v1/webhooks/microsoft/lifecycle`. Graph will call
+   the webhook URL with a `?validationToken=` during subscription creation — already implemented
+   (echoed back as plain text, see `app/api/v1/webhooks.py`).
+6. Graph mail subscriptions cap at roughly 4230 minutes (~3 days); this codebase's
+   `establish_watch`/`renew_watch` request 2 days deliberately, leaving headroom before expiry.
+
+### Watch/subscription renewal worker
+
+`EmailTrackingService.renew_expiring_watches()` is implemented and tested but **nothing currently
+invokes it on a schedule** — this codebase has no APScheduler/Celery wired up anywhere yet (see
+ARCHITECTURE.md). A production deployment must run it at least daily (e.g. a Celery beat task, a
+cron-triggered script calling into the service, or a scheduled cloud function) — conservative
+scheduling matters here since a missed Gmail watch renewal silently stops all future notifications
+for that connection until the next reconciliation sync or manual reconnect.
+
+### Background job queue
+
+`app/services/background_tasks.py`'s `InlineTaskRunner` executes webhook-triggered processing
+synchronously, in-process — fine for development and low volume, but a production deployment
+handling real webhook traffic should implement a `BackgroundTaskRunner` backed by whatever queue is
+already chosen for the rest of the platform (Celery/RQ/cloud tasks) and swap it in; no webhook route
+needs to change to make that swap.
 
 ## Android build (once Flutter is installed)
 

@@ -7,7 +7,7 @@ JSON/array-heavy columns will need a Postgres-only migration path documented whe
 
 ## Status
 
-Implemented so far (migrations `1787363de7f0` → `1bee777c8a2b`, `backend/migrations/versions/`):
+Implemented so far (migrations `1787363de7f0` → `bd5f9ea36fd1`, `backend/migrations/versions/`):
 
 - `users` — `id` (uuid str pk), `email` (unique, indexed), `hashed_password` (argon2), `is_active`,
   `is_verified`, `created_at`, `updated_at`.
@@ -177,6 +177,43 @@ Implemented so far (migrations `1787363de7f0` → `1bee777c8a2b`, `backend/migra
   `upload_status` (`"local_only"` always, for now — no upload code path exists; see PRIVACY.md and
   ARCHITECTURE.md). Indexed on `user_id`/`session_id`/`session_question_id`.
 
+### Phase 8 additions (migration `bd5f9ea36fd1`)
+
+- `email_connections` — `id`, `user_id` (FK → `users.id`, CASCADE), `provider` (`GMAIL`/`OUTLOOK`),
+  `provider_account_id`/`provider_email`, `encrypted_access_token`/`encrypted_refresh_token`
+  (Fernet-encrypted at rest — see ARCHITECTURE.md's Token encryption section; never plaintext),
+  `token_expires_at`, `granted_scopes` (JSON list), `status`
+  (`ACTIVE`/`REAUTHORIZATION_REQUIRED`/`ERROR`/`DISCONNECTED`), `last_sync_at`/`last_error_at`/
+  `last_error_code`, `gmail_history_id`/`gmail_watch_expiry` (nullable, Gmail-only),
+  `outlook_subscription_id`/`outlook_subscription_expiry` (nullable, Outlook-only),
+  `disconnected_at`. Unique on `(provider, provider_account_id)` — one external mailbox account can
+  never be linked to more than one CareerOS user.
+- `recruitment_email_events` — `id`, `user_id` (FK, CASCADE), `email_connection_id` (FK →
+  `email_connections.id`, `SET NULL`, nullable — a forwarded-email event has none),
+  `provider` (`GMAIL`/`OUTLOOK`/`FORWARDED`), `provider_message_id`/`provider_thread_id`,
+  `sender_email`/`sender_domain` (indexed)/`sender_name`, `subject`, `evidence_excerpt` (a short,
+  sanitized excerpt only — **never the full email body**, see PRIVACY.md's data-minimization
+  section), `received_at`, `matched_application_id` (FK → `applications.id`, `SET NULL`, nullable),
+  `candidate_application_ids` (JSON list — populated only when `status == AMBIGUOUS`, spec §25),
+  `detected_stage` (nullable string — an `ApplicationStage` value), `confidence_score`/
+  `confidence_label`, `classification_reason_json` (the human-readable evidence list shown on the
+  confirmation screen), `status`
+  (`DETECTED`/`SUGGESTED`/`AMBIGUOUS`/`UNMATCHED`/`CONFIRMED`/`IGNORED`), `reviewed_at`. Unique on
+  `(user_id, provider, provider_message_id)` — the database-enforced mechanism behind "the same
+  provider message can never create two events," not just an application-layer check.
+- `oauth_states` — `state` (primary key, a random single-use token), `user_id` (FK, CASCADE),
+  `provider`, `created_at`/`expires_at`, `consumed_at` (nullable — set on first use, making the
+  state permanently unusable afterward). Short-lived (15 minutes) CSRF protection for the OAuth
+  authorization-code flow; see ARCHITECTURE.md.
+- `email_forwarding_aliases` — `id`, `user_id` (FK, CASCADE, unique — one alias per user),
+  `alias_token` (unique, indexed, a random opaque string — never a sequential/guessable id),
+  `is_active`. Backs the "Forward Recruitment Email" tracking method (spec §36); see
+  ARCHITECTURE.md for why it stays inert without a configured inbound-mail provider.
+
+Note: `Application.current_stage` and `application_stage_events` (Phase 5, above) are **unchanged**
+by Phase 8 — `ApplicationStageEvent.source` simply gains a new real value, `"EMAIL_CONFIRMED"`,
+alongside the pre-existing `"MANUAL"`, exactly as its Phase 5 docstring already anticipated.
+
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
 
@@ -193,8 +230,6 @@ documents (general document vault — cv_documents/ats_analyses already implemen
 
 application_documents (applications/application_stage_events/application_notes already implemented,
 see above — this is just the file-attachment side, blocked on the general document vault)
-
-email_connections, recruitment_email_events
 
 notifications
 

@@ -6,6 +6,7 @@ import "../../../theme/app_colors.dart";
 import "../../applications/data/application_models.dart";
 import "../../applications/presentation/application_providers.dart";
 import "../../aptitude/data/aptitude_models.dart";
+import "../../email_tracking/presentation/email_tracking_providers.dart";
 import "../../aptitude/presentation/aptitude_providers.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
 import "../../interview/data/interview_models.dart";
@@ -50,6 +51,7 @@ class HomeTab extends ConsumerWidget {
           const SizedBox(height: 32),
           _ActiveApplicationsCard(activeCountAsync: ref.watch(activeApplicationsCountProvider)),
           const SizedBox(height: 16),
+          const _ApplicationUpdatesCard(),
           const _UpcomingAptitudeStageCard(),
           const _UpcomingInterviewStageCard(),
           const _PreparationProgressCard(),
@@ -116,6 +118,82 @@ class _ActiveApplicationsCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Application Updates" (spec §31) — a count of recruitment-email suggestions awaiting review,
+/// plus (only when a real application is already matched) the company name and possible stage.
+/// Never shows the email's raw subject/body — that lives behind Review on
+/// [RecruitmentEventDetailScreen], which is the only place a stage can actually be confirmed.
+class _ApplicationUpdatesCard extends ConsumerWidget {
+  const _ApplicationUpdatesCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventsAsync = ref.watch(recruitmentEventsProvider);
+    return eventsAsync.maybeWhen(
+      data: (events) {
+        final needsReview = events.where((e) => e.needsReview).toList();
+        if (needsReview.isEmpty) return const SizedBox.shrink();
+        final top = needsReview.first;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Card(
+            color: AppColors.blue.withValues(alpha: 0.06),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () => context.push("/settings/tracking/events"),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.mark_email_unread_outlined, color: AppColors.blue),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            needsReview.length == 1 ? "1 Recruitment Update" : "${needsReview.length} Recruitment Updates",
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          if (top.matchedApplicationId != null)
+                            _ApplicationUpdateSubtitle(applicationId: top.matchedApplicationId!, stage: top.detectedStage)
+                          else
+                            const Text("Review to see details", style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    TextButton(onPressed: () => context.push("/settings/tracking/events"), child: const Text("Review")),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _ApplicationUpdateSubtitle extends ConsumerWidget {
+  const _ApplicationUpdateSubtitle({required this.applicationId, required this.stage});
+
+  final String applicationId;
+  final ApplicationStage? stage;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final applicationAsync = ref.watch(applicationDetailProvider(applicationId));
+    return applicationAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (application) => Text(
+        stage != null ? "${application.companyName} · Possible ${stage!.label}" : application.companyName,
+        style: const TextStyle(color: AppColors.muted, fontSize: 12),
       ),
     );
   }

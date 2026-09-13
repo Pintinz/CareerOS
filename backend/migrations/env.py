@@ -16,6 +16,7 @@ from app.models import (  # noqa: F401
     company,
     company_follow,
     cv_document,
+    email_tracking,
     intelligence_post,
     interview,
     job,

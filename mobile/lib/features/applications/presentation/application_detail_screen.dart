@@ -8,6 +8,8 @@ import "../../../core/utils/url_launcher_helper.dart";
 import "../../../theme/app_colors.dart";
 import "../../aptitude/data/aptitude_models.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
+import "../../email_tracking/data/email_tracking_models.dart";
+import "../../email_tracking/presentation/email_tracking_providers.dart";
 import "../../interview/data/interview_models.dart";
 import "../../interview/presentation/interview_configuration_screen.dart";
 import "../../interview/presentation/interview_providers.dart";
@@ -31,7 +33,7 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -204,7 +206,7 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
               labelColor: AppColors.blue,
               unselectedLabelColor: AppColors.muted,
               indicatorColor: AppColors.blue,
-              tabs: const [Tab(text: "Details"), Tab(text: "Timeline"), Tab(text: "Notes")],
+              tabs: const [Tab(text: "Details"), Tab(text: "Timeline"), Tab(text: "Notes"), Tab(text: "Emails")],
             ),
             Expanded(
               child: TabBarView(
@@ -213,6 +215,7 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
                   _DetailsTab(application: application),
                   _TimelineTab(application: application),
                   _NotesTab(application: application),
+                  _EmailsTab(applicationId: application.id),
                 ],
               ),
             ),
@@ -571,4 +574,52 @@ class _NotesTabState extends ConsumerState<_NotesTab> {
       ],
     );
   }
+}
+
+/// Spec §32 — recruitment-email events matched to *this* application only, never every raw
+/// mailbox message. Tapping one goes to the same confirmation screen as the dashboard/settings
+/// list — there is only one place a stage can actually be confirmed from.
+class _EmailsTab extends ConsumerWidget {
+  const _EmailsTab({required this.applicationId});
+
+  final String applicationId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final eventsAsync = ref.watch(applicationRecruitmentEventsProvider(applicationId));
+    return eventsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text(e.userMessage, style: const TextStyle(color: AppColors.danger))),
+      data: (events) {
+        if (events.isEmpty) {
+          return const Center(child: Text("No recruitment emails matched to this application yet.", style: TextStyle(color: AppColors.muted)));
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(20),
+          itemCount: events.length,
+          separatorBuilder: (context, index) => const Divider(),
+          itemBuilder: (context, index) {
+            final event = events[index];
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(event.detectedStage != null ? "${event.detectedStage!.label} update" : "Recruitment email"),
+              subtitle: Text(
+                "${DateFormat.yMMMd().format(event.receivedAt)} · ${event.confidenceLabel ?? ''} ${_statusLabel(event.status)}".trim(),
+                style: const TextStyle(fontSize: 12),
+              ),
+              onTap: () => context.push("/settings/tracking/events/${event.id}"),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _statusLabel(RecruitmentEventStatus status) => switch (status) {
+        RecruitmentEventStatus.confirmed => "Confirmed",
+        RecruitmentEventStatus.ignored => "Ignored",
+        RecruitmentEventStatus.ambiguous => "Needs your input",
+        RecruitmentEventStatus.suggested => "Needs review",
+        _ => "Detected",
+      };
 }
