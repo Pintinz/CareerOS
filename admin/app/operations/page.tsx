@@ -59,7 +59,7 @@ export default function OperationsPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Operations</h1>
+      <h1 className="text-2xl font-bold text-navy">Operations</h1>
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
       {data && (
@@ -96,7 +96,7 @@ export default function OperationsPage() {
           <h2 className="mb-3 mt-8 text-lg font-semibold text-navy">Background Jobs</h2>
           <div className="overflow-x-auto rounded-2xl bg-card shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-black/5 text-xs uppercase text-muted">
+              <thead className="border-b border-line text-xs uppercase text-muted">
                 <tr>
                   <th className="px-4 py-3">Job</th>
                   <th className="px-4 py-3">Last Run</th>
@@ -114,7 +114,7 @@ export default function OperationsPage() {
                   </tr>
                 )}
                 {Object.entries(data.background_jobs).map(([name, run]) => (
-                  <tr key={name} className="border-b border-black/5 last:border-0">
+                  <tr key={name} className="border-b border-line last:border-0">
                     <td className="px-4 py-3 font-medium">{name}</td>
                     <td className="px-4 py-3 text-muted">{new Date(run.last_run_at).toLocaleString()}</td>
                     <td className={`px-4 py-3 ${run.success ? "text-success" : "text-danger"}`}>{run.success ? "Yes" : "No"}</td>

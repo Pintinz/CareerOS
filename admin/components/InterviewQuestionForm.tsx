@@ -6,7 +6,7 @@ import { ApiError, api } from "@/lib/apiClient";
 import { InterviewCategoryOut, InterviewDifficulty, InterviewQuestionAdminOut, InterviewTopicOut } from "@/types/questionModels";
 
 const DIFFICULTIES: InterviewDifficulty[] = ["EASY", "MEDIUM", "HARD", "EXPERT"];
-const inputClass = "w-full rounded-xl border border-black/10 px-3 py-2 text-sm";
+const inputClass = "w-full rounded-xl border border-line px-3 py-2 text-sm";
 const labelClass = "mb-1 block text-xs text-muted";
 
 export function InterviewQuestionForm({

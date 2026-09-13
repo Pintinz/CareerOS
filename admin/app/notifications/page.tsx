@@ -65,7 +65,7 @@ export default function NotificationsPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Notifications</h1>
+      <h1 className="text-2xl font-bold text-navy">Notifications</h1>
       <p className="mt-2 text-sm text-muted">
         No FCM/APNs credentials are configured in this environment — sending marks a campaign SENT and records an
         honest recipient count of 0 rather than claiming a real delivery occurred. Never include private
@@ -75,15 +75,15 @@ export default function NotificationsPage() {
       <form onSubmit={handleCreate} className="mt-6 space-y-4 rounded-2xl bg-card p-6 shadow-sm">
         <div>
           <label className="mb-1 block text-xs text-muted">Title</label>
-          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm" />
+          <input required value={title} onChange={(e) => setTitle(e.target.value)} className="w-full rounded-xl border border-line px-3 py-2 text-sm" />
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted">Body</label>
-          <textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={3} className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm" />
+          <textarea required value={body} onChange={(e) => setBody(e.target.value)} rows={3} className="w-full rounded-xl border border-line px-3 py-2 text-sm" />
         </div>
         <div>
           <label className="mb-1 block text-xs text-muted">Audience</label>
-          <select value={audience} onChange={(e) => setAudience(e.target.value)} className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm">
+          <select value={audience} onChange={(e) => setAudience(e.target.value)} className="w-full rounded-xl border border-line px-3 py-2 text-sm">
             {AUDIENCES.map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
@@ -96,7 +96,7 @@ export default function NotificationsPage() {
             <p className="text-sm text-muted">{body || "Body"}</p>
           </div>
         )}
-        <button type="submit" disabled={creating} className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+        <button type="submit" disabled={creating} className="btn-primary">
           {creating ? "Creating..." : "Create notification"}
         </button>
       </form>

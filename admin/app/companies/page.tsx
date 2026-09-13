@@ -79,7 +79,7 @@ export default function CompaniesPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Companies</h1>
+      <h1 className="text-2xl font-bold text-navy">Companies</h1>
 
       <form onSubmit={handleCreate} className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl bg-card p-6 shadow-sm">
         <div>
@@ -88,7 +88,7 @@ export default function CompaniesPage() {
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="rounded-xl border border-black/10 px-3 py-2 text-sm"
+            className="rounded-xl border border-line px-3 py-2 text-sm"
           />
         </div>
         <div>
@@ -96,7 +96,7 @@ export default function CompaniesPage() {
           <input
             value={country}
             onChange={(e) => setCountry(e.target.value)}
-            className="rounded-xl border border-black/10 px-3 py-2 text-sm"
+            className="rounded-xl border border-line px-3 py-2 text-sm"
           />
         </div>
         <div>
@@ -104,13 +104,13 @@ export default function CompaniesPage() {
           <input
             value={industry}
             onChange={(e) => setIndustry(e.target.value)}
-            className="rounded-xl border border-black/10 px-3 py-2 text-sm"
+            className="rounded-xl border border-line px-3 py-2 text-sm"
           />
         </div>
         <button
           type="submit"
           disabled={creating}
-          className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="btn-primary"
         >
           {creating ? "Adding..." : "Add company"}
         </button>
@@ -120,7 +120,7 @@ export default function CompaniesPage() {
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Country</th>
@@ -147,7 +147,7 @@ export default function CompaniesPage() {
               </tr>
             )}
             {companies.map((company) => (
-              <tr key={company.id} className="border-b border-black/5 last:border-0">
+              <tr key={company.id} className="border-b border-line last:border-0">
                 <td className="px-4 py-3 font-medium">{company.name}</td>
                 <td className="px-4 py-3 text-muted">{company.country ?? "—"}</td>
                 <td className="px-4 py-3 text-muted">{company.industry ?? "—"}</td>

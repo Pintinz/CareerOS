@@ -13,7 +13,7 @@ export default function NewInterviewQuestionPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="mb-6 text-2xl font-semibold text-navy">New interview question</h1>
+      <h1 className="mb-6 text-2xl font-bold text-navy">New interview question</h1>
       <InterviewQuestionForm onSaved={(q) => router.push(`/questions/interview/${q.id}`)} />
     </main>
   );

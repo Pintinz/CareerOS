@@ -48,7 +48,7 @@ export default function UsersPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Users</h1>
+      <h1 className="text-2xl font-bold text-navy">Users</h1>
       <p className="mt-2 text-sm text-muted">
         Never shows OAuth tokens, password hashes, CV contents, email bodies, or interview recordings.
       </p>
@@ -64,9 +64,9 @@ export default function UsersPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by email or name..."
-          className="w-72 rounded-xl border border-black/10 px-3 py-2 text-sm"
+          className="w-72 rounded-xl border border-line px-3 py-2 text-sm"
         />
-        <button type="submit" className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white">
+        <button type="submit" className="btn-primary">
           Search
         </button>
       </form>
@@ -75,7 +75,7 @@ export default function UsersPage() {
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
@@ -92,7 +92,7 @@ export default function UsersPage() {
               </tr>
             )}
             {items.map((user) => (
-              <tr key={user.id} className="border-b border-black/5 last:border-0">
+              <tr key={user.id} className="border-b border-line last:border-0">
                 <td className="px-4 py-3">{user.full_name ?? "—"}</td>
                 <td className="px-4 py-3 text-muted">{user.email}</td>
                 <td className="px-4 py-3 text-muted">{new Date(user.created_at).toLocaleDateString()}</td>

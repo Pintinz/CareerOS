@@ -35,13 +35,13 @@ export default function AuditPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Audit Logs</h1>
+      <h1 className="text-2xl font-bold text-navy">Audit Logs</h1>
       <p className="mt-2 text-sm text-muted">Every administrative create/update/publish/delete action, append-only. Never contains secrets.</p>
       {error && <p className="mt-4 text-sm text-danger">{error}</p>}
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-3">When</th>
               <th className="px-4 py-3">Admin</th>
@@ -57,7 +57,7 @@ export default function AuditPage() {
               </tr>
             )}
             {items.map((entry) => (
-              <tr key={entry.id} className="border-b border-black/5 last:border-0">
+              <tr key={entry.id} className="border-b border-line last:border-0">
                 <td className="px-4 py-3 text-muted">{new Date(entry.created_at).toLocaleString()}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted">{entry.admin_id ?? "system"}</td>
                 <td className="px-4 py-3 font-medium">{entry.action}</td>

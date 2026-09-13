@@ -28,7 +28,7 @@ export default function EditAptitudeQuestionPage() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-navy">Edit question</h1>
+        <h1 className="text-2xl font-bold text-navy">Edit question</h1>
         <button onClick={() => router.push("/questions/aptitude")} className="text-sm text-muted hover:text-ink">
           Back to question bank
         </button>

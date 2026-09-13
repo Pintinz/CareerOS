@@ -88,7 +88,7 @@ export default function DiscoveryPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Discovery Queue</h1>
+      <h1 className="text-2xl font-bold text-navy">Discovery Queue</h1>
       <p className="mt-2 text-sm text-muted">
         Nothing here is ever auto-published — creating a draft always starts it as DRAFT, requiring a normal
         publish action afterward.
@@ -99,7 +99,7 @@ export default function DiscoveryPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${tab === t ? "bg-navy text-white" : "bg-card text-muted"}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tab === t ? "bg-navy text-white" : "bg-card text-muted"}`}
           >
             {t}
           </button>
@@ -149,7 +149,7 @@ export default function DiscoveryPage() {
                 required
                 value={draftTitle}
                 onChange={(e) => setDraftTitle(e.target.value)}
-                className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-line px-3 py-2 text-sm"
               />
             </div>
             {reviewing.item_type !== "SCHOLARSHIP" && (
@@ -158,7 +158,7 @@ export default function DiscoveryPage() {
                 <select
                   value={draftCompanyId}
                   onChange={(e) => setDraftCompanyId(e.target.value)}
-                  className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+                  className="w-full rounded-xl border border-line px-3 py-2 text-sm"
                 >
                   <option value="">— select —</option>
                   {companies.map((c) => (
@@ -173,14 +173,14 @@ export default function DiscoveryPage() {
                 value={draftSummary}
                 onChange={(e) => setDraftSummary(e.target.value)}
                 rows={3}
-                className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-line px-3 py-2 text-sm"
               />
             </div>
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setReviewing(null)} className="rounded-xl px-4 py-2 text-sm text-muted">
                 Cancel
               </button>
-              <button type="submit" className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white">
+              <button type="submit" className="btn-primary">
                 Create Draft
               </button>
             </div>

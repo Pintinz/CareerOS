@@ -51,7 +51,7 @@ function linesToList(value: string): string[] | null {
   return lines.length > 0 ? lines : null;
 }
 
-const inputClass = "w-full rounded-xl border border-black/10 px-3 py-2 text-sm";
+const inputClass = "w-full rounded-xl border border-line px-3 py-2 text-sm";
 const labelClass = "mb-1 block text-xs text-muted";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

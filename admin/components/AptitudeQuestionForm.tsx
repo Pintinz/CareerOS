@@ -8,7 +8,7 @@ import { QuestionAdminOut, QuestionCategoryOut, QuestionDifficulty, QuestionOpti
 const QUESTION_TYPES: QuestionType[] = ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TRUE_FALSE", "NUMERIC", "IMAGE_BASED", "PASSAGE_BASED"];
 const DIFFICULTIES: QuestionDifficulty[] = ["EASY", "MEDIUM", "HARD", "EXPERT"];
 
-const inputClass = "w-full rounded-xl border border-black/10 px-3 py-2 text-sm";
+const inputClass = "w-full rounded-xl border border-line px-3 py-2 text-sm";
 const labelClass = "mb-1 block text-xs text-muted";
 
 function emptyOption(order: number): QuestionOptionIn {

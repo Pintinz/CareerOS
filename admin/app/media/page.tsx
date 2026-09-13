@@ -64,7 +64,7 @@ export default function MediaPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">Media Library</h1>
+      <h1 className="text-2xl font-bold text-navy">Media Library</h1>
       <p className="mt-2 text-sm text-muted">
         Every image uploaded through the shared admin upload pipeline — job thumbnails, scholarship banners,
         company logos, news images, and question assets. Deletion is blocked when the asset is still referenced

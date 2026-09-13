@@ -53,8 +53,8 @@ export default function IntelligencePage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-navy">Company Intelligence</h1>
-        <Link href="/intelligence/new" className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white">
+        <h1 className="text-2xl font-bold text-navy">Company Intelligence</h1>
+        <Link href="/intelligence/new" className="btn-primary">
           New post
         </Link>
       </div>
@@ -64,7 +64,7 @@ export default function IntelligencePage() {
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${statusFilter === s ? "bg-navy text-white" : "bg-card text-muted"}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${statusFilter === s ? "bg-brand text-white shadow-sm" : "bg-card text-muted shadow-sm hover:text-ink"}`}
           >
             {s}
           </button>
@@ -75,7 +75,7 @@ export default function IntelligencePage() {
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-3">Headline</th>
               <th className="px-4 py-3">Company</th>
@@ -96,7 +96,7 @@ export default function IntelligencePage() {
               </tr>
             )}
             {items.map((p) => (
-              <tr key={p.id} className="border-b border-black/5 last:border-0">
+              <tr key={p.id} className="border-b border-line last:border-0">
                 <td className="px-4 py-3 font-medium">
                   <Link href={`/intelligence/${p.id}`} className="hover:text-brand">{p.headline}</Link>
                 </td>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { StatusBadge } from "@/components/ui";
 import { useAdminGuard } from "@/components/useAdminGuard";
 import { ApiError, api } from "@/lib/apiClient";
 import { ContentStatus, JobAdmin, PaginatedResponse } from "@/types/models";
@@ -15,14 +16,6 @@ const STATUS_FILTERS: (ContentStatus | "ALL")[] = [
   "EXPIRED",
   "ARCHIVED",
 ];
-
-const STATUS_COLORS: Record<ContentStatus, string> = {
-  DRAFT: "bg-muted/10 text-muted",
-  REVIEW: "bg-warning/10 text-warning",
-  PUBLISHED: "bg-success/10 text-success",
-  EXPIRED: "bg-danger/10 text-danger",
-  ARCHIVED: "bg-muted/10 text-muted",
-};
 
 export default function JobsPage() {
   const { checked } = useAdminGuard();
@@ -78,10 +71,10 @@ export default function JobsPage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-navy">Jobs</h1>
+        <h1 className="text-2xl font-bold text-navy">Jobs</h1>
         <Link
           href="/jobs/new"
-          className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white"
+          className="btn-primary"
         >
           New job
         </Link>
@@ -92,8 +85,8 @@ export default function JobsPage() {
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              statusFilter === s ? "bg-navy text-white" : "bg-card text-muted"
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+              statusFilter === s ? "bg-brand text-white shadow-sm" : "bg-card text-muted shadow-sm hover:text-ink"
             }`}
           >
             {s}
@@ -105,7 +98,7 @@ export default function JobsPage() {
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Company</th>
@@ -130,7 +123,7 @@ export default function JobsPage() {
               </tr>
             )}
             {jobs.map((job) => (
-              <tr key={job.id} className="border-b border-black/5 last:border-0 align-top">
+              <tr key={job.id} className="border-b border-line last:border-0 align-top">
                 <td className="px-4 py-3 font-medium">
                   <Link href={`/jobs/${job.id}`} className="hover:text-brand">
                     {job.title}
@@ -138,9 +131,7 @@ export default function JobsPage() {
                 </td>
                 <td className="px-4 py-3 text-muted">{job.company.name}</td>
                 <td className="px-4 py-3">
-                  <span className={`rounded-full px-2 py-1 text-xs font-medium ${STATUS_COLORS[job.status]}`}>
-                    {job.status}
-                  </span>
+                  <StatusBadge status={job.status} />
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-2 text-xs">

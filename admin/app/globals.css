@@ -2,7 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #f6f8fc;
-  color: #10213d;
+@layer base {
+  body {
+    background-color: #f6f8fc;
+    color: #10213d;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
+  }
+
+  /* Visible keyboard focus everywhere (accessibility.md). */
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid #1677ff;
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+
+  input,
+  select,
+  textarea {
+    background-color: #ffffff;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: #1677ff;
+    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.15);
+    outline: none;
+  }
+
+  /* Operational tables: quiet uppercase headers, generous rows, subtle hover. */
+  table thead th {
+    background-color: #f6f8fc;
+    color: #66758c;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  table tbody tr {
+    transition: background-color 120ms ease;
+  }
+
+  table tbody tr:hover {
+    background-color: #f9fbfe;
+  }
+
+  table td {
+    vertical-align: middle;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0f66e0] disabled:opacity-60;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand/40 hover:text-brand disabled:opacity-60;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#d63e4c] disabled:opacity-60;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
 }

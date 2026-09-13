@@ -95,9 +95,9 @@ export default function CompanyDetailPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">{company.name}</h1>
+      <h1 className="text-2xl font-bold text-navy">{company.name}</h1>
 
-      <div className="mt-6 flex gap-2 border-b border-black/5">
+      <div className="mt-6 flex gap-2 border-b border-line">
         {(["overview", "jobs", "intelligence"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -133,7 +133,7 @@ export default function CompanyDetailPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={4}
-              className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-line px-3 py-2 text-sm"
             />
           </div>
           <p className="text-xs text-muted">
@@ -143,7 +143,7 @@ export default function CompanyDetailPage() {
           <Field label="Business Areas" value={form.businessAreas} onChange={(v) => setForm({ ...form, businessAreas: v })} />
           <Field label="Locations" value={form.locations} onChange={(v) => setForm({ ...form, locations: v })} />
 
-          <button type="submit" disabled={saving} className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white disabled:opacity-60">
+          <button type="submit" disabled={saving} className="btn-primary">
             {saving ? "Saving..." : "Save Changes"}
           </button>
         </form>
@@ -199,7 +199,7 @@ function Field({
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-black/10 px-3 py-2 text-sm"
+        className="w-full rounded-xl border border-line px-3 py-2 text-sm"
       />
     </div>
   );

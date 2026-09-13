@@ -61,13 +61,13 @@ export default function InterviewQuestionsPage() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-navy">Interview Question Bank</h1>
+        <h1 className="text-2xl font-bold text-navy">Interview Question Bank</h1>
         <div className="flex gap-3">
-          <label className="cursor-pointer rounded-xl border border-black/10 bg-card px-4 py-2 text-sm font-medium text-ink">
+          <label className="cursor-pointer rounded-xl border border-line bg-card px-4 py-2 text-sm font-medium text-ink">
             Bulk Import CSV
             <input type="file" accept=".csv" onChange={handleImport} className="hidden" />
           </label>
-          <Link href="/questions/interview/new" className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white">
+          <Link href="/questions/interview/new" className="btn-primary">
             New question
           </Link>
         </div>
@@ -83,14 +83,14 @@ export default function InterviewQuestionsPage() {
       )}
 
       <div className="mt-6 flex gap-2">
-        <button onClick={() => setCategoryFilter("")} className={`rounded-full px-3 py-1 text-xs font-medium ${!categoryFilter ? "bg-navy text-white" : "bg-card text-muted"}`}>
+        <button onClick={() => setCategoryFilter("")} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${!categoryFilter ? "bg-navy text-white" : "bg-card text-muted"}`}>
           All
         </button>
         {categories.map((c) => (
           <button
             key={c.id}
             onClick={() => setCategoryFilter(c.id)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${categoryFilter === c.id ? "bg-navy text-white" : "bg-card text-muted"}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${categoryFilter === c.id ? "bg-navy text-white" : "bg-card text-muted"}`}
           >
             {c.name}
           </button>
@@ -101,7 +101,7 @@ export default function InterviewQuestionsPage() {
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs uppercase text-muted">
             <tr>
               <th className="px-4 py-3">Question</th>
               <th className="px-4 py-3">Difficulty</th>
@@ -117,7 +117,7 @@ export default function InterviewQuestionsPage() {
               </tr>
             )}
             {items.map((q) => (
-              <tr key={q.id} className="border-b border-black/5 last:border-0">
+              <tr key={q.id} className="border-b border-line last:border-0">
                 <td className="max-w-md truncate px-4 py-3 font-medium">
                   <Link href={`/questions/interview/${q.id}`} className="hover:text-brand">{q.question_text}</Link>
                 </td>

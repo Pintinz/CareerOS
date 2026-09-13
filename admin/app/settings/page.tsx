@@ -62,7 +62,7 @@ export default function SettingsPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-navy">System Settings</h1>
+      <h1 className="text-2xl font-bold text-navy">System Settings</h1>
       <p className="mt-2 text-sm text-muted">
         Non-secret, runtime-configurable values (scoring weights, matching thresholds, classifier confidence
         cutoffs). Secret API keys always remain in environment/secret management, never here.
@@ -79,7 +79,7 @@ export default function SettingsPage() {
               </div>
               <p className="mb-3 text-xs text-muted">{s.description}</p>
               <textarea
-                className="w-full rounded-xl border border-black/10 px-3 py-2 font-mono text-xs"
+                className="w-full rounded-xl border border-line px-3 py-2 font-mono text-xs"
                 rows={4}
                 value={drafts[key] ?? ""}
                 onChange={(e) => setDrafts({ ...drafts, [key]: e.target.value })}
