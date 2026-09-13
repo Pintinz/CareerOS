@@ -112,6 +112,16 @@ class FakeInterviewRepository extends InterviewRepository {
 
   @override
   Future<List<StarStory>> listStarStories({String? category}) async => starStoriesOverride;
+
+  MockMixPreview mockMixPreviewOverride = const MockMixPreview(
+    categoryCounts: {'cat-technical': 4, 'cat-behavioral': 3},
+    categoryNames: {'cat-technical': 'Technical', 'cat-behavioral': 'Behavioral'},
+    source: 'role_default',
+  );
+
+  @override
+  Future<MockMixPreview> getMockMixPreview({int questionCount = 10, String? applicationId, String? jobId}) async =>
+      mockMixPreviewOverride;
 }
 
 InterviewSessionDetail buildSampleInterviewSession({

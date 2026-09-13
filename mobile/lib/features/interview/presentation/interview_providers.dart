@@ -45,6 +45,34 @@ final starStoryProvider = FutureProvider.autoDispose.family<StarStory, String>((
   return ref.watch(interviewRepositoryProvider).getStarStory(storyId);
 });
 
+/// Identifies one Automatic Mix preview request — what a Mock Interview's "Automatic Mix" would
+/// apply for this question count / application / job, without creating a session.
+class MockMixPreviewArgs {
+  const MockMixPreviewArgs({required this.questionCount, this.applicationId, this.jobId});
+
+  final int questionCount;
+  final String? applicationId;
+  final String? jobId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MockMixPreviewArgs &&
+      other.questionCount == questionCount &&
+      other.applicationId == applicationId &&
+      other.jobId == jobId;
+
+  @override
+  int get hashCode => Object.hash(questionCount, applicationId, jobId);
+}
+
+final mockMixPreviewProvider = FutureProvider.autoDispose.family<MockMixPreview, MockMixPreviewArgs>((ref, args) {
+  return ref.watch(interviewRepositoryProvider).getMockMixPreview(
+        questionCount: args.questionCount,
+        applicationId: args.applicationId,
+        jobId: args.jobId,
+      );
+});
+
 /// Drives session creation from the configuration screen.
 class InterviewSessionCreationController extends AsyncNotifier<InterviewSessionDetail?> {
   @override
@@ -60,6 +88,7 @@ class InterviewSessionCreationController extends AsyncNotifier<InterviewSessionD
     String? applicationId,
     String? jobId,
     String? companyId,
+    bool autoMix = false,
   }) async {
     state = const AsyncLoading();
     final result = await AsyncValue.guard(
@@ -73,6 +102,7 @@ class InterviewSessionCreationController extends AsyncNotifier<InterviewSessionD
             applicationId: applicationId,
             jobId: jobId,
             companyId: companyId,
+            autoMix: autoMix,
           ),
     );
     state = result;
