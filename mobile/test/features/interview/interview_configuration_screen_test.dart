@@ -68,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Total: 0 / 10'), findsOneWidget);
-    final startButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Start'));
+    final startButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Start Practice'));
     expect(startButton.onPressed, isNull);
 
     // Bump Technical to 10 via its + button (first add_circle_outline icon).
@@ -79,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Total: 10 / 10'), findsOneWidget);
-    final enabledStartButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Start'));
+    final enabledStartButton = tester.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Start Practice'));
     expect(enabledStartButton.onPressed, isNotNull);
   });
 
@@ -91,7 +91,7 @@ void main() {
     await tester.pumpWidget(_wrap(const InterviewConfigureArgs(), overrides));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Start'));
+    await tester.tap(find.text('Start Practice'));
     await tester.pumpAndSettle();
 
     expect(find.text('Session: new-interview-42'), findsOneWidget);

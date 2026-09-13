@@ -51,6 +51,6 @@ abstract final class AppIcons {
   static const check = Icons.check_rounded;
   static const flag = Icons.flag_outlined;
   static const timer = Icons.timer_outlined;
-  static const offline = Icons.cloud_off_rounded;
+  static const offline = Icons.cloud_off;
   static const error = Icons.error_outline_rounded;
 }

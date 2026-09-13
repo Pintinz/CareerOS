@@ -2,8 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/interview_models.dart";
 import "interview_providers.dart";
 import "recording_controller.dart";
@@ -13,6 +14,7 @@ import "recording_widgets.dart";
 /// self-assessment, and — for Mock Interview — a self-paced per-question timer. Covers both
 /// Question Practice mode and Mock Interview mode in one screen since they share almost all of
 /// their UI; the differences (timer visibility, self-rating prompt) are conditional on `mode`.
+/// Distraction-free: no ads, no bottom navigation.
 class InterviewSessionScreen extends ConsumerStatefulWidget {
   const InterviewSessionScreen({super.key, required this.sessionId});
 
@@ -64,7 +66,10 @@ class _InterviewSessionScreenState extends ConsumerState<InterviewSessionScreen>
     if (state.session == null) {
       return Scaffold(
         appBar: AppBar(title: const Text("Interview Practice")),
-        body: Center(child: Text(state.error?.userMessage ?? "Unable to load this session.")),
+        body: ErrorState(
+          title: "We couldn't open this session",
+          message: state.error?.userMessage ?? "Unable to load this session.",
+        ),
       );
     }
 
@@ -77,33 +82,53 @@ class _InterviewSessionScreenState extends ConsumerState<InterviewSessionScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(question?.categoryName ?? "Interview Practice"),
+        titleSpacing: 0,
+        title: Text(question?.categoryName ?? "Interview Practice", maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           if (state.hasUnsyncedChanges)
             const Padding(
-              padding: EdgeInsets.only(right: 8),
-              child: Tooltip(message: "Not synced yet — will upload once you're back online.", child: Icon(Icons.cloud_off, color: AppColors.warning)),
+              padding: EdgeInsets.only(right: 4),
+              child: Tooltip(message: "Not synced yet — will upload once you're back online.", child: Icon(AppIcons.offline, color: AppColors.warning)),
             ),
           if (isMock && state.remainingSeconds != null) _TimerBadge(seconds: state.remainingSeconds!),
-          const SizedBox(width: 12),
           TextButton(
             onPressed: () => _confirmEnd(context, controller),
-            child: const Text("End", style: TextStyle(color: AppColors.danger)),
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            child: const Text("End"),
           ),
         ],
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          LinearProgressIndicator(value: total == 0 ? 0 : (index + 1) / total),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Text("Question ${index + 1} of $total", style: const TextStyle(color: AppColors.muted)),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xxs, AppSpacing.pageH, AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Text("Question ${index + 1} of $total", style: context.text.titleSmall),
+                    const Spacer(),
+                    StatusChip(label: isMock ? "Mock Interview" : "Practice", tone: isMock ? AppTone.warning : AppTone.primary, dense: true),
+                  ],
+                ),
+                Gap.xs,
+                CareerProgressBar(
+                  value: total == 0 ? 0 : (index + 1) / total,
+                  height: 6,
+                  tone: AppTone.warning,
+                  semanticLabel: "Interview progress",
+                  semanticValue: "Question ${index + 1} of $total",
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: question == null
-                ? const Center(child: Text("No questions in this session."))
+                ? const EmptyState(icon: AppIcons.interview, title: "No questions in this session.", message: "Go back and start a new session.")
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, AppSpacing.xl),
                     child: _QuestionBody(
                       key: ValueKey(question.id),
                       question: question,
@@ -112,15 +137,17 @@ class _InterviewSessionScreenState extends ConsumerState<InterviewSessionScreen>
                       onToggleGuidance: () => setState(() => _showGuidance = !_showGuidance),
                       answerController: _answerController,
                       notesController: _notesController,
-                      isMock: isMock,
                       onAnswerChanged: (text) => controller.answer(question.id, answerText: text),
                       onNotesChanged: (text) => controller.answer(question.id, notes: text),
-                      onRecordingReady: (path, duration) =>
-                          controller.answer(question.id, audioPath: path, audioDurationSeconds: duration),
+                      onRecordingReady: (path, duration) => controller.answer(question.id, audioPath: path, audioDurationSeconds: duration),
                       onMarkPracticed: () => controller.answer(question.id, isMarkedPracticed: true),
                       onToggleSaved: () => controller.answer(question.id, isSaved: !(question.answerState?.isSaved ?? false)),
                       onSelfAssess: (rating, usedStar, gaveMetric, exact) => controller.answer(
-                        question.id, selfRating: rating, usedStar: usedStar, gaveMeasurableResult: gaveMetric, answeredExactQuestion: exact,
+                        question.id,
+                        selfRating: rating,
+                        usedStar: usedStar,
+                        gaveMeasurableResult: gaveMetric,
+                        answeredExactQuestion: exact,
                       ),
                     ),
                   ),
@@ -130,10 +157,12 @@ class _InterviewSessionScreenState extends ConsumerState<InterviewSessionScreen>
             canGoNext: index < total - 1,
             onPrevious: controller.previous,
             onNext: controller.next,
-            onSkip: question == null ? null : () {
-              controller.answer(question.id, isSkipped: true);
-              if (index < total - 1) controller.next();
-            },
+            onSkip: question == null
+                ? null
+                : () {
+                    controller.answer(question.id, isSkipped: true);
+                    if (index < total - 1) controller.next();
+                  },
             onEndInterview: () => _confirmEnd(context, controller),
           ),
         ],
@@ -166,17 +195,24 @@ class _TimerBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final minutes = seconds ~/ 60;
     final secs = seconds % 60;
-    final isLow = seconds <= 15;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: (isLow ? AppColors.danger : AppColors.blue).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined, size: 16, color: isLow ? AppColors.danger : AppColors.blue),
-          const SizedBox(width: 4),
-          Text("${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}", style: TextStyle(color: isLow ? AppColors.danger : AppColors.blue, fontWeight: FontWeight.w600)),
-        ],
+    final tone = seconds <= 15 ? AppTone.danger : AppTone.primary;
+    return Semantics(
+      label: "Time remaining $minutes minutes $secs seconds",
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(color: tone.tint(context), borderRadius: AppRadius.pillAll),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer_outlined, size: 16, color: tone.onTint(context)),
+            const SizedBox(width: 4),
+            Text(
+              "${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}",
+              style: context.text.labelLarge?.copyWith(color: tone.onTint(context), fontFeatures: const [FontFeature.tabularFigures()]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -191,7 +227,6 @@ class _QuestionBody extends StatelessWidget {
     required this.onToggleGuidance,
     required this.answerController,
     required this.notesController,
-    required this.isMock,
     required this.onAnswerChanged,
     required this.onNotesChanged,
     required this.onRecordingReady,
@@ -206,7 +241,6 @@ class _QuestionBody extends StatelessWidget {
   final VoidCallback onToggleGuidance;
   final TextEditingController answerController;
   final TextEditingController notesController;
-  final bool isMock;
   final ValueChanged<String> onAnswerChanged;
   final ValueChanged<String> onNotesChanged;
   final void Function(String path, int durationSeconds) onRecordingReady;
@@ -217,95 +251,139 @@ class _QuestionBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSaved = question.answerState?.isSaved ?? false;
+    final isPracticed = question.answerState?.isMarkedPracticed ?? false;
+    final colors = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, children: [
-          _Badge(label: question.difficulty.label, color: AppColors.blue),
-          if (question.topicName != null) _Badge(label: question.topicName!, color: AppColors.purple),
-        ]),
-        const SizedBox(height: 16),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: Text(question.questionText, style: Theme.of(context).textTheme.titleLarge)),
-            IconButton(
-              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border, color: isSaved ? AppColors.blue : AppColors.muted),
-              onPressed: onToggleSaved,
-            ),
-          ],
+        CareerCard(
+          variant: CareerCardVariant.feature,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        TagChip(label: question.difficulty.label),
+                        if (question.topicName != null) TagChip(label: question.topicName!, tone: AppTone.purple),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: isSaved ? "Remove from saved questions" : "Save question",
+                    icon: Icon(isSaved ? AppIcons.savedSelected : AppIcons.saved, color: isSaved ? colors.primary : colors.textSecondary),
+                    onPressed: onToggleSaved,
+                  ),
+                ],
+              ),
+              Gap.xs,
+              Text(question.questionText, style: context.text.titleLarge?.copyWith(height: 1.4)),
+              Gap.md,
+              AppTextButton(
+                label: showGuidance ? "Hide Guidance" : "Show Guidance",
+                icon: showGuidance ? Icons.visibility_off_outlined : Icons.lightbulb_outline_rounded,
+                onPressed: onToggleGuidance,
+              ),
+              if (showGuidance && question.answerGuidance != null) ...[
+                Gap.xs,
+                _GuidanceCard(guidance: question.answerGuidance!),
+              ],
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: onToggleGuidance,
-          icon: Icon(showGuidance ? Icons.visibility_off_outlined : Icons.lightbulb_outline),
-          label: Text(showGuidance ? "Hide Guidance" : "Show Guidance"),
-        ),
-        if (showGuidance && question.answerGuidance != null) ...[
-          const SizedBox(height: 12),
-          _GuidanceCard(guidance: question.answerGuidance!),
-        ],
-        const SizedBox(height: 20),
-        Text("Your Answer", style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        const Text(
-          "Record it, type it, or add notes — whatever works for you. You can combine all three.",
-          style: TextStyle(fontSize: 12, color: AppColors.muted),
-        ),
-        const SizedBox(height: 10),
+        Gap.xl,
+        Text("Your Answer", style: context.text.titleMedium),
+        const SizedBox(height: 2),
+        Text("Record it, type it, or add notes — whatever works for you. You can combine all three.", style: context.text.bodySmall),
+        Gap.sm,
         RecordingControls(
           target: RecordingTarget(sessionId: sessionId, questionId: question.id),
           onRecordingReady: onRecordingReady,
         ),
-        const SizedBox(height: 12),
+        Gap.sm,
         TextField(
           controller: answerController,
-          maxLines: 6,
-          decoration: const InputDecoration(hintText: "Type your answer (optional) — or just think it through and mark as practiced.", border: OutlineInputBorder()),
+          minLines: 4,
+          maxLines: 10,
+          decoration: const InputDecoration(
+            labelText: "Type your answer",
+            hintText: "Optional — or just think it through and mark as practiced.",
+            alignLabelWithHint: true,
+          ),
           onChanged: onAnswerChanged,
         ),
-        const SizedBox(height: 12),
+        Gap.sm,
         TextField(
           controller: notesController,
-          maxLines: 2,
-          decoration: const InputDecoration(hintText: "Add notes", border: OutlineInputBorder()),
+          minLines: 1,
+          maxLines: 3,
+          decoration: const InputDecoration(labelText: "Notes", prefixIcon: Icon(Icons.sticky_note_2_outlined)),
           onChanged: onNotesChanged,
         ),
-        const SizedBox(height: 12),
-        if (question.answerState?.structureCheck != null) _StructureCheckCard(check: question.answerState!.structureCheck!),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: onMarkPracticed,
-          icon: const Icon(Icons.check_circle_outline),
-          label: const Text("Mark as Practiced"),
-        ),
-        const SizedBox(height: 20),
-        Text("How did that answer feel?", style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        _SelfRatingRow(currentRating: question.answerState?.selfRating, onSelected: (rating) {
-          onSelfAssess(
-            rating,
-            question.answerState?.usedStar ?? false,
-            question.answerState?.gaveMeasurableResult ?? false,
-            question.answerState?.answeredExactQuestion ?? false,
-          );
-        }),
-        const SizedBox(height: 8),
-        _SelfCheckToggle(
-          label: "Did you use STAR?",
-          value: question.answerState?.usedStar ?? false,
-          onChanged: (v) => onSelfAssess(question.answerState?.selfRating ?? 0, v, question.answerState?.gaveMeasurableResult ?? false, question.answerState?.answeredExactQuestion ?? false),
-        ),
-        _SelfCheckToggle(
-          label: "Did you give a measurable result?",
-          value: question.answerState?.gaveMeasurableResult ?? false,
-          onChanged: (v) => onSelfAssess(question.answerState?.selfRating ?? 0, question.answerState?.usedStar ?? false, v, question.answerState?.answeredExactQuestion ?? false),
-        ),
-        _SelfCheckToggle(
-          label: "Did you answer the exact question?",
-          value: question.answerState?.answeredExactQuestion ?? false,
-          onChanged: (v) => onSelfAssess(question.answerState?.selfRating ?? 0, question.answerState?.usedStar ?? false, question.answerState?.gaveMeasurableResult ?? false, v),
+        if (question.answerState?.structureCheck != null) ...[
+          Gap.sm,
+          _StructureCheckCard(check: question.answerState!.structureCheck!),
+        ],
+        Gap.sm,
+        isPracticed
+            ? AppOutlineButton(label: "Mark as Practiced", icon: Icons.check_circle_rounded, onPressed: onMarkPracticed)
+            : SecondaryButton(label: "Mark as Practiced", icon: Icons.check_circle_outline_rounded, onPressed: onMarkPracticed),
+        Gap.xl,
+        CareerCard(
+          variant: CareerCardVariant.outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("How did that answer feel?", style: context.text.titleMedium),
+              const SizedBox(height: 2),
+              Text("Your own rating — it's never scored automatically.", style: context.text.bodySmall),
+              Gap.sm,
+              _SelfRatingRow(
+                currentRating: question.answerState?.selfRating,
+                onSelected: (rating) => onSelfAssess(
+                  rating,
+                  question.answerState?.usedStar ?? false,
+                  question.answerState?.gaveMeasurableResult ?? false,
+                  question.answerState?.answeredExactQuestion ?? false,
+                ),
+              ),
+              Gap.xs,
+              _SelfCheckToggle(
+                label: "Did you use STAR?",
+                value: question.answerState?.usedStar ?? false,
+                onChanged: (v) => onSelfAssess(
+                  question.answerState?.selfRating ?? 0,
+                  v,
+                  question.answerState?.gaveMeasurableResult ?? false,
+                  question.answerState?.answeredExactQuestion ?? false,
+                ),
+              ),
+              _SelfCheckToggle(
+                label: "Did you give a measurable result?",
+                value: question.answerState?.gaveMeasurableResult ?? false,
+                onChanged: (v) => onSelfAssess(
+                  question.answerState?.selfRating ?? 0,
+                  question.answerState?.usedStar ?? false,
+                  v,
+                  question.answerState?.answeredExactQuestion ?? false,
+                ),
+              ),
+              _SelfCheckToggle(
+                label: "Did you answer the exact question?",
+                value: question.answerState?.answeredExactQuestion ?? false,
+                onChanged: (v) => onSelfAssess(
+                  question.answerState?.selfRating ?? 0,
+                  question.answerState?.usedStar ?? false,
+                  question.answerState?.gaveMeasurableResult ?? false,
+                  v,
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -319,33 +397,41 @@ class _GuidanceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    Widget group(String title, List<String> items, {Color? color}) => Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: context.text.labelMedium?.copyWith(color: color)),
+              const SizedBox(height: 2),
+              BulletList(items: items),
+            ],
+          ),
+        );
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(color: colors.tint(colors.primary), borderRadius: AppRadius.mdAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (guidance.assessing?.isNotEmpty ?? false) ...[
-            const Text("What the interviewer is assessing", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            const SizedBox(height: 2),
-            Text(guidance.assessing!),
-            const SizedBox(height: 10),
-          ],
-          if (guidance.strongAnswerIncludes.isNotEmpty) ...[
-            const Text("A strong answer includes", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            for (final item in guidance.strongAnswerIncludes) Text("• $item"),
-            const SizedBox(height: 10),
-          ],
-          if (guidance.commonMistakes.isNotEmpty) ...[
-            const Text("Common mistakes", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.danger)),
-            for (final item in guidance.commonMistakes) Text("• $item"),
-            const SizedBox(height: 10),
-          ],
-          if (guidance.technicalConcepts.isNotEmpty) ...[
-            const Text("Technical concepts to mention", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-            for (final item in guidance.technicalConcepts) Text("• $item"),
-          ],
+          if (guidance.assessing?.isNotEmpty ?? false)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("What the interviewer is assessing", style: context.text.labelMedium),
+                  const SizedBox(height: 2),
+                  Text(guidance.assessing!, style: context.text.bodyLarge),
+                ],
+              ),
+            ),
+          if (guidance.strongAnswerIncludes.isNotEmpty) group("A strong answer includes", guidance.strongAnswerIncludes),
+          if (guidance.commonMistakes.isNotEmpty) group("Common mistakes", guidance.commonMistakes, color: AppColors.error),
+          if (guidance.technicalConcepts.isNotEmpty) group("Technical concepts to mention", guidance.technicalConcepts),
         ],
       ),
     );
@@ -359,18 +445,25 @@ class _StructureCheckCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(10)),
+    final ok = check.flags.isEmpty;
+    return CareerCard(
+      variant: CareerCardVariant.muted,
+      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Answer Structure Check · ${check.wordCount} words", style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-          if (check.flags.isEmpty)
-            const Text("Looks well-structured.", style: TextStyle(fontSize: 12, color: AppColors.success))
+          Row(
+            children: [
+              Icon(ok ? Icons.check_circle_rounded : Icons.rule_rounded, size: 18, color: ok ? AppColors.success : AppColors.warning),
+              Gap.xs,
+              Expanded(child: Text("Answer Structure Check · ${check.wordCount} words", style: context.text.labelMedium)),
+            ],
+          ),
+          Gap.xxs,
+          if (ok)
+            Text("Looks well-structured.", style: context.text.bodySmall?.copyWith(color: AppTone.success.onTint(context)))
           else
-            for (final flag in check.flags) Text("• ${_flagLabel(flag)}", style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            for (final flag in check.flags) Text("• ${_flagLabel(flag)}", style: context.text.bodySmall),
         ],
       ),
     );
@@ -396,25 +489,32 @@ class _SelfRatingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Row(
       children: [
         for (final rating in [1, 2, 3, 4, 5])
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: OutlinedButton(
-                onPressed: () => onSelected(rating),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: currentRating == rating ? AppColors.blue.withValues(alpha: 0.1) : null,
-                  side: BorderSide(color: currentRating == rating ? AppColors.blue : AppColors.muted.withValues(alpha: 0.3)),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text("$rating", style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text(_labels[rating]!, style: const TextStyle(fontSize: 10)),
-                  ],
+              child: Semantics(
+                selected: currentRating == rating,
+                label: "Rate $rating, ${_labels[rating]}",
+                excludeSemantics: true,
+                child: OutlinedButton(
+                  onPressed: () => onSelected(rating),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 56),
+                    backgroundColor: currentRating == rating ? colors.tint(colors.primary) : null,
+                    side: BorderSide(color: currentRating == rating ? colors.primary : colors.border),
+                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text("$rating", style: context.text.titleMedium?.copyWith(color: currentRating == rating ? colors.primary : null)),
+                      FittedBox(child: Text(_labels[rating]!, style: context.text.labelSmall)),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -435,25 +535,9 @@ class _SelfCheckToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
-      title: Text(label, style: const TextStyle(fontSize: 14)),
+      title: Text(label, style: context.text.bodyLarge),
       value: value,
       onChanged: onChanged,
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -477,27 +561,30 @@ class _BottomControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(color: AppColors.card, border: Border(top: BorderSide(color: Color(0x1A000000)))),
+    final colors = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(color: colors.surface, border: Border(top: BorderSide(color: colors.border))),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: [
-            Expanded(child: OutlinedButton(onPressed: canGoPrevious ? onPrevious : null, child: const Text("Previous"))),
-            const SizedBox(width: 8),
-            Expanded(child: OutlinedButton(onPressed: onSkip, child: const Text("Skip"))),
-            const SizedBox(width: 8),
-            Expanded(
-              child: canGoNext
-                  ? ElevatedButton(onPressed: onNext, child: const Text("Next"))
-                  : ElevatedButton(
-                      onPressed: onEndInterview,
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-                      child: const Text("End Interview"),
-                    ),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+          child: Row(
+            children: [
+              Expanded(child: OutlinedButton(onPressed: canGoPrevious ? onPrevious : null, child: const Text("Previous"))),
+              Gap.xs,
+              Expanded(child: OutlinedButton(onPressed: onSkip, child: const Text("Skip"))),
+              Gap.xs,
+              Expanded(
+                child: canGoNext
+                    ? ElevatedButton(onPressed: onNext, child: const Text("Next"))
+                    : ElevatedButton(
+                        onPressed: onEndInterview,
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                        child: const FittedBox(child: Text("End Interview")),
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,9 +1,10 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
-import "package:intl/intl.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "interview_providers.dart";
 
 /// Company + role preparation for an application-linked interview (spec §9/§26/§27): company
@@ -22,130 +23,184 @@ class CompanyPrepScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Company Preparation")),
       body: prepAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.userMessage)),
+        loading: () => const SkeletonList(itemCount: 3),
+        error: (e, _) => ErrorState(
+          title: "We couldn't load company preparation",
+          message: e.userMessage,
+          onRetry: () => ref.invalidate(companyPrepProvider(applicationId)),
+        ),
         data: (prep) => ListView(
-          padding: const EdgeInsets.all(20),
+          padding: AppSpacing.page,
           children: [
-            Text(prep.companyName ?? "Company", style: Theme.of(context).textTheme.headlineSmall),
-            if (prep.industry != null) Text(prep.industry!, style: const TextStyle(color: AppColors.muted)),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: AppColors.warning.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-              child: Text(prep.disclaimer, style: const TextStyle(fontSize: 12)),
-            ),
-            const SizedBox(height: 20),
-            if (prep.about != null) ...[
-              Text("About the Company", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(prep.about!),
-              const SizedBox(height: 20),
-            ],
-            if (prep.recentDevelopments.isNotEmpty) ...[
-              Text("Recent Developments", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              for (final post in prep.recentDevelopments)
-                Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(post.headline),
-                    subtitle: post.summary != null ? Text(post.summary!, maxLines: 2, overflow: TextOverflow.ellipsis) : null,
-                    trailing: post.publishedAt != null ? Text(DateFormat.MMMd().format(post.publishedAt!), style: const TextStyle(fontSize: 11)) : null,
+            Row(
+              children: [
+                NetworkImageWithFallback(url: null, fallbackText: prep.companyName ?? "Company", size: 52),
+                Gap.md,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(prep.companyName ?? "Company", style: context.text.headlineSmall),
+                      if (prep.industry != null) Text(prep.industry!, style: context.text.bodyMedium),
+                    ],
                   ),
                 ),
-              const SizedBox(height: 12),
-            ],
-            if (prep.roleRelevance != null) ...[
-              Text("Role Relevance", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(prep.roleRelevance!),
-              const SizedBox(height: 20),
-            ],
-            if (prep.likelyTopics.isNotEmpty) ...[
-              Text("Likely Topics to Prepare", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [for (final topic in prep.likelyTopics) Chip(label: Text(topic))]),
-              const SizedBox(height: 20),
-            ],
-            if (prep.openJobs.isNotEmpty) ...[
-              Text("Other Open Roles", style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              for (final job in prep.openJobs) ListTile(title: Text(job.title), subtitle: job.location != null ? Text(job.location!) : null, dense: true),
-              const SizedBox(height: 12),
-            ],
-            const Divider(height: 32),
-            Text("Before Your Interview", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            progressAsync.when(
-              loading: () => const LinearProgressIndicator(),
-              error: (e, _) => Text(e.userMessage, style: const TextStyle(color: AppColors.danger)),
-              data: (progress) => Column(
-                children: [
-                  for (final item in progress.checklist)
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(item.label),
-                      value: item.isDone,
-                      onChanged: (checked) async {
-                        await ref.read(interviewRepositoryProvider).updateChecklistItem(
-                              key: item.key, isDone: checked ?? false, applicationId: applicationId,
-                            );
-                        ref.invalidate(preparationProgressProvider);
-                        ref.invalidate(interviewReadinessProvider);
-                      },
+              ],
+            ),
+            Gap.md,
+            InsightCard(icon: Icons.info_outline_rounded, tone: AppTone.warning, title: "About this guide", message: prep.disclaimer),
+            Gap.xl,
+            if (prep.about != null) DetailSection(title: "About the Company", child: Text(prep.about!, style: context.text.bodyLarge)),
+            if (prep.recentDevelopments.isNotEmpty)
+              DetailSection(
+                title: "Recent Developments",
+                child: CareerListGroup(
+                  children: [
+                    for (final post in prep.recentDevelopments)
+                      CareerListRow(
+                        icon: AppIcons.intelligence,
+                        tone: AppTone.info,
+                        title: post.headline,
+                        subtitle: [
+                          if (post.summary != null) post.summary!,
+                          if (post.publishedAt != null) DateLabels.published(post.publishedAt!),
+                        ].join(" · "),
+                      ),
+                  ],
+                ),
+              ),
+            if (prep.roleRelevance != null) DetailSection(title: "Role Relevance", child: Text(prep.roleRelevance!, style: context.text.bodyLarge)),
+            if (prep.likelyTopics.isNotEmpty)
+              DetailSection(
+                title: "Likely Topics to Prepare",
+                child: Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [for (final topic in prep.likelyTopics) TagChip(label: topic, tone: AppTone.primary)],
+                ),
+              ),
+            if (prep.openJobs.isNotEmpty)
+              DetailSection(
+                title: "Other Open Roles",
+                child: CareerListGroup(
+                  children: [
+                    for (final job in prep.openJobs) CareerListRow(icon: AppIcons.job, title: job.title, subtitle: job.location),
+                  ],
+                ),
+              ),
+            DetailSection(
+              title: "Before Your Interview",
+              icon: Icons.checklist_rounded,
+              child: progressAsync.when(
+                loading: () => const LoadingSkeleton(height: 120, radius: AppRadius.card),
+                error: (e, _) => Text(e.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+                data: (progress) {
+                  final done = progress.checklist.where((i) => i.isDone).length;
+                  return CareerCard(
+                    variant: CareerCardVariant.outlined,
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.xs),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (progress.checklist.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(right: AppSpacing.sm),
+                            child: CareerProgressBar(
+                              value: done / progress.checklist.length,
+                              tone: AppTone.success,
+                              semanticLabel: "Research checklist",
+                              semanticValue: "$done of ${progress.checklist.length} done",
+                            ),
+                          ),
+                          Gap.xs,
+                        ],
+                        for (final item in progress.checklist)
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            title: Text(
+                              item.label,
+                              style: context.text.bodyLarge?.copyWith(
+                                decoration: item.isDone ? TextDecoration.lineThrough : null,
+                                color: item.isDone ? context.colors.textSecondary : null,
+                              ),
+                            ),
+                            value: item.isDone,
+                            onChanged: (checked) async {
+                              await ref.read(interviewRepositoryProvider).updateChecklistItem(
+                                    key: item.key,
+                                    isDone: checked ?? false,
+                                    applicationId: applicationId,
+                                  );
+                              ref.invalidate(preparationProgressProvider);
+                              ref.invalidate(interviewReadinessProvider);
+                            },
+                          ),
+                      ],
                     ),
-                ],
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 20),
-            Text("Questions to Ask the Interviewer", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            progressAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (progress) => Column(
-                children: [
-                  for (final q in progress.questionsToAsk)
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        title: Text(q.text),
-                        subtitle: Text(q.category, style: const TextStyle(fontSize: 11)),
-                        trailing: Wrap(
-                          spacing: 4,
-                          children: [
-                            _StatusChip(
-                              label: "Saved",
-                              selected: q.status == "saved",
-                              onTap: () async {
-                                await ref.read(interviewRepositoryProvider).updateQuestionToAsk(
-                                      id: q.id, status: q.status == "saved" ? null : "saved", applicationId: applicationId,
-                                    );
-                                ref.invalidate(preparationProgressProvider);
-                              },
-                            ),
-                            _StatusChip(
-                              label: "Planned",
-                              selected: q.status == "planned",
-                              onTap: () async {
-                                await ref.read(interviewRepositoryProvider).updateQuestionToAsk(
-                                      id: q.id, status: q.status == "planned" ? null : "planned", applicationId: applicationId,
-                                    );
-                                ref.invalidate(preparationProgressProvider);
-                              },
-                            ),
-                          ],
+            DetailSection(
+              title: "Questions to Ask the Interviewer",
+              icon: Icons.question_answer_outlined,
+              child: progressAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (_, __) => const SizedBox.shrink(),
+                data: (progress) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final q in progress.questionsToAsk)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                        child: CareerCard(
+                          variant: CareerCardVariant.outlined,
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(q.text, style: context.text.bodyLarge),
+                              Gap.xs,
+                              Row(
+                                children: [
+                                  TagChip(label: q.category),
+                                  const Spacer(),
+                                  _StatusToggle(
+                                    label: "Saved",
+                                    selected: q.status == "saved",
+                                    onTap: () async {
+                                      await ref.read(interviewRepositoryProvider).updateQuestionToAsk(
+                                            id: q.id,
+                                            status: q.status == "saved" ? null : "saved",
+                                            applicationId: applicationId,
+                                          );
+                                      ref.invalidate(preparationProgressProvider);
+                                    },
+                                  ),
+                                  Gap.xxs,
+                                  _StatusToggle(
+                                    label: "Planned",
+                                    selected: q.status == "planned",
+                                    onTap: () async {
+                                      await ref.read(interviewRepositoryProvider).updateQuestionToAsk(
+                                            id: q.id,
+                                            status: q.status == "planned" ? null : "planned",
+                                            applicationId: applicationId,
+                                          );
+                                      ref.invalidate(preparationProgressProvider);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text("Add your own question"),
-                    onPressed: () => _addCustomQuestion(context, ref),
-                  ),
-                ],
+                    Gap.xs,
+                    AppOutlineButton(label: "Add your own question", icon: AppIcons.add, onPressed: () => _addCustomQuestion(context, ref)),
+                  ],
+                ),
               ),
             ),
           ],
@@ -167,16 +222,21 @@ class CompanyPrepScreen extends ConsumerWidget {
         ],
       ),
     );
+    controller.dispose();
     if (text == null || text.isEmpty) return;
     await ref.read(interviewRepositoryProvider).updateQuestionToAsk(
-          text: text, category: "Role", status: "planned", isCustom: true, applicationId: applicationId,
+          text: text,
+          category: "Role",
+          status: "planned",
+          isCustom: true,
+          applicationId: applicationId,
         );
     ref.invalidate(preparationProgressProvider);
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.label, required this.selected, required this.onTap});
+class _StatusToggle extends StatelessWidget {
+  const _StatusToggle({required this.label, required this.selected, required this.onTap});
 
   final String label;
   final bool selected;
@@ -184,11 +244,6 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
-      backgroundColor: selected ? AppColors.blue.withValues(alpha: 0.15) : null,
-      labelStyle: TextStyle(color: selected ? AppColors.blue : null),
-      onPressed: onTap,
-    );
+    return AppFilterChip(label: label, selected: selected, onSelected: (_) => onTap());
   }
 }

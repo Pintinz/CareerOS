@@ -2,8 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/interview_models.dart";
 import "interview_providers.dart";
 
@@ -102,17 +103,14 @@ class _StarStoryEditorScreenState extends ConsumerState<StarStoryEditorScreen> {
 
   Future<void> _delete() async {
     if (widget.storyId == null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showCareerDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete this story?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text("Delete", style: TextStyle(color: AppColors.danger))),
-        ],
-      ),
+      title: "Delete this story?",
+      message: "This STAR story will be removed permanently.",
+      confirmLabel: "Delete",
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     await ref.read(interviewRepositoryProvider).deleteStarStory(widget.storyId!);
     ref.invalidate(starStoriesProvider);
     if (mounted) context.pop();
@@ -129,35 +127,80 @@ class _StarStoryEditorScreenState extends ConsumerState<StarStoryEditorScreen> {
       appBar: AppBar(
         title: Text(widget.storyId == null ? "New STAR Story" : "Edit STAR Story"),
         actions: [
-          if (widget.storyId != null) IconButton(icon: const Icon(Icons.delete_outline), onPressed: _delete),
+          if (widget.storyId != null) IconButton(tooltip: "Delete story", icon: const Icon(AppIcons.delete), onPressed: _delete),
         ],
       ),
+      bottomNavigationBar: BottomActionBar(primary: PrimaryButton(label: "Save", isLoading: _saving, onPressed: _save)),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: AppSpacing.page,
         children: [
-          TextField(controller: _titleController, decoration: const InputDecoration(labelText: "Title", border: OutlineInputBorder())),
-          const SizedBox(height: 16),
+          TextField(
+            controller: _titleController,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(labelText: "Title", hintText: "e.g. Restoring a failed pump overnight"),
+          ),
+          Gap.md,
           DropdownButtonFormField<StarCategory>(
             initialValue: _category,
-            decoration: const InputDecoration(labelText: "Category", border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: "Category"),
             items: [for (final c in StarCategory.values) DropdownMenuItem(value: c, child: Text(c.label))],
             onChanged: (v) => setState(() => _category = v ?? _category),
           ),
-          const SizedBox(height: 20),
-          if (_completeness != null) _CompletenessCard(completeness: _completeness!),
-          const SizedBox(height: 16),
-          _StarField(label: "Situation", controller: _situationController),
-          _StarField(label: "Task", controller: _taskController),
-          _StarField(label: "Action", controller: _actionController),
-          _StarField(label: "Result", controller: _resultController),
-          const SizedBox(height: 8),
-          TextField(controller: _metricsController, decoration: const InputDecoration(labelText: "Metrics (optional)", border: OutlineInputBorder())),
-          const SizedBox(height: 16),
-          TextField(controller: _lessonsController, maxLines: 2, decoration: const InputDecoration(labelText: "Lessons learned (optional)", border: OutlineInputBorder())),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _saving ? null : _save,
-            child: _saving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text("Save"),
+          if (_completeness != null) ...[
+            Gap.lg,
+            _CompletenessCard(completeness: _completeness!),
+          ],
+          Gap.xl,
+          _StarField(
+            letter: "S",
+            label: "Situation",
+            prompt: "Where were you, and what was happening?",
+            controller: _situationController,
+            status: _completeness?.sections["situation"],
+          ),
+          _StarField(
+            letter: "T",
+            label: "Task",
+            prompt: "What were you responsible for?",
+            controller: _taskController,
+            status: _completeness?.sections["task"],
+          ),
+          _StarField(
+            letter: "A",
+            label: "Action",
+            prompt: "What did you do? Use \"I\" statements.",
+            controller: _actionController,
+            status: _completeness?.sections["action"],
+          ),
+          _StarField(
+            letter: "R",
+            label: "Result",
+            prompt: "What changed because of your actions?",
+            controller: _resultController,
+            status: _completeness?.sections["result"],
+          ),
+          CareerCard(
+            variant: CareerCardVariant.outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Strengthen your story", style: context.text.titleSmall),
+                const SizedBox(height: 2),
+                Text("Optional details interviewers remember.", style: context.text.bodySmall),
+                Gap.sm,
+                TextField(
+                  controller: _metricsController,
+                  decoration: const InputDecoration(labelText: "Metrics (optional)", prefixIcon: Icon(Icons.trending_up_rounded)),
+                ),
+                Gap.sm,
+                TextField(
+                  controller: _lessonsController,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(labelText: "Lessons learned (optional)", prefixIcon: Icon(Icons.school_outlined)),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -165,20 +208,63 @@ class _StarStoryEditorScreenState extends ConsumerState<StarStoryEditorScreen> {
   }
 }
 
-class _StarField extends StatelessWidget {
-  const _StarField({required this.label, required this.controller});
+String _statusLabel(String status) => switch (status) {
+      "missing" => "Missing",
+      "brief" => "Brief",
+      "complete" => "Complete",
+      "strong" => "Strong",
+      _ => status,
+    };
 
+AppTone _statusTone(String status) => switch (status) {
+      "missing" => AppTone.danger,
+      "brief" => AppTone.warning,
+      "strong" => AppTone.success,
+      _ => AppTone.primary,
+    };
+
+class _StarField extends StatelessWidget {
+  const _StarField({required this.letter, required this.label, required this.prompt, required this.controller, this.status});
+
+  final String letter;
   final String label;
+  final String prompt;
   final TextEditingController controller;
+  final String? status;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextField(
-        controller: controller,
-        maxLines: 3,
-        decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ExcludeSemantics(
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(color: colors.primary, borderRadius: AppRadius.smAll),
+                  alignment: Alignment.center,
+                  child: Text(letter, style: context.text.labelLarge?.copyWith(color: Colors.white)),
+                ),
+              ),
+              Gap.xs,
+              Expanded(child: Text(prompt, style: context.text.bodySmall)),
+              if (status != null) StatusChip(label: _statusLabel(status!), tone: _statusTone(status!), dense: true),
+            ],
+          ),
+          Gap.xs,
+          TextField(
+            controller: controller,
+            minLines: 3,
+            maxLines: 8,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(labelText: label, alignLabelWithHint: true),
+          ),
+        ],
       ),
     );
   }
@@ -189,53 +275,79 @@ class _CompletenessCard extends StatelessWidget {
 
   final StarCompleteness completeness;
 
-  static const _sectionLabels = ["situation", "task", "action", "result"];
+  static const _sectionKeys = ["situation", "task", "action", "result"];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
+    final strongOrComplete = _sectionKeys.where((k) => const {"complete", "strong"}.contains(completeness.sections[k])).length;
+    return CareerCard(
+      variant: CareerCardVariant.outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("STAR Completeness", style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          for (final section in _sectionLabels)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  SizedBox(width: 90, child: Text(section[0].toUpperCase() + section.substring(1))),
-                  Text(_statusLabel(completeness.sections[section] ?? "missing"), style: TextStyle(color: _statusColor(completeness.sections[section] ?? "missing"), fontWeight: FontWeight.w600)),
-                ],
+          Row(
+            children: [
+              Expanded(child: Text("STAR Completeness", style: context.text.titleSmall)),
+              StatusChip(
+                label: completeness.isComplete ? "Ready to use" : "$strongOrComplete of 4 sections complete",
+                tone: completeness.isComplete ? AppTone.success : AppTone.warning,
+                dense: true,
               ),
-            ),
+            ],
+          ),
+          Gap.sm,
+          Row(
+            children: [
+              for (final (i, key) in _sectionKeys.indexed) ...[
+                if (i > 0) Gap.xxs,
+                Expanded(
+                  child: Semantics(
+                    label: "${key[0].toUpperCase()}${key.substring(1)}: ${_statusLabel(completeness.sections[key] ?? "missing")}",
+                    excludeSemantics: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: _statusTone(completeness.sections[key] ?? "missing").color(context),
+                            borderRadius: AppRadius.pillAll,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "${key[0].toUpperCase()} · ${_statusLabel(completeness.sections[key] ?? "missing")}",
+                          style: context.text.labelSmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
           if (completeness.gaps.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            Gap.sm,
             for (final gap in completeness.gaps)
-              Text("• ${_gapLabel(gap)}", style: const TextStyle(fontSize: 12, color: AppColors.warning)),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.arrow_right_rounded, size: 18, color: AppColors.warning),
+                    Expanded(child: Text(_gapLabel(gap), style: context.text.bodySmall)),
+                  ],
+                ),
+              ),
           ],
+          Gap.xs,
+          Text("Checked by simple structure rules — not AI scoring.", style: context.text.labelSmall),
         ],
       ),
     );
   }
-
-  String _statusLabel(String status) => switch (status) {
-        "missing" => "Missing",
-        "brief" => "Brief",
-        "complete" => "Complete",
-        "strong" => "Strong",
-        _ => status,
-      };
-
-  Color _statusColor(String status) => switch (status) {
-        "missing" => AppColors.danger,
-        "brief" => AppColors.warning,
-        "strong" => AppColors.success,
-        _ => AppColors.blue,
-      };
 
   String _gapLabel(String gap) => switch (gap) {
         "no_situation" => "Situation is missing",

@@ -2,8 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/interview_models.dart";
 import "interview_providers.dart";
 
@@ -27,6 +28,7 @@ class InterviewConfigureArgs {
 }
 
 const _kQuestionCounts = [5, 10, 15, 20];
+const _kDifficultyLabels = {"EASY": "Easy", "MEDIUM": "Medium", "HARD": "Hard", "MIXED": "Mixed"};
 
 enum _MixMode { automatic, custom }
 
@@ -76,9 +78,7 @@ class _InterviewConfigurationScreenState extends ConsumerState<InterviewConfigur
     final session = await controller.create(
       mode: _mode,
       categories: _isMock ? const [] : _selectedCategories.toList(),
-      categoryCounts: _isCustomMix
-          ? (Map.of(_customCounts)..removeWhere((_, count) => count <= 0))
-          : null,
+      categoryCounts: _isCustomMix ? (Map.of(_customCounts)..removeWhere((_, count) => count <= 0)) : null,
       autoMix: _isMock && _mixMode == _MixMode.automatic,
       difficulty: _difficulty,
       questionCount: _questionCount,
@@ -94,184 +94,225 @@ class _InterviewConfigurationScreenState extends ConsumerState<InterviewConfigur
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final categoriesAsync = ref.watch(interviewCategoriesProvider);
     final creationState = ref.watch(interviewSessionCreationControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Configure Interview Practice")),
+      appBar: AppBar(title: const Text("Set Up Interview Practice")),
+      bottomNavigationBar: BottomActionBar(
+        leading: Text(
+          ["$_questionCount questions", _kDifficultyLabels[_difficulty]!, if (_useTimer) "${_timePerQuestionSeconds}s each"].join(" · "),
+          style: context.text.labelMedium,
+          maxLines: 2,
+        ),
+        primary: PrimaryButton(
+          label: "Start Practice",
+          isLoading: creationState.isLoading,
+          onPressed: _canStart ? _start : null,
+        ),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: AppSpacing.page,
         children: [
-          Text("Mode", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final mode in InterviewSessionMode.values)
-                ChoiceChip(
-                  label: Text(mode.label),
-                  selected: _mode == mode,
-                  onSelected: (_) => setState(() {
-                    _mode = mode;
-                    if (mode == InterviewSessionMode.mock) {
-                      _useTimer = true;
-                      _mixMode = _MixMode.automatic;
-                    }
-                  }),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (_isMock) ...[
-            Text("Mock Interview Mix", style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text(
-              "Automatic Mix picks a role-appropriate category split for you. Custom Mix lets you set exactly how many questions come from each category.",
-              style: TextStyle(color: AppColors.muted, fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
+          _ConfigSection(
+            title: "Mode",
+            child: Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
               children: [
-                ChoiceChip(
-                  label: const Text("Automatic Mix"),
-                  selected: _mixMode == _MixMode.automatic,
-                  onSelected: (_) => setState(() => _mixMode = _MixMode.automatic),
-                ),
-                ChoiceChip(
-                  label: const Text("Custom Mix"),
-                  selected: _mixMode == _MixMode.custom,
-                  onSelected: (_) => setState(() => _mixMode = _MixMode.custom),
-                ),
+                for (final mode in InterviewSessionMode.values)
+                  ChoiceChip(
+                    label: Text(mode.label),
+                    selected: _mode == mode,
+                    selectedColor: colors.primary,
+                    labelStyle: context.text.labelMedium?.copyWith(color: _mode == mode ? Colors.white : colors.textPrimary),
+                    onSelected: (_) => setState(() {
+                      _mode = mode;
+                      if (mode == InterviewSessionMode.mock) {
+                        _useTimer = true;
+                        _mixMode = _MixMode.automatic;
+                      }
+                    }),
+                  ),
               ],
             ),
-            const SizedBox(height: 12),
-            categoriesAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-              error: (e, _) => Text(e.userMessage, style: const TextStyle(color: AppColors.danger)),
-              data: (categories) => _mixMode == _MixMode.automatic
-                  ? _AutomaticMixPreview(
-                      questionCount: _questionCount,
-                      applicationId: widget.args.applicationId,
-                      jobId: widget.args.jobId,
-                    )
-                  : _CustomMixBuilder(
-                      categories: categories,
-                      counts: _customCounts,
-                      targetTotal: _questionCount,
-                      onChanged: (slug, count) => setState(() {
-                        if (count <= 0) {
-                          _customCounts.remove(slug);
-                        } else {
-                          _customCounts[slug] = count;
-                        }
-                      }),
-                    ),
-            ),
-          ] else ...[
-            Text("Categories", style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text("Leave all unselected for a mixed session across every category.", style: TextStyle(color: AppColors.muted, fontSize: 13)),
-            const SizedBox(height: 8),
-            categoriesAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-              error: (e, _) => Text(e.userMessage, style: const TextStyle(color: AppColors.danger)),
-              data: (categories) => Wrap(
-                spacing: 8,
-                runSpacing: 8,
+          ),
+          if (_isMock)
+            _ConfigSection(
+              title: "Mock Interview Mix",
+              subtitle:
+                  "Automatic Mix picks a role-appropriate category split for you. Custom Mix lets you set exactly how many questions come from each category.",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final category in categories)
-                    FilterChip(
-                      label: Text(category.name),
-                      selected: _selectedCategories.contains(category.slug),
-                      onSelected: (selected) => setState(() {
-                        if (selected) {
-                          _selectedCategories.add(category.slug);
-                        } else {
-                          _selectedCategories.remove(category.slug);
-                        }
-                      }),
-                    ),
+                  Wrap(
+                    spacing: AppSpacing.xs,
+                    children: [
+                      ChoiceChip(
+                        label: const Text("Automatic Mix"),
+                        selected: _mixMode == _MixMode.automatic,
+                        onSelected: (_) => setState(() => _mixMode = _MixMode.automatic),
+                      ),
+                      ChoiceChip(
+                        label: const Text("Custom Mix"),
+                        selected: _mixMode == _MixMode.custom,
+                        onSelected: (_) => setState(() => _mixMode = _MixMode.custom),
+                      ),
+                    ],
+                  ),
+                  Gap.sm,
+                  categoriesAsync.when(
+                    loading: () => const LoadingSkeleton(height: 40),
+                    error: (e, _) => Text(e.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+                    data: (categories) => _mixMode == _MixMode.automatic
+                        ? _AutomaticMixPreview(
+                            questionCount: _questionCount,
+                            applicationId: widget.args.applicationId,
+                            jobId: widget.args.jobId,
+                          )
+                        : _CustomMixBuilder(
+                            categories: categories,
+                            counts: _customCounts,
+                            targetTotal: _questionCount,
+                            onChanged: (slug, count) => setState(() {
+                              if (count <= 0) {
+                                _customCounts.remove(slug);
+                              } else {
+                                _customCounts[slug] = count;
+                              }
+                            }),
+                          ),
+                  ),
                 ],
               ),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Text("Difficulty", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final entry in const {"EASY": "Easy", "MEDIUM": "Medium", "HARD": "Hard", "MIXED": "Mixed"}.entries)
-                ChoiceChip(
-                  label: Text(entry.value),
-                  selected: _difficulty == entry.key,
-                  onSelected: (_) => setState(() => _difficulty = entry.key),
+            )
+          else
+            _ConfigSection(
+              title: "Categories",
+              subtitle: "Leave all unselected for a mixed session across every category.",
+              child: categoriesAsync.when(
+                loading: () => const LoadingSkeleton(height: 36, radius: AppRadius.pill),
+                error: (e, _) => Text(e.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+                data: (categories) => Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final category in categories)
+                      FilterChip(
+                        label: Text(category.name),
+                        selected: _selectedCategories.contains(category.slug),
+                        showCheckmark: true,
+                        checkmarkColor: colors.primary,
+                        onSelected: (selected) => setState(() {
+                          if (selected) {
+                            _selectedCategories.add(category.slug);
+                          } else {
+                            _selectedCategories.remove(category.slug);
+                          }
+                        }),
+                      ),
+                  ],
                 ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text("Number of Questions", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final count in _kQuestionCounts)
-                ChoiceChip(
-                  label: Text("$count"),
-                  selected: _questionCount == count,
-                  onSelected: (_) => setState(() => _questionCount = count),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(child: Text("Time per question", style: Theme.of(context).textTheme.titleMedium)),
-              Switch(value: _useTimer, onChanged: (v) => setState(() => _useTimer = v)),
-            ],
-          ),
-          if (_useTimer) ...[
-            const Text("Self-paced timer for reference only — nothing is auto-submitted when it runs out.", style: TextStyle(color: AppColors.muted, fontSize: 12)),
-            Row(
-              children: [
-                Expanded(
-                  child: Slider(
-                    value: _timePerQuestionSeconds.toDouble(),
-                    min: 30,
-                    max: 300,
-                    divisions: 9,
-                    label: "${_timePerQuestionSeconds}s",
-                    onChanged: (v) => setState(() => _timePerQuestionSeconds = v.round()),
-                  ),
-                ),
-                SizedBox(width: 50, child: Text("${_timePerQuestionSeconds}s", textAlign: TextAlign.end)),
-              ],
-            ),
-          ],
-          const SizedBox(height: 28),
-          if (creationState.hasError)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(creationState.error!.userMessage, style: const TextStyle(color: AppColors.danger)),
-            ),
-          if (_isCustomMix && !_canStart)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _customMixTotal == 0
-                    ? "Set at least one category count to start."
-                    : "Category counts add up to $_customMixTotal — they need to add up to exactly $_questionCount.",
-                style: const TextStyle(color: AppColors.danger, fontSize: 13),
               ),
             ),
-          ElevatedButton(
-            onPressed: (creationState.isLoading || !_canStart) ? null : _start,
-            child: creationState.isLoading
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Start"),
+          _ConfigSection(
+            title: "Difficulty",
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [for (final e in _kDifficultyLabels.entries) ButtonSegment(value: e.key, label: Text(e.value))],
+                selected: {_difficulty},
+                onSelectionChanged: (v) => setState(() => _difficulty = v.first),
+              ),
+            ),
           ),
+          _ConfigSection(
+            title: "Number of Questions",
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<int>(
+                showSelectedIcon: false,
+                segments: [for (final count in _kQuestionCounts) ButtonSegment(value: count, label: Text("$count"))],
+                selected: {_questionCount},
+                onSelectionChanged: (v) => setState(() => _questionCount = v.first),
+              ),
+            ),
+          ),
+          _ConfigSection(
+            title: "Time per question",
+            trailing: Switch(value: _useTimer, onChanged: (v) => setState(() => _useTimer = v)),
+            child: _useTimer
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Self-paced timer for reference only — nothing is auto-submitted when it runs out.", style: context.text.bodySmall),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Slider(
+                              value: _timePerQuestionSeconds.toDouble(),
+                              min: 30,
+                              max: 300,
+                              divisions: 9,
+                              label: "${_timePerQuestionSeconds}s",
+                              onChanged: (v) => setState(() => _timePerQuestionSeconds = v.round()),
+                            ),
+                          ),
+                          SizedBox(width: 50, child: Text("${_timePerQuestionSeconds}s", textAlign: TextAlign.end, style: context.text.titleSmall)),
+                        ],
+                      ),
+                    ],
+                  )
+                : Text("Off — answer at your own pace.", style: context.text.bodySmall),
+          ),
+          if (creationState.hasError)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: Text(creationState.error!.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+            ),
+          if (_isCustomMix && !_canStart)
+            Text(
+              _customMixTotal == 0
+                  ? "Set at least one category count to start."
+                  : "Category counts add up to $_customMixTotal — they need to add up to exactly $_questionCount.",
+              style: context.text.bodyMedium?.copyWith(color: AppColors.error),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _ConfigSection extends StatelessWidget {
+  const _ConfigSection({required this.title, required this.child, this.subtitle, this.trailing});
+
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: CareerCard(
+        variant: CareerCardVariant.outlined,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text(title, style: context.text.titleMedium)),
+                if (trailing != null) trailing!,
+              ],
+            ),
+            if (subtitle != null) ...[const SizedBox(height: 2), Text(subtitle!, style: context.text.bodySmall)],
+            Gap.sm,
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -294,48 +335,31 @@ class _AutomaticMixPreview extends ConsumerWidget {
       MockMixPreviewArgs(questionCount: questionCount, applicationId: applicationId, jobId: jobId),
     ));
     return previewAsync.when(
-      loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-      error: (e, _) => Text(e.userMessage, style: const TextStyle(color: AppColors.danger)),
+      loading: () => const LoadingSkeleton(height: 40),
+      error: (e, _) => Text(e.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
       data: (preview) => Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: AppRadius.mdAll),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              preview.source == "role_default" ? "Role-specific split" : "General default split",
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.muted),
-            ),
-            const SizedBox(height: 8),
+            Text(preview.source == "role_default" ? "Role-specific split" : "General default split", style: context.text.labelMedium),
+            Gap.xs,
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
               children: [
                 for (final entry in preview.categoryCounts.entries)
-                  if (entry.value > 0) _Badge(label: "${preview.categoryNames[entry.key] ?? entry.key} ${entry.value}"),
+                  if (entry.value > 0)
+                    TagChip(label: "${preview.categoryNames[entry.key] ?? entry.key} ${entry.value}", tone: AppTone.primary),
               ],
             ),
-            const SizedBox(height: 8),
-            Text("Total: ${preview.total}", style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            Gap.xs,
+            Text("Total: ${preview.total}", style: context.text.bodySmall),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-      child: Text(label, style: const TextStyle(color: AppColors.blue, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }
@@ -344,9 +368,7 @@ class _Badge extends StatelessWidget {
 /// exactly the selected question count before Start is enabled (spec: never silently drop or
 /// round a category to zero).
 class _CustomMixBuilder extends StatelessWidget {
-  const _CustomMixBuilder({
-    required this.categories, required this.counts, required this.targetTotal, required this.onChanged,
-  });
+  const _CustomMixBuilder({required this.categories, required this.counts, required this.targetTotal, required this.onChanged});
 
   final List<InterviewCategory> categories;
   final Map<String, int> counts;
@@ -361,33 +383,27 @@ class _CustomMixBuilder extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final category in categories)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Expanded(child: Text(category.name)),
-                IconButton(
-                  icon: const Icon(Icons.remove_circle_outline),
-                  onPressed: (counts[category.slug] ?? 0) > 0
-                      ? () => onChanged(category.slug, (counts[category.slug] ?? 0) - 1)
-                      : null,
-                ),
-                SizedBox(width: 24, child: Text("${counts[category.slug] ?? 0}", textAlign: TextAlign.center)),
-                IconButton(
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: () => onChanged(category.slug, (counts[category.slug] ?? 0) + 1),
-                ),
-              ],
-            ),
+          Row(
+            children: [
+              Expanded(child: Text(category.name, style: context.text.bodyLarge)),
+              IconButton(
+                tooltip: "Fewer ${category.name} questions",
+                icon: const Icon(Icons.remove_circle_outline),
+                onPressed: (counts[category.slug] ?? 0) > 0 ? () => onChanged(category.slug, (counts[category.slug] ?? 0) - 1) : null,
+              ),
+              SizedBox(width: 28, child: Text("${counts[category.slug] ?? 0}", textAlign: TextAlign.center, style: context.text.titleSmall)),
+              IconButton(
+                tooltip: "More ${category.name} questions",
+                icon: Icon(Icons.add_circle_outline, color: context.colors.primary),
+                onPressed: () => onChanged(category.slug, (counts[category.slug] ?? 0) + 1),
+              ),
+            ],
           ),
-        const SizedBox(height: 4),
-        Text(
-          "Total: $total / $targetTotal",
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: matches ? AppColors.success : AppColors.danger,
-          ),
+        Gap.xs,
+        StatusChip(
+          label: "Total: $total / $targetTotal",
+          tone: matches ? AppTone.success : AppTone.danger,
+          icon: matches ? AppIcons.check : Icons.info_outline_rounded,
         ),
       ],
     );
