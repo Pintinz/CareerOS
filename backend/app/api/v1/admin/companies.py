@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.admin_user import AdminRole
+from app.models.admin_user import AdminRole, AdminUser
 from app.schemas.company import CompanyCreate, CompanyListResponse, CompanyOut, CompanyUpdate
 from app.security.admin_dependencies import require_admin_role
+from app.services import audit_service
 from app.services.company_service import CompanyService
 
 router = APIRouter()
@@ -37,16 +38,20 @@ async def get_company_admin(company_id: str, db: AsyncSession = Depends(get_db))
 @router.post(
     "", response_model=CompanyOut, status_code=status.HTTP_201_CREATED, dependencies=[Depends(_CAN_WRITE)]
 )
-async def create_company(payload: CompanyCreate, db: AsyncSession = Depends(get_db)) -> CompanyOut:
-    company = await CompanyService(db).create(payload)
+async def create_company(
+    payload: CompanyCreate, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(_CAN_WRITE)
+) -> CompanyOut:
+    company = await CompanyService(db).create(payload, admin_id=admin.id)
+    await audit_service.record(db, admin_id=admin.id, action="create", entity_type="company", entity_id=company.id)
     return CompanyOut.model_validate(company)
 
 
 @router.put("/{company_id}", response_model=CompanyOut, dependencies=[Depends(_CAN_WRITE)])
 async def update_company(
-    company_id: str, payload: CompanyUpdate, db: AsyncSession = Depends(get_db)
+    company_id: str, payload: CompanyUpdate, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(_CAN_WRITE)
 ) -> CompanyOut:
     company = await CompanyService(db).update(company_id, payload)
+    await audit_service.record(db, admin_id=admin.id, action="update", entity_type="company", entity_id=company_id)
     return CompanyOut.model_validate(company)
 
 
@@ -55,5 +60,8 @@ async def update_company(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_admin_role(AdminRole.SUPER_ADMIN, AdminRole.ADMIN))],
 )
-async def delete_company(company_id: str, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_company(
+    company_id: str, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(require_admin_role(AdminRole.SUPER_ADMIN, AdminRole.ADMIN))
+) -> None:
     await CompanyService(db).delete(company_id)
+    await audit_service.record(db, admin_id=admin.id, action="delete", entity_type="company", entity_id=company_id)

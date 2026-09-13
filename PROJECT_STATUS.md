@@ -17,6 +17,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `27d23bb` — Phase 7.5 commit-hash doc fix.
 - `0ece72a` — Phase 7.5 follow-up: Mock Interview Automatic/Custom Mix builder UI.
 - `2b46386` — Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
+- Phase 9 (Admin CMS, Content Operations & Operational Monitoring) — see below (tagged `phase-9-admin-cms`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -48,6 +49,9 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 - Phase 7.5 follow-up (Mock Interview Mix UI) added: 192.4MB APK, built in **39 seconds**.
 - Phase 8 (Smart Recruitment Email Tracking) added: 192.4MB APK, built in **34 seconds** — no new
   Flutter dependencies were needed (Clipboard/url_launcher/intl were already in use).
+- Phase 9 (Admin CMS — backend/admin-web only, no mobile code touched) — regression-checked anyway:
+  `flutter analyze` clean, `flutter build apk --debug` succeeded in ~85 seconds, `flutter test` still
+  57/57 passing, confirming zero regression as expected.
 
 ## Phase Status
 
@@ -63,7 +67,7 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 | 7 — Interview Preparation | IN PROGRESS | Backend (10-category question bank, snapshot-based sessions, deterministic generation/self-paced mock timer/company+job bias, STAR stories + completeness check + question matching, readiness/analytics, company-research prep) + mobile (Interview Home, configuration, session screen, results, STAR builder, analytics/readiness, company prep + checklist, application/home/profile integration) built and verified. Real audio recording landed in Phase 7.5 (see below); still missing: per-category Mock Interview count builder **UI** (backend now fully supports it, see Phase 7.5), offline caching of STAR stories/checklist/analytics (only the active session itself is offline-cached). |
 | 7.5 — Media, Assessment & Interview Hardening | IN PROGRESS | Backend: shared image-upload pipeline hardened with real Pillow decode validation + `MediaAsset` audit rows, `question_image_alt_text`/`option_image_alt_text` (immutably snapshotted like every other question field), 30 real procedurally-generated (non-AI, non-copyrighted) abstract-reasoning images seeded, `StarStory.version`/`InterviewPreparationProgress.version` for offline conflict detection (409 on stale `expected_version`), `InterviewRecording` metadata model + CRUD, centralized role-specific Mock Interview mix config (`app/interview/role_mix.py`) + preview endpoint. Mobile: real microphone recording/playback wired into the interview session screen (record/stop/play/delete, consent dialog, every failure mode mapped to a message, never a crash), `version`-aware STAR/PreparationProgress models ready for offline sync, and (follow-up) a real Automatic Mix / Custom Mix builder in the Mock Interview configuration screen. Missing (see Known limitations): abstract-image rendering/caching/zoom in the aptitude UI, offline STAR/checklist CRUD with conflict resolution, cache-management screen, Recordings Manager screen, retention settings, resume-active-activity, unified preparation history. |
 | 8 — Smart Recruitment Email Tracking | IN PROGRESS | Backend: full provider abstraction (`EmailTrackingProvider`/`GmailTrackingProvider`/`OutlookTrackingProvider`/`MockEmailTrackingProvider`), OAuth authorization/callback/state, Fernet token encryption, `email_connections`/`recruitment_email_events`/`oauth_states`/`email_forwarding_aliases` tables, a deterministic phrase-based classifier + weighted application matcher (both config-driven), webhook endpoints (Gmail Pub/Sub, Microsoft Graph notifications + lifecycle) with validate→dedupe→acknowledge→process, watch/subscription renewal, and the atomic confirm-flow that is the *only* code path allowed to call the Phase 5 stage-transition service. Mobile: Smart Application Tracking settings screen, privacy-first Gmail/Outlook consent screens, provider cards (connected/reauthorization/in-development), Recruitment Update Detected confirm/ignore/ambiguous-application-picker screen, Home "Application Updates" card, application detail "Emails" tab. **Verified only against the mock provider and mocked webhook payloads — no real Google/Microsoft OAuth credentials exist in this environment**, see the Phase 8 completion report for the full implemented/mock-verified/blocked-by-credentials breakdown. |
-| 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships/Aptitude/Interview question-bank CMS **APIs** built (admin web UI for aptitude/interview questions not built — Phase 9 UI work). Intelligence posts, source registry, discovery queue, user management NOT STARTED (or API-only). |
+| 9 — Admin | IN PROGRESS (focused subset, verified) | Real backend + admin web UI for all 15 spec areas: content CMS (jobs/scholarships/intelligence/companies), question banks (CRUD + CSV bulk import w/ dedup), media library (usage-guarded delete), source registry + discovery queue (never auto-publishes), user admin, notifications (architecture-only, no real push), audit log, system settings, a real single-scheduler background job system (email watch renewal / scheduled publish / content expiration) with retry/backoff, and an honest operations dashboard. See the Phase 9 section below for what's real vs. explicitly deferred. |
 | 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
 | 11 — Production Hardening | NOT STARTED | |
 
@@ -522,6 +526,119 @@ flag in place, but no inbound-mail provider is configured, so `forward_email_ava
 `false` end to end — exactly the "implement the architecture, don't block the phase" outcome spec
 §36 asks for when a provider isn't configured.
 
+### Phase 9 — Admin CMS, Content Operations & Operational Monitoring (focused subset, verified)
+
+This phase was explicitly scoped down from a 67-section spec — see "Not built this phase" below
+for what was deliberately deferred with an honest architecture note rather than half-built. Full
+detail lives in the new **ADMIN.md**.
+
+**Backend hardening carried over from Phase 8's known gaps** (`app/scheduler.py`,
+`app/services/retry_policy.py`):
+- One real `AsyncIOScheduler` (APScheduler) wired into FastAPI's `lifespan`, replacing "nothing
+  invokes this on a timer" — three jobs run on real intervals: email watch/subscription renewal
+  (24h), scheduled content publishing (15min), content expiration (1h). Source-discovery polling is
+  deliberately **not** registered — no ingestion adapter exists in this codebase to poll (see
+  below), and scheduling a job with nothing to do would be dead weight, not honesty.
+  `GET /admin/dashboard/operations` surfaces each job's last run/success/duration/error.
+- A reusable retry/backoff policy (`FailureCategory`: TRANSIENT/AUTHORIZATION/CONFIGURATION/
+  INVALID_REQUEST/PROVIDER_OUTAGE/UNKNOWN, exponential backoff+jitter, bounded attempts) now wraps
+  `EmailTrackingService`'s watch-renewal call — a 401/403 marks the connection
+  `REAUTHORIZATION_REQUIRED` immediately (never retried), a transient 429/5xx retries with backoff
+  before giving up, and a permanent 4xx never loops forever. This closes the Phase 8 "no retry/
+  backoff" gap.
+- All three scheduled jobs are idempotent when invoked twice (verified by test): scheduled-publish/
+  expiration only transition rows whose status doesn't already match the target.
+
+**Content workflow & audit** (`app/services/content_lifecycle_service.py`,
+`app/services/audit_service.py`, `app/models/admin_ops.py`):
+- Job/Scholarship/IntelligencePost gained `scheduled_publish_at`/`reviewed_by_admin_id`/
+  `published_by_admin_id`. A create/update call now optionally records who reviewed/published an
+  item (idempotent — never overwrites an already-set value) instead of just a timestamp.
+  `publish_scheduled_content()`/`expire_content()` run on the scheduler above; Scholarships expire
+  off `application_deadline` (no separate expiry field exists), IntelligencePost is deliberately
+  excluded from expiration (news doesn't expire the way a time-bound listing does).
+- Append-only `AuditLog` (admin/action/entity/entity_id/metadata/timestamp, no update/delete
+  anywhere) wired into every create/update/publish/delete/suspend across jobs, scholarships,
+  intelligence, companies, both question banks, media deletion, settings changes, user suspend/
+  reactivate, discovery draft creation, and notification send.
+
+**System settings** (`app/services/system_settings_service.py`): a SUPER_ADMIN-only key/JSON-value
+store seeded with the compiled-in ATS-weight/interview-readiness/email-classifier-confidence
+defaults. Honestly, only the email-classifier confidence thresholds are actually *consumed* at
+runtime by `EmailTrackingService.process_message` — the ATS/readiness weight settings are stored,
+editable, and visible in the admin UI but not yet wired into their scoring engines. Documented as a
+deliberate partial-wiring decision, not an oversight.
+
+**Source registry + discovery queue** (`app/models/admin_ops.py`, `app/services/
+admin_ops_service.py`'s `DiscoveryService`): a real `ContentSource`/`DiscoveredItem` data model with
+deduplication (by source+external-id, else source+normalized-title, else source+URL) before
+insertion. Reviewing a discovered item always creates a Job/Scholarship/IntelligencePost as
+**DRAFT** — nothing discovered ever auto-publishes, and creating a draft from an already-reviewed
+item returns 409 rather than silently duplicating. **No live RSS/Lever/Ashby ingestion adapter
+exists** — only the data model and a manual `POST /admin/discovery/ingest` entry point, mirroring
+the Phase 8 Forward-to-CareerOS precedent of architecting rather than faking a missing integration.
+
+**Notifications** (`AdminNotificationService`): create/preview/send-now against a real audience-type
+enum, but **no FCM/APNs credentials are configured in this environment** — `send_now()` marks the
+campaign SENT and honestly records `recipient_count = 0` rather than fabricating a delivery count.
+
+**Media library usage guard** (`app/api/v1/admin/uploads.py`): `GET /admin/uploads` lists every
+uploaded asset; `DELETE` 409s if a raw-SQL text search finds the asset's URL referenced in any known
+content column (jobs/companies/scholarships/intelligence/questions/options thumbnail/logo/image
+fields) — a text-search approximation, not a real usage-reference join table (none exists yet).
+
+**CSV bulk import** (`app/services/question_import_service.py`): both aptitude and interview
+question banks gained `POST .../bulk-import` — every row validated independently (never importing a
+broken row silently), returns `imported`/`skipped`/row-level `errors`, and detects exact/normalized
+near-duplicate `question_text` against both the existing bank and earlier rows in the same file
+(skipped with a `duplicate_warnings` reason, not silently dropped or erroring).
+
+**Company intelligence structured fields** (`app/models/company.py`): `known_technologies`/
+`business_areas`/`locations` — explicitly editorial, hand-entered facts only; the admin UI copy
+states "never inferred."
+
+- 21 new backend tests (`tests/test_admin_ops.py`, `tests/test_uploads.py`): retry/backoff
+  classification and give-up behavior, scheduled-publish/expiration idempotency, publish records
+  `published_by` + creates an audit log, settings require SUPER_ADMIN + the one wired-consumer
+  setting actually changes classifier behavior, discovery dedup-by-URL + create-draft-never-auto-
+  publishes + ignore/reject, notification send never claims real delivery, user-admin list never
+  exposes the password hash + suspend/reactivate + role-gating, CSV bulk import reports imported/
+  skipped/row-errors + doesn't reimport existing questions, media-library list/delete + referenced-
+  asset deletion is blocked.
+
+**Admin web** (`admin/`) — real UI for all 15 nav areas, not placeholders:
+- Rebuilt design system: fixed navy sidebar (`AdminNav.tsx`) matching the spec's exact color
+  palette, RBAC-aware nav (Audit Logs/Settings hidden client-side by role — backend authorization
+  remains the actual gate, per spec §2).
+- Real dashboard (`app/page.tsx`) — 8 live overview cards, 5 email-tracking operational cards, a
+  content-status breakdown grid; no fake numbers, zeros render honestly when nothing exists yet.
+- Real Operations dashboard (`app/operations/page.tsx`) — provider health never says "Verified"
+  unless a real provider has actually been exercised (in this environment that's never true, so it
+  always reads Mock/Disabled), background-job run history, content-ingestion counts.
+- Full CRUD pages for Intelligence (new — list/create/edit, company/category selectors, the
+  editorial "why it matters" hedged-language guidance from spec §12), Aptitude/Interview question
+  banks (create/edit forms, category filter chips, CSV bulk-import file input with an
+  imported/skipped/errors summary), Sources, Discovery (tabbed queue + review-and-create-draft
+  modal), Notifications (create + live preview + send), Media (grid with copy-URL/delete), Users
+  (search + suspend/reactivate), Audit Logs (table), Settings (SUPER_ADMIN-only editor).
+- Company detail page (`app/companies/[id]/page.tsx`) — Overview/Jobs/Intelligence tabs, the new
+  structured-intelligence fields, quick-create links scoped to that company.
+- Live-smoke-tested end to end against the running backend after `next build` succeeded cleanly:
+  logged in as a seeded admin, exercised the Dashboard/Operations/Intelligence/Discovery/Sources/
+  Notifications/Settings/Audit/Users/Companies pages, and completed a full create→audit-log→delete
+  round trip for a company and an intelligence post. This caught and fixed one real bug (see Known
+  Bugs) that a clean TypeScript build could not have caught.
+
+**Not built this phase** (documented, not silently skipped): live RSS/Lever/Ashby polling adapters
+and a "Run Sync" action (architecture-only, matching the Phase 8 precedent); real FCM/APNs push
+delivery; apply-click tracking and per-content view/save/apply-click analytics (spec §46-47); global
+cross-entity admin search (spec §48); bulk actions on content lists (spec §50); job/scholarship
+mobile-approximating preview before publish (spec §6); a rich-text/sanitized editor (plain
+`<textarea>` used throughout); edit-concurrency/version-conflict detection on admin forms (spec
+§52); an accessibility audit pass beyond incidental semantic HTML; admin UI automated tests (backend
+tests only this phase — the admin UI was instead verified live in a browser, see above); a full
+media usage-reference join table (the raw-SQL approximation above stands in for it).
+
 ## Partially Complete
 
 - **Mobile app**: Phase 0-8 core loops written and verified. Not yet built: internships/graduate-
@@ -569,7 +686,15 @@ flag in place, but no inbound-mail provider is configured, so `forward_email_ava
 
 ## Known Bugs
 
-None currently open. Full history of bugs found-and-fixed this session lives in the commit messages
+None currently open. Phase 9 caught and fixed one real bug via live browser smoke-testing (not
+caught by `tsc`/`next build`, which only verify internal TypeScript consistency, not that the
+frontend's assumed request shapes match the backend's actual validation): the Discovery review
+modal's and the Intelligence form's company-selector dropdowns both requested
+`/admin/companies?page=1&page_size=200`, but `page_size` is capped at 100 server-side, so both calls
+404'd — sorry, 422'd — with a Pydantic validation error and silently left the dropdown empty. Fixed
+by lowering both to `page_size=100`, verified live (the dropdown now populates, and a full company +
+intelligence-post create flow was exercised end to end afterward). Full history of bugs found-and-
+fixed earlier in this session lives in the commit messages
 for `9593281` and `1c0608f` (a nullable comparison bug, an admin form page-size mismatch, job expiry
 not enforced everywhere, two Gradle-plugin incompatibilities, an `AppColors` typo, a `file_picker` v12
 API change, and a save/unsave toggle that silently no-op'd outside the main list's state). Phase 6
@@ -609,11 +734,16 @@ unrelated sender scores 0 and correctly stays unmatched) and documented why in
 
 ## Tests
 
-- Backend: `pytest -q` → **139 passed** across 12 test files (health, auth, admin/companies, jobs,
+- Backend: `pytest -q` → **160 passed** across 13 test files (health, auth, admin/companies, jobs,
   scholarships, uploads, ATS, intelligence, applications, aptitude, interview, media & hardening,
-  **email tracking — 39 tests, new this phase**, in `test_email_tracking.py`).
-- Admin: no automated tests — verified by hand via live browser interaction.
-- Mobile: `flutter test` → **57 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
+  email tracking, **admin ops — 19 tests, new this phase**, in `test_admin_ops.py`, plus 2 new
+  media-library tests added to `test_uploads.py`).
+- Admin: no automated tests — verified by hand via live browser interaction against the running
+  backend (Phase 9: logged in as a seeded admin and exercised Dashboard/Operations/Intelligence/
+  Discovery/Sources/Notifications/Settings/Audit/Users/Companies, including a full company +
+  intelligence-post create→audit-log→delete round trip). This caught one real bug — see Known Bugs.
+- Mobile: `flutter analyze` clean, `flutter build apk --debug` succeeds, `flutter test` →
+  **57 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
   tests + 16 Phase 7 widget tests + 6 Phase 7.5 tests covering the recording state machine via a
   fully fake `RecordingService` — start/permission-denied/stop/stop-failure/delete/cancel; see the
   Phase 7.5 section above for why real `audioplayers` playback isn't similarly unit-tested — +
@@ -755,28 +885,34 @@ the question, deterministic content, never AI-generated or claimed to be employe
 
 ## Next Tasks
 
-1. Commit the Phase 8 (Smart Recruitment Email Tracking) backend + mobile work — currently
-   uncommitted.
-2. Obtain real Google Cloud (OAuth client + Pub/Sub topic) and Microsoft Entra app-registration
+Per the user's explicit instruction, Phase 9 is the last phase for now — **do not start Phase 10
+(Monetization) or Phase 11 (Production Hardening) until the whole product is reviewed.** Remaining
+work, roughly in priority order:
+
+1. Obtain real Google Cloud (OAuth client + Pub/Sub topic) and Microsoft Entra app-registration
    credentials and run the Phase 8 acceptance flows against an actual Gmail/Outlook account — the
-   single highest-value remaining Phase 8 task, since everything today is mock-verified only. See
+   single highest-value remaining gap, since email tracking today is mock-verified only. See
    DEPLOYMENT.md for the exact setup steps.
-3. A daily-scheduler wiring for `EmailTrackingService.renew_expiring_watches()` once a job scheduler
-   (APScheduler/Celery) exists anywhere in this codebase — currently a tested but uninvoked method.
-4. Retry/backoff policy (spec §60) for transient provider errors during watch/subscription renewal,
-   and admin-facing email-tracking operational metrics (spec §64) — both explicitly deferred this
-   pass, not attempted.
-5. Remaining mobile UI for backend capabilities that still don't have a mobile surface:
+2. Real RSS/Lever/Ashby ingestion adapters + a "Run Sync" admin action — Phase 9's `ContentSource`/
+   `DiscoveredItem` data model and manual ingest endpoint are ready for it, but no live polling exists.
+3. Apply-click tracking (spec §47) and per-content view/save/apply-click analytics (spec §46) —
+   no `ApplyClickEvent` model or endpoint exists yet.
+4. Global cross-entity admin search (spec §48) and bulk content actions (spec §50) — both explicitly
+   deferred this phase in favor of covering all 15 nav areas with real single-item functionality.
+5. Admin UI automated tests (Phase 9 relied on live manual browser verification only) and
+   edit-concurrency/version-conflict detection on admin forms (spec §52).
+6. Remaining mobile UI for backend capabilities that still don't have a mobile surface:
    abstract-reasoning image rendering with caching + zoom in the aptitude screens, a Recordings
    Manager + retention settings screen, a cache-management ("Storage & Offline Data") screen.
-6. Offline STAR story + checklist editing with conflict resolution, now that the backend
+7. Offline STAR story + checklist editing with conflict resolution, now that the backend
    (`version`/`expected_version`, 409-on-stale-write) and mobile models are ready for it — the
    mutation queue and conflict UI are the remaining piece.
-7. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
+8. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
    how many real bugs this session's manual review process has caught in exactly this kind of code.
-8. Phase 9 (Admin CMS / Content Operations), per the user's explicit instruction to stop after
-   Phase 8 and begin Phase 9 from a clean checkpoint.
 9. A real interactive QA pass on an emulator/device once one is available in this environment, to
    validate the Phase 6-8 acceptance flows beyond what automated tests can confirm — recording/
    playback against a real microphone/speaker, and Phase 8 against real Gmail/Outlook accounts,
    especially.
+10. Wire the ATS-scoring and interview-readiness weight settings (Phase 9's `SystemSetting` store
+    already holds them, editable in the admin UI) into their actual scoring engines — only the
+    email-classifier confidence thresholds are consumed at runtime today.

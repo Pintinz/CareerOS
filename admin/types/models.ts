@@ -10,6 +10,9 @@ export interface Company {
   headquarters: string | null;
   country: string | null;
   description: string | null;
+  known_technologies: string[] | null;
+  business_areas: string[] | null;
+  locations: string[] | null;
   is_verified: boolean;
   is_active: boolean;
 }
@@ -73,6 +76,45 @@ export interface JobAdmin {
   is_verified: boolean;
   is_featured: boolean;
   is_urgent: boolean;
+  is_active: boolean;
+  is_demo: boolean;
+  status: ContentStatus;
+  created_by_admin_id: string | null;
+}
+
+export interface JobCompanySummary {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+}
+
+export type IntelligenceCategory =
+  | "LEADERSHIP" | "TECHNOLOGY" | "AUTOMATION" | "INVESTMENTS" | "HIRING" | "PROJECTS"
+  | "ACQUISITION" | "PLANT_EXPANSION" | "MANUFACTURING" | "ENERGY" | "FINANCE" | "AI"
+  | "GRADUATE_RECRUITMENT" | "OPERATIONS" | "OTHER";
+
+export interface IntelligencePostAdmin {
+  id: string;
+  slug: string;
+  headline: string;
+  category: IntelligenceCategory;
+  company: JobCompanySummary | null;
+  company_id: string | null;
+  thumbnail_url: string | null;
+  post_image_url: string | null;
+  image_alt_text: string | null;
+  summary: string | null;
+  full_content: string | null;
+  why_it_matters: string | null;
+  relevant_roles: string[] | null;
+  relevant_skills: string[] | null;
+  source_type: SourceType;
+  source_url: string | null;
+  source_published_at: string | null;
+  published_at: string | null;
+  is_verified: boolean;
+  is_featured: boolean;
   is_active: boolean;
   is_demo: boolean;
   status: ContentStatus;

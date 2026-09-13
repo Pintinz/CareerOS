@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -14,7 +14,9 @@ from app.schemas.aptitude import (
     QuestionUpdate,
 )
 from app.security.admin_dependencies import get_current_admin, require_admin_role
+from app.services import audit_service
 from app.services.aptitude_service import AptitudeService
+from app.services.question_import_service import import_aptitude_questions
 
 router = APIRouter()
 
@@ -87,14 +89,18 @@ async def get_question_admin(question_id: str, db: AsyncSession = Depends(get_db
 async def create_question_admin(
     payload: QuestionCreate, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(get_current_admin)
 ) -> QuestionAdminOut:
-    return await AptitudeService(db).admin_create_question(payload, admin.id)
+    question = await AptitudeService(db).admin_create_question(payload, admin.id)
+    await audit_service.record(db, admin_id=admin.id, action="create", entity_type="aptitude_question", entity_id=question.id)
+    return question
 
 
 @router.put("/questions/{question_id}", response_model=QuestionAdminOut, dependencies=[Depends(_CAN_WRITE)])
 async def update_question_admin(
-    question_id: str, payload: QuestionUpdate, db: AsyncSession = Depends(get_db)
+    question_id: str, payload: QuestionUpdate, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(get_current_admin)
 ) -> QuestionAdminOut:
-    return await AptitudeService(db).admin_update_question(question_id, payload)
+    question = await AptitudeService(db).admin_update_question(question_id, payload)
+    await audit_service.record(db, admin_id=admin.id, action="update", entity_type="aptitude_question", entity_id=question_id)
+    return question
 
 
 @router.delete(
@@ -102,5 +108,25 @@ async def update_question_admin(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_admin_role(AdminRole.SUPER_ADMIN, AdminRole.ADMIN))],
 )
-async def delete_question_admin(question_id: str, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_question_admin(
+    question_id: str, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(require_admin_role(AdminRole.SUPER_ADMIN, AdminRole.ADMIN))
+) -> None:
     await AptitudeService(db).admin_delete_question(question_id)
+    await audit_service.record(db, admin_id=admin.id, action="delete", entity_type="aptitude_question", entity_id=question_id)
+
+
+@router.post("/questions/bulk-import", dependencies=[Depends(_CAN_WRITE)])
+async def bulk_import_questions_admin(
+    file: UploadFile = File(...), db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(get_current_admin)
+) -> dict:
+    """Spec §20-21 — CSV columns: question_text, question_type, category_slug, topic_slug, field,
+    industry, job_role, difficulty, explanation, marks, negative_marks,
+    option_1..4 + option_1..4_correct (true/false). Every row is validated independently; a
+    broken row is reported with its reason and never imported."""
+    csv_text = (await file.read()).decode("utf-8-sig")
+    result = await import_aptitude_questions(db, csv_text, admin_id=admin.id)
+    await audit_service.record(
+        db, admin_id=admin.id, action="bulk_import", entity_type="aptitude_question",
+        metadata={"imported": result.imported, "skipped": result.skipped, "errors": len(result.errors)},
+    )
+    return {"imported": result.imported, "skipped": result.skipped, "errors": result.errors, "duplicate_warnings": result.duplicate_warnings}

@@ -203,10 +203,38 @@ and PRIVACY.md for what is/isn't retained from a message.
 | POST | `/api/v1/webhooks/microsoft` | Microsoft Graph change-notification endpoint. Echoes `?validationToken=` verbatim during subscription creation (Graph's required handshake); otherwise enqueues a sync per notified subscription. |
 | POST | `/api/v1/webhooks/microsoft/lifecycle` | Graph lifecycle-notification endpoint. Same validation handshake; handles `reauthorizationRequired` (marks the connection), `subscriptionRemoved` (attempts safe resubscription), and `missed` (triggers a reconciliation sync). |
 
-Admin operational metrics for email tracking (spec §64: active watches/subscriptions, reauth-needed
-count, events processed/matched/ambiguous, webhook failures) are **not implemented** this phase —
-admin web work stayed out of scope, consistent with the Phase 9 boundary every other admin CMS gap
-in this file already respects. There is no admin inbox-viewer and none is planned (spec §63).
+Admin operational metrics for email tracking (connection counts, reauth-needed count, last renewal
+run) are now surfaced via `GET /admin/dashboard/operations` — see Phase 9, below. There is still no
+admin inbox-viewer and none is planned (spec §63); the per-message operational counters spec §64
+also asks for (events processed/matched/ambiguous, webhook failures) are not built.
+
+## Implemented endpoints (Phase 9 — Admin CMS, Content Operations & Operational Monitoring)
+
+All routes below require an `admin_users` bearer token; role requirements are noted per group. Full
+narrative detail lives in **ADMIN.md**. Existing admin routes (`/admin/jobs`, `/admin/scholarships`,
+`/admin/companies`, `/admin/intelligence`, `/admin/aptitude/*`, `/admin/interview/*`,
+`/admin/uploads`) were extended in place — see below — rather than duplicated.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/admin/dashboard` | Live overview counts (users/published jobs/published scholarships/companies/intelligence posts/aptitude+interview questions/applications tracked), content-status breakdown, email-tracking connection counts. No fabricated numbers — zero renders as zero. |
+| GET | `/api/v1/admin/dashboard/operations` | Provider health (`HEALTHY`/`WARNING`/`ERROR`/`DISABLED` — never `"Verified"` unless a real provider has actually been exercised, which is never true in this environment), content-ingestion counts, and the scheduler's job-run history (last run/success/duration/error per job). |
+| GET / POST | `/api/v1/admin/sources` | List/create `ContentSource` registrations. Creating a source does not itself ingest anything. |
+| GET / PUT / DELETE | `/api/v1/admin/sources/{id}` | Read/update/delete a source. |
+| GET | `/api/v1/admin/discovery` | List `DiscoveredItem`s, filterable by `item_type` (`JOB`/`SCHOLARSHIP`/`INTELLIGENCE`) and `status`. |
+| POST | `/api/v1/admin/discovery/ingest` | Manually register a discovered item against a source; deduplicates by (source+external_id), else (source+normalized title), else (source+URL) — returns the existing item, not an error, on a duplicate. No live RSS/Lever/Ashby polling calls this automatically. |
+| POST | `/api/v1/admin/discovery/{id}/ignore` \| `/reject` | Marks the item `IGNORED`/`REJECTED`. |
+| POST | `/api/v1/admin/discovery/{id}/create-draft` | Creates a **DRAFT** Job/Scholarship/IntelligencePost from the item (editable before publish) and marks the item `REVIEWED`. 409 if the item isn't `PENDING` (already reviewed). Never auto-publishes. |
+| GET | `/api/v1/admin/users` | Paginated user list with search; response never includes `hashed_password`, OAuth tokens, CV text, email bodies, or interview recordings. |
+| POST | `/api/v1/admin/users/{id}/suspend` \| `/reactivate` | ADMIN/SUPER_ADMIN only. Suspending blocks login immediately; reactivating restores it. Both write an audit log entry. |
+| GET / POST | `/api/v1/admin/notifications` | List/create an `AdminNotification` campaign. |
+| POST | `/api/v1/admin/notifications/{id}/send` | Marks the campaign `SENT` and honestly records `recipient_count: 0` — **no FCM/APNs credentials are configured**, so nothing is actually delivered; see ARCHITECTURE.md. |
+| GET / PUT | `/api/v1/admin/settings` | SUPER_ADMIN only. List/update `SystemSetting` rows against the `KNOWN_SETTINGS` registry (ATS weights, interview-readiness weights, email-classifier confidence thresholds, etc.). Secrets (API keys) are never exposed here — they stay in environment/secret management. |
+| GET | `/api/v1/admin/audit` | ADMIN/SUPER_ADMIN only. Paginated, append-only audit log. Never contains secrets. |
+| GET | `/api/v1/admin/uploads` | Lists every uploaded media asset (filename/mime/dimensions/size/uploader) — new this phase, alongside the pre-existing upload endpoint. |
+| DELETE | `/api/v1/admin/uploads/{id}` | Deletes an asset. 409 if a raw-SQL text search finds its URL still referenced by any job/company/scholarship/intelligence/question/option row (a text-search approximation, not a real reference-join table). |
+| POST | `/api/v1/admin/aptitude/questions/bulk-import` \| `/api/v1/admin/interview/questions/bulk-import` | Multipart CSV upload. Every row validated independently — never imports a broken row silently. Returns `{imported, skipped, errors: [{row, reason}], duplicate_warnings}`; duplicates (exact or normalized-near-identical `question_text`, against both the existing bank and earlier rows in the same file) are skipped, not imported, and reported separately from hard errors. |
+| POST / PUT | `/api/v1/admin/jobs`, `/scholarships`, `/intelligence`, `/companies`, `/aptitude/questions`, `/interview/questions` (existing routes) | Now record who created/reviewed/published the entity (`reviewed_by_admin_id`/`published_by_admin_id`, idempotent) and write an audit-log entry on every create/update/publish/delete. |
 
 ## Planned endpoint groups (filled in per phase, not yet built)
 
@@ -214,11 +242,9 @@ in this file already respects. There is no admin inbox-viewer and none is planne
 /profile         career preferences, skills, experiences, education, certifications (beyond §10 basics)
 /applications    document attachments (CRUD/stage/notes already implemented above)
 /documents       CV vault + document vault upload/list/rename/delete (signed URLs, private by default)
-/notifications   list, mark read, preferences
-/admin/*         news/company-follow publishing, source registry, discovery queue, user management,
-                 email-tracking operational metrics (jobs/scholarships/companies/aptitude/interview
-                 question-bank admin, and email-tracking connect/webhook endpoints, already
-                 implemented above)
+/notifications   list, mark read, preferences (consumer-facing; admin campaign creation implemented above)
+/jobs/{id}/apply-click   apply-click event recording (spec §47) — not built
+/admin/search    global cross-entity admin search (spec §48) — not built
 ```
 
 Each group gets its exact request/response schemas documented here when its phase is implemented —

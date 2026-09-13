@@ -50,3 +50,38 @@ async def test_upload_rejects_disallowed_content_type(client: AsyncClient, db_se
     files = {"file": ("script.js", io.BytesIO(b"alert(1)"), "application/javascript")}
     response = await client.post("/api/v1/admin/uploads/image", headers=headers, files=files)
     assert response.status_code == 422
+
+
+async def test_media_library_lists_uploads_and_deletes_unreferenced_asset(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    headers = await _admin_headers(client, db_session)
+    files = {"file": ("test.png", io.BytesIO(_TINY_PNG), "image/png")}
+    upload = await client.post("/api/v1/admin/uploads/image", headers=headers, files=files)
+    asset_id = upload.json()["media_asset_id"]
+
+    listing = await client.get("/api/v1/admin/uploads", headers=headers)
+    assert listing.status_code == 200
+    assert any(item["id"] == asset_id for item in listing.json())
+
+    delete = await client.delete(f"/api/v1/admin/uploads/{asset_id}", headers=headers)
+    assert delete.status_code == 204
+
+    listing_after = await client.get("/api/v1/admin/uploads", headers=headers)
+    assert all(item["id"] != asset_id for item in listing_after.json())
+
+
+async def test_media_library_prevents_deleting_a_referenced_asset(client: AsyncClient, db_session: AsyncSession) -> None:
+    from tests.test_jobs import _create_company, _job_payload
+
+    headers = await _admin_headers(client, db_session)
+    files = {"file": ("test.png", io.BytesIO(_TINY_PNG), "image/png")}
+    upload = await client.post("/api/v1/admin/uploads/image", headers=headers, files=files)
+    asset_id = upload.json()["media_asset_id"]
+    thumbnail_url = upload.json()["url"]
+
+    company_id = await _create_company(client, headers)
+    await client.post("/api/v1/admin/jobs", headers=headers, json=_job_payload(company_id, thumbnail_url=thumbnail_url))
+
+    delete = await client.delete(f"/api/v1/admin/uploads/{asset_id}", headers=headers)
+    assert delete.status_code == 409

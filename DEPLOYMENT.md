@@ -136,22 +136,36 @@ code uses each of these, and PRIVACY.md for what's actually done with the access
 6. Graph mail subscriptions cap at roughly 4230 minutes (~3 days); this codebase's
    `establish_watch`/`renew_watch` request 2 days deliberately, leaving headroom before expiry.
 
-### Watch/subscription renewal worker
+### Watch/subscription renewal worker (now scheduled — Phase 9)
 
-`EmailTrackingService.renew_expiring_watches()` is implemented and tested but **nothing currently
-invokes it on a schedule** — this codebase has no APScheduler/Celery wired up anywhere yet (see
-ARCHITECTURE.md). A production deployment must run it at least daily (e.g. a Celery beat task, a
-cron-triggered script calling into the service, or a scheduled cloud function) — conservative
-scheduling matters here since a missed Gmail watch renewal silently stops all future notifications
-for that connection until the next reconciliation sync or manual reconnect.
+`EmailTrackingService.renew_expiring_watches()` now runs automatically every 24 hours via the
+in-process APScheduler wired into `app/scheduler.py`'s FastAPI `lifespan` — no separate worker
+process is required for a single-instance deployment. **This scheduler runs inside the API process
+itself**, so a multi-instance/horizontally-scaled production deployment must ensure only one
+instance actually runs the scheduled jobs (e.g. gate `start_scheduler()` behind a leader-election
+flag, an environment variable set on exactly one instance, or move it to a dedicated worker process)
+— running it on every instance would renew/publish/expire redundantly, which is wasteful but not
+unsafe (every job is idempotent) unless the redundant calls trip a provider's rate limit.
 
-### Background job queue
+### Background job scheduler and queue
 
-`app/services/background_tasks.py`'s `InlineTaskRunner` executes webhook-triggered processing
-synchronously, in-process — fine for development and low volume, but a production deployment
-handling real webhook traffic should implement a `BackgroundTaskRunner` backed by whatever queue is
-already chosen for the rest of the platform (Celery/RQ/cloud tasks) and swap it in; no webhook route
-needs to change to make that swap.
+`app/scheduler.py` also runs scheduled content publishing (15min) and content expiration (1h) on the
+same in-process scheduler. `app/services/background_tasks.py`'s `InlineTaskRunner` still executes
+webhook-triggered processing synchronously, in-process — fine for development and low volume, but a
+production deployment handling real webhook traffic should implement a `BackgroundTaskRunner` backed
+by whatever queue is already chosen for the rest of the platform (Celery/RQ/cloud tasks) and swap it
+in; no webhook route needs to change to make that swap. Source-discovery polling is not scheduled at
+all — no ingestion adapter exists yet (see PROJECT_STATUS.md's Phase 9 section); wiring one in would
+also mean adding it to the scheduler here.
+
+### Admin seed account
+
+`ensure_seed_admin()` (in `app/main.py`'s `lifespan`) creates the first `SUPER_ADMIN` from
+`ADMIN_SEED_EMAIL`/`ADMIN_SEED_PASSWORD` on first run only — it is a no-op if either is unset or if
+any admin already exists (never overwrites/resets an existing account). Set both in production for
+exactly long enough to create the real first admin, then either unset them or rotate that account's
+password immediately — they stay effective as a "create if missing" trigger on every subsequent
+restart otherwise.
 
 ## Android build (once Flutter is installed)
 

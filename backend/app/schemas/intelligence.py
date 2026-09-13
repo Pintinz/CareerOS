@@ -49,7 +49,10 @@ class IntelligenceDetailOut(BaseModel):
 class IntelligenceAdminOut(IntelligenceDetailOut):
     is_active: bool
     status: ContentStatus
+    scheduled_publish_at: datetime | None = None
     created_by_admin_id: str | None = None
+    reviewed_by_admin_id: str | None = None
+    published_by_admin_id: str | None = None
     company_id: str | None = None
 
 
@@ -73,6 +76,7 @@ class _IntelligenceWritableFields(BaseModel):
     is_active: bool = True
     is_demo: bool = False
     status: ContentStatus = ContentStatus.DRAFT
+    scheduled_publish_at: datetime | None = None
 
 
 class IntelligenceCreate(_IntelligenceWritableFields):
@@ -98,6 +102,7 @@ class IntelligenceUpdate(BaseModel):
     is_featured: bool | None = None
     is_active: bool | None = None
     status: ContentStatus | None = None
+    scheduled_publish_at: datetime | None = None
 
 
 class IntelligenceListResponse(PaginatedResponse[IntelligenceCardOut]):

@@ -1,0 +1,124 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { useAdminGuard } from "@/components/useAdminGuard";
+import { ApiError, api } from "@/lib/apiClient";
+import { ContentStatus, IntelligencePostAdmin, PaginatedResponse } from "@/types/models";
+
+const STATUS_FILTERS: (ContentStatus | "ALL")[] = ["ALL", "DRAFT", "REVIEW", "PUBLISHED", "EXPIRED", "ARCHIVED"];
+
+export default function IntelligencePage() {
+  const { checked } = useAdminGuard();
+  const [items, setItems] = useState<IntelligencePostAdmin[]>([]);
+  const [statusFilter, setStatusFilter] = useState<ContentStatus | "ALL">("ALL");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const query = statusFilter === "ALL" ? "" : `&status=${statusFilter}`;
+      const response = await api.get<PaginatedResponse<IntelligencePostAdmin>>(
+        `/admin/intelligence?page=1&page_size=100${query}`
+      );
+      setItems(response.items);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load intelligence posts.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (checked) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checked, statusFilter]);
+
+  async function setStatus(p: IntelligencePostAdmin, status: ContentStatus) {
+    await api.put(`/admin/intelligence/${p.id}`, { status });
+    await load();
+  }
+
+  async function handleDelete(p: IntelligencePostAdmin) {
+    if (!confirm(`Delete "${p.headline}"? This cannot be undone.`)) return;
+    await api.delete(`/admin/intelligence/${p.id}`);
+    await load();
+  }
+
+  if (!checked) return null;
+
+  return (
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-navy">Company Intelligence</h1>
+        <Link href="/intelligence/new" className="rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white">
+          New post
+        </Link>
+      </div>
+
+      <div className="mt-6 flex gap-2">
+        {STATUS_FILTERS.map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${statusFilter === s ? "bg-navy text-white" : "bg-card text-muted"}`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+
+      <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-black/5 text-xs uppercase text-muted">
+            <tr>
+              <th className="px-4 py-3">Headline</th>
+              <th className="px-4 py-3">Company</th>
+              <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-muted">Loading...</td>
+              </tr>
+            )}
+            {!loading && items.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-6 text-center text-muted">No intelligence posts match this filter.</td>
+              </tr>
+            )}
+            {items.map((p) => (
+              <tr key={p.id} className="border-b border-black/5 last:border-0">
+                <td className="px-4 py-3 font-medium">
+                  <Link href={`/intelligence/${p.id}`} className="hover:text-brand">{p.headline}</Link>
+                </td>
+                <td className="px-4 py-3 text-muted">{p.company?.name ?? "—"}</td>
+                <td className="px-4 py-3 text-muted">{p.category}</td>
+                <td className="px-4 py-3">{p.status}</td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-3 text-xs">
+                    {p.status !== "PUBLISHED" && (
+                      <button onClick={() => setStatus(p, "PUBLISHED")} className="text-success">Publish</button>
+                    )}
+                    {p.status === "PUBLISHED" && (
+                      <button onClick={() => setStatus(p, "DRAFT")} className="text-muted">Unpublish</button>
+                    )}
+                    <button onClick={() => handleDelete(p)} className="text-danger">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  );
+}

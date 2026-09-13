@@ -410,11 +410,11 @@ for the real atomicity bug this caught before it shipped.
 
 ### Watch/subscription renewal (spec §58-59)
 
-`EmailTrackingService.renew_expiring_watches()` is a real, tested method a daily scheduler would
-call — it re-establishes any Gmail watch or Outlook subscription within 24 hours of expiry, and
-marks a connection `REAUTHORIZATION_REQUIRED` outright if its stored token can't even be decrypted.
-Nothing in this codebase currently invokes it on a timer (no APScheduler/Celery is wired up anywhere
-yet — see the background-task note above); a production deployment needs to schedule it, e.g. daily.
+`EmailTrackingService.renew_expiring_watches()` re-establishes any Gmail watch or Outlook
+subscription within 24 hours of expiry, and marks a connection `REAUTHORIZATION_REQUIRED` outright
+if its stored token can't even be decrypted or if renewal fails with a non-retryable auth error (see
+"Background job scheduler" under Phase 9 below — as of Phase 9 this now runs for real, every 24
+hours, wrapped in the shared retry/backoff policy).
 
 ### Forward-to-CareerOS (spec §36)
 
@@ -424,6 +424,58 @@ never a sequential/guessable id — implemented as a real table + repository. No
 environment, so `Settings.forward_email_available` stays `false` and the feature is inert end to
 end — exactly the "implement the architecture, don't block the phase" outcome the spec itself asks
 for when a provider isn't available (spec §36's explicit fallback instruction).
+
+## Admin CMS, content operations & background scheduling (`app/scheduler.py`, `app/services/
+retry_policy.py`, `app/models/admin_ops.py`, `app/services/admin_ops_service.py`, Phase 9)
+
+Full detail lives in **ADMIN.md**. Architecturally significant points:
+
+### Background job scheduler (`app/scheduler.py`)
+
+A single `AsyncIOScheduler` (APScheduler) wired into FastAPI's `lifespan`, started/stopped alongside
+the app process — deliberately **not** placed under `app/workers/` (that directory remains an empty
+placeholder from the original scaffold; the scheduler and its jobs live directly in
+`app/scheduler.py` and `app/services/content_lifecycle_service.py` instead, since no second
+process/queue exists to justify a separate `workers/` package yet). Three jobs are registered:
+email watch/subscription renewal (24h), scheduled content publishing (15min), content expiration
+(1h). Source-discovery polling is deliberately not registered — no ingestion adapter exists in
+`app/ingestion/` (also still an empty placeholder) to poll. Each job run's outcome (last run,
+success, duration, error) is tracked in an in-memory, process-local history and surfaced via
+`GET /admin/dashboard/operations` — this history is intentionally not persisted, since it describes
+"since this backend process last started," not a durable audit trail (that's what `AuditLog` is for).
+
+### Retry/backoff policy (`app/services/retry_policy.py`)
+
+A reusable `RetryPolicy` classifies any exception into `TRANSIENT`/`AUTHORIZATION`/`CONFIGURATION`/
+`INVALID_REQUEST`/`PROVIDER_OUTAGE`/`UNKNOWN` (HTTP 401/403 → `AUTHORIZATION`, 429/5xx →
+`TRANSIENT`, other 4xx → `INVALID_REQUEST`) and retries only transient/outage categories with
+exponential backoff + jitter up to a bounded attempt count, raising `PermanentFailure(category, ...)`
+otherwise. `EmailTrackingService._renew_one()` is the first (and currently only) consumer — an
+`AUTHORIZATION` failure marks the connection `REAUTHORIZATION_REQUIRED`, anything else marks it
+`ERROR`, and a connection is never retried forever on a permanent failure. Any future scheduled job
+that calls an external provider should reuse this policy rather than writing its own try/except.
+
+### Content workflow, sources, and discovery
+
+Job/Scholarship/IntelligencePost each gained `scheduled_publish_at`/`reviewed_by_admin_id`/
+`published_by_admin_id`, populated idempotently by each service's `create`/`update` via a shared
+`_apply_workflow_transitions` pattern (duplicated per-service rather than extracted into one shared
+mixin — a minor inconsistency, not a bug). `ContentSource`/`DiscoveredItem` (in
+`app/models/admin_ops.py`) model an admin-curated source registry and a discovery queue with
+deduplication before insert — but there is still no real ingestion code that populates
+`DiscoveredItem` automatically; only a manual `POST /admin/discovery/ingest` entry point exists. A
+discovered item can only ever become a **DRAFT** Job/Scholarship/IntelligencePost, never a published
+one, enforced in `DiscoveryService.create_draft()`.
+
+### Audit logging and settings
+
+`AuditLog` (`app/models/admin_ops.py`) is a plain append-only table — no ORM-level protection
+against update/delete exists, but no code path ever calls one; `audit_service.record()` is the only
+writer. `SystemSetting` is a generic key/JSON-value store; `system_settings_service.KNOWN_SETTINGS`
+is the registry of what's editable, but wiring a stored setting into the code that should actually
+use it is a separate, per-setting task — only the email-classifier confidence thresholds are wired
+as of Phase 9 (see PROJECT_STATUS.md's Phase 9 section for the full list of what's stored-but-not-
+yet-consumed).
 
 ## Environment-gated integrations
 

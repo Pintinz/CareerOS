@@ -18,12 +18,19 @@ from app.api.v1 import (
     webhooks,
 )
 from app.api.v1.admin import aptitude as admin_aptitude
+from app.api.v1.admin import audit as admin_audit
 from app.api.v1.admin import companies as admin_companies
+from app.api.v1.admin import dashboard as admin_dashboard
+from app.api.v1.admin import discovery as admin_discovery
 from app.api.v1.admin import intelligence as admin_intelligence
 from app.api.v1.admin import interview as admin_interview
 from app.api.v1.admin import jobs as admin_jobs
+from app.api.v1.admin import notifications as admin_notifications
 from app.api.v1.admin import scholarships as admin_scholarships
+from app.api.v1.admin import settings as admin_settings
+from app.api.v1.admin import sources as admin_sources
 from app.api.v1.admin import uploads as admin_uploads
+from app.api.v1.admin import users as admin_users
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -54,3 +61,10 @@ api_router.include_router(
 api_router.include_router(admin_uploads.router, prefix="/admin/uploads", tags=["admin-uploads"])
 api_router.include_router(admin_aptitude.router, prefix="/admin/aptitude", tags=["admin-aptitude"])
 api_router.include_router(admin_interview.router, prefix="/admin/interview", tags=["admin-interview"])
+api_router.include_router(admin_dashboard.router, prefix="/admin/dashboard", tags=["admin-dashboard"])
+api_router.include_router(admin_sources.router, prefix="/admin/sources", tags=["admin-sources"])
+api_router.include_router(admin_discovery.router, prefix="/admin/discovery", tags=["admin-discovery"])
+api_router.include_router(admin_notifications.router, prefix="/admin/notifications", tags=["admin-notifications"])
+api_router.include_router(admin_settings.router, prefix="/admin/settings", tags=["admin-settings"])
+api_router.include_router(admin_audit.router, prefix="/admin/audit", tags=["admin-audit"])
+api_router.include_router(admin_users.router, prefix="/admin/users", tags=["admin-users"])

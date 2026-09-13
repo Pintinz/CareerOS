@@ -19,6 +19,7 @@ admin/node_modules/
 admin/.next/
 admin/out/
 admin/.turbo/
+admin/tsconfig.tsbuildinfo
 
 # Mobile (Flutter)
 mobile/.dart_tool/

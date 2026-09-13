@@ -214,6 +214,53 @@ Note: `Application.current_stage` and `application_stage_events` (Phase 5, above
 by Phase 8 — `ApplicationStageEvent.source` simply gains a new real value, `"EMAIL_CONFIRMED"`,
 alongside the pre-existing `"MANUAL"`, exactly as its Phase 5 docstring already anticipated.
 
+### Phase 9 additions (migration `2146a3e4995f`)
+
+New tables:
+- `audit_logs` — `id`, `admin_id` (FK → `admin_users.id`), `action` (create/update/publish/archive/
+  delete/suspend/etc., a free string not an enum), `entity_type`, `entity_id` (nullable), `metadata`
+  (JSON, never contains secrets), `created_at`. Append-only — no route ever updates or deletes a row.
+- `system_settings` — `key` (primary key), `value` (JSON), `updated_at`, `updated_by_admin_id` (FK →
+  `admin_users.id`, `SET NULL`). Generic store; `system_settings_service.KNOWN_SETTINGS` is the
+  application-level registry of which keys exist and their compiled-in defaults.
+- `content_sources` — `id`, `name`, `source_type` (a Phase-9-specific `SourceType` enum — broader
+  than, and distinct from, `app/models/job.py`'s existing `SourceType`; see ARCHITECTURE.md),
+  `url`, `verification_status` (`UNVERIFIED`/`VERIFIED`/`FAILING`), `is_active`, `notes`,
+  `created_by_admin_id` (FK, `SET NULL`), timestamps.
+- `discovered_items` — `id`, `source_id` (FK → `content_sources.id`, CASCADE), `item_type`
+  (`JOB`/`SCHOLARSHIP`/`INTELLIGENCE`), `external_id`/`original_url` (either may be null depending on
+  the source), `raw_title`, `normalized_title` (indexed — lowercased, punctuation-stripped, used for
+  near-duplicate detection), `raw_payload` (JSON, whatever the source provided), `status`
+  (`PENDING`/`REVIEWED`/`IGNORED`/`REJECTED`), `created_draft_id` (nullable — the Job/Scholarship/
+  IntelligencePost id created from it, once reviewed), timestamps. No unique constraint forces
+  dedup at the database level (unlike Phase 8's webhook-message uniqueness) — deduplication is
+  application-level in `DiscoveredItemRepository.find_duplicate` (source + external_id, else source +
+  normalized_title, else source + exact URL), since a source may supply any subset of those fields.
+- `admin_notifications` — `id`, `title`/`body`, `audience`
+  (`ALL_USERS`/`COMPANY_FOLLOWERS`/`JOB_MATCH`/`SCHOLARSHIP_INTERESTED`/`SPECIFIC_USER`),
+  `audience_target` (nullable — a company/job/scholarship/user id depending on `audience`), `status`
+  (`DRAFT`/`SCHEDULED`/`SENT`/`CANCELLED`), `scheduled_at`/`sent_at`, `recipient_count` (honestly `0`
+  in this environment — no FCM/APNs credentials exist to actually deliver anything, see
+  ARCHITECTURE.md), `created_by_admin_id` (FK, `SET NULL`).
+
+Columns added to existing tables:
+- `jobs`, `scholarships`, `intelligence_posts` — each gained `scheduled_publish_at` (nullable
+  datetime), `reviewed_by_admin_id`/`published_by_admin_id` (both FK → `admin_users.id`,
+  `SET NULL`). Populated idempotently on first REVIEW/PUBLISHED transition — never overwritten by a
+  later edit.
+- `companies` — gained `known_technologies`/`business_areas`/`locations` (JSON lists — editorial,
+  hand-entered facts only, never inferred; see PRIVACY.md/PROJECT_STATUS.md's Phase 9 section) and
+  `created_by_admin_id` (FK → `admin_users.id`, `SET NULL`).
+- `email_connections` — gained `last_watch_renewal_at` (nullable datetime), set on every successful
+  scheduled renewal (Phase 9's scheduler; see ARCHITECTURE.md).
+
+SQLite migration note: adding a nullable FK column to an existing SQLite table requires
+`op.batch_alter_table(...)` (SQLite has no `ALTER TABLE ADD CONSTRAINT`), and each new column+FK
+pair on the same table needed its own separate batch block — batching multiple new columns into one
+block triggered a spurious `CircularDependencyError` from SQLAlchemy's column-reordering logic
+during batch-table-recreate. See the migration file
+(`backend/migrations/versions/2146a3e4995f_*.py`) for the working pattern.
+
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
 

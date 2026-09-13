@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.db.session import AsyncSessionLocal
+from app.scheduler import start_scheduler, stop_scheduler
 from app.services.admin_auth_service import ensure_seed_admin
 
 settings = get_settings()
@@ -19,7 +20,9 @@ async def lifespan(app: FastAPI):
         await ensure_seed_admin(
             session, email=settings.admin_seed_email, password=settings.admin_seed_password
         )
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)

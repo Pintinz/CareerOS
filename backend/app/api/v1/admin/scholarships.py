@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.admin_user import AdminRole
+from app.models.admin_user import AdminRole, AdminUser
 from app.models.job import ContentStatus
 from app.schemas.scholarship import (
     ScholarshipAdminListResponse,
@@ -11,6 +11,7 @@ from app.schemas.scholarship import (
     ScholarshipUpdate,
 )
 from app.security.admin_dependencies import require_admin_role
+from app.services import audit_service
 from app.services.scholarship_service import ScholarshipService
 
 router = APIRouter()
@@ -49,16 +50,21 @@ async def get_scholarship_admin(scholarship_id: str, db: AsyncSession = Depends(
     dependencies=[Depends(_CAN_WRITE)],
 )
 async def create_scholarship(
-    payload: ScholarshipCreate, db: AsyncSession = Depends(get_db)
+    payload: ScholarshipCreate, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(_CAN_WRITE)
 ) -> ScholarshipAdminOut:
-    return await ScholarshipService(db).create(payload)
+    scholarship = await ScholarshipService(db).create(payload, admin_id=admin.id)
+    await audit_service.record(db, admin_id=admin.id, action="create", entity_type="scholarship", entity_id=scholarship.id)
+    return scholarship
 
 
 @router.put("/{scholarship_id}", response_model=ScholarshipAdminOut, dependencies=[Depends(_CAN_WRITE)])
 async def update_scholarship(
-    scholarship_id: str, payload: ScholarshipUpdate, db: AsyncSession = Depends(get_db)
+    scholarship_id: str, payload: ScholarshipUpdate, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(_CAN_WRITE)
 ) -> ScholarshipAdminOut:
-    return await ScholarshipService(db).update(scholarship_id, payload)
+    scholarship = await ScholarshipService(db).update(scholarship_id, payload, admin_id=admin.id)
+    action = "publish" if payload.status == ContentStatus.PUBLISHED else "update"
+    await audit_service.record(db, admin_id=admin.id, action=action, entity_type="scholarship", entity_id=scholarship_id)
+    return scholarship
 
 
 @router.delete(
@@ -66,5 +72,8 @@ async def update_scholarship(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_admin_role(AdminRole.SUPER_ADMIN, AdminRole.ADMIN))],
 )
-async def delete_scholarship(scholarship_id: str, db: AsyncSession = Depends(get_db)) -> None:
+async def delete_scholarship(
+    scholarship_id: str, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(require_admin_role(AdminRole.SUPER_ADMIN, AdminRole.ADMIN))
+) -> None:
     await ScholarshipService(db).delete(scholarship_id)
+    await audit_service.record(db, admin_id=admin.id, action="delete", entity_type="scholarship", entity_id=scholarship_id)

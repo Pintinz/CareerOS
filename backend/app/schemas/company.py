@@ -15,6 +15,9 @@ class CompanyOut(BaseModel):
     headquarters: str | None = None
     country: str | None = None
     description: str | None = None
+    known_technologies: list[str] | None = None
+    business_areas: list[str] | None = None
+    locations: list[str] | None = None
     is_verified: bool
     is_active: bool
     is_demo: bool = False
@@ -33,6 +36,9 @@ class CompanyCreate(BaseModel):
     headquarters: str | None = None
     country: str | None = None
     description: str | None = None
+    known_technologies: list[str] | None = None
+    business_areas: list[str] | None = None
+    locations: list[str] | None = None
     is_verified: bool = False
     is_active: bool = True
     is_demo: bool = False
@@ -48,6 +54,9 @@ class CompanyUpdate(BaseModel):
     headquarters: str | None = None
     country: str | None = None
     description: str | None = None
+    known_technologies: list[str] | None = None
+    business_areas: list[str] | None = None
+    locations: list[str] | None = None
     is_verified: bool | None = None
     is_active: bool | None = None
     is_demo: bool | None = None

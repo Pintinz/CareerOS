@@ -77,7 +77,10 @@ class ScholarshipDetailOut(BaseModel):
 class ScholarshipAdminOut(ScholarshipDetailOut):
     is_active: bool
     status: ContentStatus
+    scheduled_publish_at: datetime | None = None
     created_by_admin_id: str | None = None
+    reviewed_by_admin_id: str | None = None
+    published_by_admin_id: str | None = None
 
 
 class _ScholarshipWritableFields(BaseModel):
@@ -114,6 +117,7 @@ class _ScholarshipWritableFields(BaseModel):
     source_published_at: datetime | None = None
 
     application_deadline: datetime | None = None
+    scheduled_publish_at: datetime | None = None
 
     is_verified: bool = False
     is_featured: bool = False
@@ -160,6 +164,7 @@ class ScholarshipUpdate(BaseModel):
     source_published_at: datetime | None = None
 
     application_deadline: datetime | None = None
+    scheduled_publish_at: datetime | None = None
 
     is_verified: bool | None = None
     is_featured: bool | None = None

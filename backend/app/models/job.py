@@ -105,8 +105,17 @@ class Job(TimestampMixin, Base):
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     status: Mapped[ContentStatus] = mapped_column(Enum(ContentStatus), nullable=False, default=ContentStatus.DRAFT)
+    # Phase 9 editorial workflow (spec §13/§14) — set only when a background job or an explicit
+    # publish action actually transitions status to PUBLISHED at/after this time, never before.
+    scheduled_publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_by_admin_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    reviewed_by_admin_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    )
+    published_by_admin_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
     )
 

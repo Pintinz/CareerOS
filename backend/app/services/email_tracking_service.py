@@ -14,8 +14,8 @@ from app.core.config import Settings, get_settings
 from app.email_tracking.classifier import classify_stage
 from app.email_tracking.confidence import compute_confidence
 from app.email_tracking.matcher import match_application
-from app.email_tracking.matching_config import SUGGEST_MIN_CONFIDENCE
 from app.email_tracking.text_utils import as_aware_utc
+from app.services import system_settings_service
 import re
 from app.email_tracking.types import ApplicationSignal, RawEmail
 from app.models.application import ApplicationStage
@@ -38,6 +38,7 @@ from app.repositories.email_tracking_repository import (
 from app.schemas.application import ApplicationStageUpdate
 from app.schemas.email_tracking import ConnectStartOut, ProviderAvailabilityOut
 from app.services.application_service import ApplicationService
+from app.services.retry_policy import DEFAULT_RETRY_POLICY, FailureCategory, PermanentFailure, RetryPolicy, run_with_retry
 from app.services.email_tracking_providers import (
     EmailTrackingProvider,
     GmailTrackingProvider,
@@ -62,7 +63,9 @@ PREP_HINT_BY_STAGE = {
 
 
 class EmailTrackingService:
-    def __init__(self, db: AsyncSession, *, settings: Settings | None = None) -> None:
+    def __init__(
+        self, db: AsyncSession, *, settings: Settings | None = None, retry_policy: RetryPolicy | None = None
+    ) -> None:
         self.db = db
         self.settings = settings or get_settings()
         self.connections = EmailConnectionRepository(db)
@@ -71,6 +74,8 @@ class EmailTrackingService:
         self.aliases = EmailForwardingAliasRepository(db)
         self.applications = ApplicationRepository(db)
         self.encryption = TokenEncryptionService()
+        # Overridable so tests can use near-zero delays instead of waiting out real backoff.
+        self.retry_policy = retry_policy or DEFAULT_RETRY_POLICY
 
     # ------------------------------------------------------------------
     # Provider selection (spec §39: mock fallback when real credentials are absent)
@@ -328,11 +333,12 @@ class EmailTrackingService:
         ]
         match = match_application(email, sender_domain, signals)
 
+        high, medium, suggest_min = await system_settings_service.get_confidence_thresholds(self.db)
         confidence_score, confidence_label = (0.0, "LOW")
         if stage_result.stage:
-            confidence_score, confidence_label = compute_confidence(stage_result, match.signals)
+            confidence_score, confidence_label = compute_confidence(stage_result, match.signals, high=high, medium=medium)
 
-        if match.status == "matched" and stage_result.stage and confidence_score >= SUGGEST_MIN_CONFIDENCE:
+        if match.status == "matched" and stage_result.stage and confidence_score >= suggest_min:
             event_status = RecruitmentEventStatus.SUGGESTED
         elif match.status == "ambiguous" and stage_result.stage:
             event_status = RecruitmentEventStatus.AMBIGUOUS
@@ -395,6 +401,11 @@ class EmailTrackingService:
         await self._renew_one(connection)
 
     async def _renew_one(self, connection: EmailConnection) -> None:
+        """Spec §38-40: transient/outage failures are retried with exponential backoff+jitter
+        (`run_with_retry`); an authorization failure marks the connection
+        `REAUTHORIZATION_REQUIRED` immediately rather than burning retries on a call that can never
+        succeed; any other permanent failure is recorded as an operational `ERROR` for the
+        Operations dashboard to surface. Never retried forever."""
         access_token = self._decrypt_or_none(connection.encrypted_access_token)
         if access_token is None:
             connection.status = EmailConnectionStatus.REAUTHORIZATION_REQUIRED
@@ -403,7 +414,9 @@ class EmailTrackingService:
         provider = self.get_provider(connection.provider)
         try:
             current_cursor = connection.gmail_history_id or connection.outlook_subscription_id or ""
-            watch = await provider.renew_watch(access_token=access_token, current_cursor=current_cursor)
+            watch = await run_with_retry(
+                provider.renew_watch, access_token=access_token, current_cursor=current_cursor, policy=self.retry_policy
+            )
             if connection.provider == EmailProvider.GMAIL:
                 connection.gmail_history_id = watch.cursor
                 connection.gmail_watch_expiry = watch.expires_at
@@ -413,7 +426,15 @@ class EmailTrackingService:
             connection.status = EmailConnectionStatus.ACTIVE
             connection.last_error_at = None
             connection.last_error_code = None
-        except Exception as exc:  # noqa: BLE001 — provider errors are classified, not re-raised.
+            connection.last_watch_renewal_at = datetime.now(timezone.utc)
+        except PermanentFailure as failure:
+            if failure.category == FailureCategory.AUTHORIZATION:
+                connection.status = EmailConnectionStatus.REAUTHORIZATION_REQUIRED
+            else:
+                connection.status = EmailConnectionStatus.ERROR
+            connection.last_error_at = datetime.now(timezone.utc)
+            connection.last_error_code = failure.category.value
+        except Exception as exc:  # noqa: BLE001 — anything not already classified is still recorded, not silently swallowed.
             connection.status = EmailConnectionStatus.ERROR
             connection.last_error_at = datetime.now(timezone.utc)
             connection.last_error_code = type(exc).__name__

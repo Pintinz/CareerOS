@@ -87,7 +87,10 @@ class JobAdminOut(JobDetailOut):
     is_active: bool
     status: ContentStatus
     expires_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
     created_by_admin_id: str | None = None
+    reviewed_by_admin_id: str | None = None
+    published_by_admin_id: str | None = None
 
 
 class JobCreate(BaseModel):
@@ -128,6 +131,7 @@ class JobCreate(BaseModel):
 
     application_deadline: datetime | None = None
     expires_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
 
     is_verified: bool = False
     is_featured: bool = False
@@ -175,6 +179,7 @@ class JobUpdate(BaseModel):
 
     application_deadline: datetime | None = None
     expires_at: datetime | None = None
+    scheduled_publish_at: datetime | None = None
 
     is_verified: bool | None = None
     is_featured: bool | None = None

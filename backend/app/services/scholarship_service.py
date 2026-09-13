@@ -64,26 +64,34 @@ class ScholarshipService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
         return scholarship
 
-    async def create(self, payload: ScholarshipCreate) -> ScholarshipAdminOut:
+    async def create(self, payload: ScholarshipCreate, *, admin_id: str | None = None) -> ScholarshipAdminOut:
         slug = await self.repo.generate_unique_slug(payload.name)
-        scholarship = Scholarship(slug=slug, **payload.model_dump())
-        if scholarship.status == ContentStatus.PUBLISHED and scholarship.published_at is None:
-            scholarship.published_at = datetime.now(timezone.utc)
+        scholarship = Scholarship(slug=slug, created_by_admin_id=admin_id, **payload.model_dump())
+        self._apply_workflow_transitions(scholarship, admin_id=admin_id)
         await self.repo.create(scholarship)
         await self.db.commit()
         await self.db.refresh(scholarship)
         return self.to_admin(scholarship)
 
-    async def update(self, scholarship_id: str, payload: ScholarshipUpdate) -> ScholarshipAdminOut:
+    async def update(self, scholarship_id: str, payload: ScholarshipUpdate, *, admin_id: str | None = None) -> ScholarshipAdminOut:
         scholarship = await self.get_for_admin(scholarship_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(scholarship, field, value)
-        if scholarship.status == ContentStatus.PUBLISHED and scholarship.published_at is None:
-            scholarship.published_at = datetime.now(timezone.utc)
+        self._apply_workflow_transitions(scholarship, admin_id=admin_id)
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(scholarship)
         return self.to_admin(scholarship)
+
+    @staticmethod
+    def _apply_workflow_transitions(scholarship: Scholarship, *, admin_id: str | None) -> None:
+        if scholarship.status == ContentStatus.REVIEW and scholarship.reviewed_by_admin_id is None:
+            scholarship.reviewed_by_admin_id = admin_id
+        if scholarship.status == ContentStatus.PUBLISHED:
+            if scholarship.published_at is None:
+                scholarship.published_at = datetime.now(timezone.utc)
+            if scholarship.published_by_admin_id is None:
+                scholarship.published_by_admin_id = admin_id
 
     async def delete(self, scholarship_id: str) -> None:
         scholarship = await self.get_for_admin(scholarship_id)

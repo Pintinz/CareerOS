@@ -63,9 +63,9 @@ class CompanyService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
         return company
 
-    async def create(self, payload: CompanyCreate) -> Company:
+    async def create(self, payload: CompanyCreate, *, admin_id: str | None = None) -> Company:
         slug = await self.repo.generate_unique_slug(payload.name)
-        company = Company(slug=slug, **payload.model_dump())
+        company = Company(slug=slug, created_by_admin_id=admin_id, **payload.model_dump())
         await self.repo.create(company)
         await self.db.commit()
         await self.db.refresh(company)

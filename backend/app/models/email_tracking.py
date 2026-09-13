@@ -70,6 +70,9 @@ class EmailConnection(TimestampMixin, Base):
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Set only on a genuinely successful watch/subscription renewal (Phase 9 spec §38) — distinct
+    # from last_sync_at (message history sync) and last_error_at (any failure).
+    last_watch_renewal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Gmail-specific sync cursors (spec §7/§59) — null for OUTLOOK connections.
     gmail_history_id: Mapped[str | None] = mapped_column(String(100), nullable=True)

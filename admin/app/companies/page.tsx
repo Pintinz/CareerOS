@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import Link from "next/link";
+
 import { useAdminGuard } from "@/components/useAdminGuard";
 import { ApiError, api } from "@/lib/apiClient";
 import { Company, PaginatedResponse } from "@/types/models";
@@ -125,20 +127,21 @@ export default function CompaniesPage() {
               <th className="px-4 py-3">Industry</th>
               <th className="px-4 py-3">Verified</th>
               <th className="px-4 py-3">Active</th>
+              <th className="px-4 py-3">Edit</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-muted">
                   Loading...
                 </td>
               </tr>
             )}
             {!loading && companies.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-muted">
                   No companies yet. Add one above.
                 </td>
               </tr>
@@ -163,6 +166,11 @@ export default function CompaniesPage() {
                   >
                     {company.is_active ? "Active" : "Inactive"}
                   </button>
+                </td>
+                <td className="px-4 py-3">
+                  <Link href={`/companies/${company.id}`} className="text-sm text-brand">
+                    Edit
+                  </Link>
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => handleDelete(company)} className="text-sm text-danger">

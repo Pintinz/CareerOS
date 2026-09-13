@@ -67,29 +67,37 @@ class IntelligenceService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
         return post
 
-    async def create(self, payload: IntelligenceCreate) -> IntelligenceAdminOut:
+    async def create(self, payload: IntelligenceCreate, *, admin_id: str | None = None) -> IntelligenceAdminOut:
         if payload.company_id and await self.companies.get_by_id(payload.company_id) is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown company_id")
 
         slug = await self.repo.generate_unique_slug(payload.headline)
-        post = IntelligencePost(slug=slug, **payload.model_dump())
-        if post.status == ContentStatus.PUBLISHED and post.published_at is None:
-            post.published_at = datetime.now(timezone.utc)
+        post = IntelligencePost(slug=slug, created_by_admin_id=admin_id, **payload.model_dump())
+        self._apply_workflow_transitions(post, admin_id=admin_id)
         await self.repo.create(post)
         await self.db.commit()
         await self.db.refresh(post)
         return await self.to_admin(post)
 
-    async def update(self, post_id: str, payload: IntelligenceUpdate) -> IntelligenceAdminOut:
+    async def update(self, post_id: str, payload: IntelligenceUpdate, *, admin_id: str | None = None) -> IntelligenceAdminOut:
         post = await self.get_for_admin(post_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(post, field, value)
-        if post.status == ContentStatus.PUBLISHED and post.published_at is None:
-            post.published_at = datetime.now(timezone.utc)
+        self._apply_workflow_transitions(post, admin_id=admin_id)
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(post)
         return await self.to_admin(post)
+
+    @staticmethod
+    def _apply_workflow_transitions(post: IntelligencePost, *, admin_id: str | None) -> None:
+        if post.status == ContentStatus.REVIEW and post.reviewed_by_admin_id is None:
+            post.reviewed_by_admin_id = admin_id
+        if post.status == ContentStatus.PUBLISHED:
+            if post.published_at is None:
+                post.published_at = datetime.now(timezone.utc)
+            if post.published_by_admin_id is None:
+                post.published_by_admin_id = admin_id
 
     async def delete(self, post_id: str) -> None:
         post = await self.get_for_admin(post_id)

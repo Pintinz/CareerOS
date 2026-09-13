@@ -173,6 +173,25 @@ notification/lifecycle endpoints implement Graph's own required validation hands
 accepting anything. Email content itself is never rendered as raw HTML in the app — only sanitized,
 short plain-text excerpts are ever displayed.
 
+## Admin visibility limits (Phase 9)
+
+The admin CMS gives staff broad content-management power but deliberately narrow visibility into
+user data:
+- `GET /admin/users` and its response schema (`UserAdminOut`) never include `hashed_password`,
+  OAuth access/refresh tokens, private CV text, email bodies/excerpts, interview recordings, or any
+  `email_connections`/`recruitment_email_events` content — verified by a dedicated test
+  (`test_user_admin_list_never_exposes_password_hash`).
+- There is no admin inbox-viewer or raw-email reader anywhere in the product (spec §63) — the only
+  email-tracking-related admin surface is the Operations dashboard's aggregate connection/health
+  counts (never per-message content).
+- Suspending or reactivating a user is restricted to ADMIN/SUPER_ADMIN roles and is logged to the
+  append-only audit log (admin id, action, target user id, timestamp) — never silently invisible.
+- `AuditLog.metadata` never contains secrets, tokens, or full user-generated content — only
+  structural facts about what changed (entity type/id, action taken).
+- System settings (`GET/PUT /admin/settings`) never expose API keys or other secrets — those remain
+  in environment/secret management exclusively; only tunable scoring weights/thresholds live in the
+  `system_settings` table.
+
 ## Account deletion
 
 Deleting an account removes profile data, documents, and application history; it is a real delete

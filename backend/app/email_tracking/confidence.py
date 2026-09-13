@@ -4,10 +4,23 @@ up" question has exactly one place to look — see `matching_config.CONFIDENCE_W
 """
 
 from app.email_tracking.classifier import StageClassification
-from app.email_tracking.matching_config import CONFIDENCE_WEIGHTS, NEGATIVE_CONTEXT_PENALTY, confidence_label
+from app.email_tracking.matching_config import CONFIDENCE_HIGH, CONFIDENCE_MEDIUM, CONFIDENCE_WEIGHTS, NEGATIVE_CONTEXT_PENALTY
 
 
-def compute_confidence(stage: StageClassification, match_signals: frozenset[str]) -> tuple[float, str]:
+def label_for_score(score: float, *, high: float = CONFIDENCE_HIGH, medium: float = CONFIDENCE_MEDIUM) -> str:
+    if score >= high:
+        return "HIGH"
+    if score >= medium:
+        return "MEDIUM"
+    return "LOW"
+
+
+def compute_confidence(
+    stage: StageClassification, match_signals: frozenset[str], *, high: float = CONFIDENCE_HIGH, medium: float = CONFIDENCE_MEDIUM
+) -> tuple[float, str]:
+    """`high`/`medium` default to the compiled-in constants but can be overridden with values read
+    from `SystemSetting` (see `system_settings_service.get_confidence_thresholds`) — this is the
+    one Phase 9 admin setting actually wired to its consumer at runtime."""
     score = 0.0
     if stage.matched_phrase:
         score += CONFIDENCE_WEIGHTS["stage_language_strength"]
@@ -23,4 +36,4 @@ def compute_confidence(stage: StageClassification, match_signals: frozenset[str]
         score -= NEGATIVE_CONTEXT_PENALTY
 
     score = max(0.0, min(1.0, score))
-    return score, confidence_label(score)
+    return score, label_for_score(score, high=high, medium=medium)

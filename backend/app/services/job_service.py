@@ -103,30 +103,40 @@ class JobService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
         return job
 
-    async def create(self, payload: JobCreate) -> JobAdminOut:
+    async def create(self, payload: JobCreate, *, admin_id: str | None = None) -> JobAdminOut:
         company = await self.companies.get_by_id(payload.company_id)
         if company is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown company_id")
 
         slug = await self.jobs.generate_unique_slug(payload.title, company.name)
-        job = Job(slug=slug, **payload.model_dump())
-        if job.status == ContentStatus.PUBLISHED and job.published_at is None:
-            job.published_at = datetime.now(timezone.utc)
+        job = Job(slug=slug, created_by_admin_id=admin_id, **payload.model_dump())
+        self._apply_workflow_transitions(job, admin_id=admin_id)
         await self.jobs.create(job)
         await self.db.commit()
         await self.db.refresh(job)
         return await self.to_admin(job)
 
-    async def update(self, job_id: str, payload: JobUpdate) -> JobAdminOut:
+    async def update(self, job_id: str, payload: JobUpdate, *, admin_id: str | None = None) -> JobAdminOut:
         job = await self.get_for_admin(job_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(job, field, value)
-        if job.status == ContentStatus.PUBLISHED and job.published_at is None:
-            job.published_at = datetime.now(timezone.utc)
+        self._apply_workflow_transitions(job, admin_id=admin_id)
         await self.db.flush()
         await self.db.commit()
         await self.db.refresh(job)
         return await self.to_admin(job)
+
+    @staticmethod
+    def _apply_workflow_transitions(job: Job, *, admin_id: str | None) -> None:
+        """Spec §13 — track who reviewed/published, not just who created (spec §13's "Track:
+        created_by, reviewed_by, published_by, timestamps")."""
+        if job.status == ContentStatus.REVIEW and job.reviewed_by_admin_id is None:
+            job.reviewed_by_admin_id = admin_id
+        if job.status == ContentStatus.PUBLISHED:
+            if job.published_at is None:
+                job.published_at = datetime.now(timezone.utc)
+            if job.published_by_admin_id is None:
+                job.published_by_admin_id = admin_id
 
     async def delete(self, job_id: str) -> None:
         job = await self.get_for_admin(job_id)
