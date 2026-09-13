@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "aptitude_providers.dart";
 
 Future<void> showQuestionNavigatorSheet(BuildContext context, {required String sessionId}) {

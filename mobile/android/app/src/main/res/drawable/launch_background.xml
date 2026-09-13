@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- CareerOS launch window (Android 7–11): brand navy with the reversed pathway mark. Android 12+
+     uses the system splash configured in values-v31/styles.xml. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/careeros_navy" />
+    <item
+        android:width="96dp"
+        android:height="96dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_splash_mark" />
 </layer-list>

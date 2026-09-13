@@ -7,7 +7,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../../core/monetization/ad_placement.dart";
 import "../../../core/monetization/monetization_providers.dart";
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "ats_providers.dart";
 import "ats_result_view.dart";
 

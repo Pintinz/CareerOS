@@ -9,7 +9,8 @@ import "core/storage/app_preferences.dart";
 import "features/aptitude/data/aptitude_offline_cache.dart";
 import "features/interview/data/interview_offline_cache.dart";
 import "routing/app_router.dart";
-import "theme/app_theme.dart";
+import "core/design/design.dart";
+import "core/design/theme_mode_controller.dart";
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +55,8 @@ class _CareerOSAppState extends ConsumerState<CareerOSApp> {
       title: "CareerOS",
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ref.watch(themeModeProvider),
       routerConfig: router,
     );
   }

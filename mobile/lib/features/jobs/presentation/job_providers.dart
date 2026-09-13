@@ -50,9 +50,24 @@ class JobListState {
       );
 }
 
-class JobListController extends Notifier<JobListState> {
+/// The job-backed Opportunities feeds. Each has its own list state, and its base filter is always
+/// applied on top of whatever the user refines. "Entry Level" is the honest stand-in for graduate
+/// programmes until the backend has a distinct opportunity type for them.
+enum JobFeed {
+  all,
+  internships,
+  entryLevel;
+
+  JobFilters apply(JobFilters filters) => switch (this) {
+        JobFeed.all => filters,
+        JobFeed.internships => filters.copyWith(employmentType: "INTERNSHIP"),
+        JobFeed.entryLevel => filters.copyWith(experienceLevel: "ENTRY"),
+      };
+}
+
+class JobListController extends FamilyNotifier<JobListState, JobFeed> {
   @override
-  JobListState build() {
+  JobListState build(JobFeed arg) {
     Future.microtask(refresh);
     return const JobListState(isLoading: true);
   }
@@ -62,7 +77,7 @@ class JobListController extends Notifier<JobListState> {
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final result = await _repo.list(page: 1, filters: state.filters);
+      final result = await _repo.list(page: 1, filters: arg.apply(state.filters));
       state = state.copyWith(items: result.items, total: result.total, page: 1, isLoading: false);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e);
@@ -74,7 +89,7 @@ class JobListController extends Notifier<JobListState> {
     state = state.copyWith(isLoadingMore: true);
     try {
       final nextPage = state.page + 1;
-      final result = await _repo.list(page: nextPage, filters: state.filters);
+      final result = await _repo.list(page: nextPage, filters: arg.apply(state.filters));
       state = state.copyWith(items: [...state.items, ...result.items], total: result.total, page: nextPage, isLoadingMore: false);
     } catch (e) {
       state = state.copyWith(isLoadingMore: false, error: e);
@@ -105,6 +120,7 @@ class JobListController extends Notifier<JobListState> {
       isUrgent: job.isUrgent,
       isVerified: job.isVerified,
       isSaved: !job.isSaved,
+      isDemo: job.isDemo,
       publishedAt: job.publishedAt,
       applicationDeadline: job.applicationDeadline,
     );
@@ -127,7 +143,10 @@ class JobListController extends Notifier<JobListState> {
   }
 }
 
-final jobListProvider = NotifierProvider<JobListController, JobListState>(JobListController.new);
+final jobFeedProvider = NotifierProvider.family<JobListController, JobListState, JobFeed>(JobListController.new);
+
+/// The main "Jobs" feed.
+final jobListProvider = jobFeedProvider(JobFeed.all);
 
 final jobDetailProvider = FutureProvider.autoDispose.family<JobDetail, String>((ref, idOrSlug) {
   return ref.watch(jobRepositoryProvider).getByIdOrSlug(idOrSlug);

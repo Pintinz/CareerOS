@@ -5,7 +5,7 @@ import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../data/email_tracking_models.dart";
 import "connect_consent_screen.dart";
 import "email_tracking_providers.dart";

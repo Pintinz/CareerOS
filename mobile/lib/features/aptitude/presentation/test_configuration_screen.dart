@@ -7,7 +7,7 @@ import "../../../core/monetization/monetization_models.dart";
 import "../../../core/monetization/monetization_providers.dart";
 import "../../../core/monetization/widgets/rewarded_unlock_dialog.dart";
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../applications/presentation/application_providers.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";

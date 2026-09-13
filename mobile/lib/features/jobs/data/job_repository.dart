@@ -18,15 +18,21 @@ class JobFilters {
   final String? experienceLevel;
   final String sort;
 
-  bool get isEmpty =>
-      search == null && country == null && employmentType == null && workMode == null && experienceLevel == null;
+  static bool _set(String? value) => value != null && value.isNotEmpty;
 
+  bool get isEmpty => !_set(search) && !_set(country) && !_set(employmentType) && !_set(workMode) && !_set(experienceLevel);
+
+  /// Number of refinements beyond the search box (drives the "Filters" badge).
+  int get activeRefinementCount => [country, employmentType, workMode, experienceLevel].where(_set).length + (sort != "newest" ? 1 : 0);
+
+  // Callers clear a filter by setting it to "" (copyWith can't express null) — empty values must
+  // never reach the API, where an empty enum value fails validation with a 422.
   Map<String, dynamic> toQuery() => {
-        if (search != null && search!.isNotEmpty) "search": search,
-        if (country != null) "country": country,
-        if (employmentType != null) "employment_type": employmentType,
-        if (workMode != null) "work_mode": workMode,
-        if (experienceLevel != null) "experience_level": experienceLevel,
+        if (_set(search)) "search": search,
+        if (_set(country)) "country": country,
+        if (_set(employmentType)) "employment_type": employmentType,
+        if (_set(workMode)) "work_mode": workMode,
+        if (_set(experienceLevel)) "experience_level": experienceLevel,
         "sort": sort,
       };
 

@@ -4,7 +4,7 @@ import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../../widgets/phase_pending_placeholder.dart";
 import "../data/application_models.dart";
 import "application_providers.dart";

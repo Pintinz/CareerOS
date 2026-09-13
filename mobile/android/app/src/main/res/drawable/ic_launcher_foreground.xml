@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CareerOS pathway mark (reversed) as the adaptive-icon foreground. Geometry mirrors
+     .claude/skills/careeros-ui-system/assets/brand-reference/careeros-mark.svg; scaled 0.78 and
+     centred so the whole mark (including the spark) stays inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="29.04"
+        android:translateY="29.04"
+        android:scaleX="0.78"
+        android:scaleY="0.78">
+        <path
+            android:pathData="M49.5,17.5 A22,22 0 1,0 53,41"
+            android:strokeWidth="8.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:fillColor="#00000000" />
+        <path
+            android:pathData="M17,44 C27,44 34,38 44.5,27.5"
+            android:strokeWidth="6.5"
+            android:strokeLineCap="round"
+            android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="17" android:startY="44" android:endX="44.5" android:endY="27.5"
+                    android:startColor="#249BFF" android:endColor="#13BDEB" />
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M57,15 L51.6,32.4 L39.6,20.4 Z"
+            android:strokeWidth="2"
+            android:strokeLineJoin="round">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="39.6" android:startY="32.4" android:endX="57" android:endY="15"
+                    android:startColor="#249BFF" android:endColor="#13BDEB" />
+            </aapt:attr>
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="39.6" android:startY="32.4" android:endX="57" android:endY="15"
+                    android:startColor="#249BFF" android:endColor="#13BDEB" />
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M58,4 L59.4,7.6 L63,9 L59.4,10.4 L58,14 L56.6,10.4 L53,9 L56.6,7.6 Z"
+            android:fillColor="#13BDEB" />
+    </group>
+</vector>

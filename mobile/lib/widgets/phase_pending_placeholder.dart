@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../theme/app_colors.dart";
+import "../core/design/design.dart";
 
 /// Honest "not built yet" empty state for a tab/feature whose phase hasn't landed —
 /// never fake data, never a silent blank screen (spec Rule 2 / §79 empty states).

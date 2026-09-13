@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- CareerOS brand navy (AppColors.navy) — launcher icon background and launch window. -->
+    <color name="careeros_navy">#071A38</color>
+</resources>

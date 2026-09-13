@@ -4,7 +4,7 @@ import "package:intl/intl.dart";
 
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../data/scholarship_models.dart";
 import "scholarship_providers.dart";
 

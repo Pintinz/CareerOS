@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:intl/intl.dart";
 
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "interview_providers.dart";
 
 /// Company + role preparation for an application-linked interview (spec §9/§26/§27): company

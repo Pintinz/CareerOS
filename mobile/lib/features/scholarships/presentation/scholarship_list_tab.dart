@@ -2,14 +2,16 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
-import "../../../widgets/phase_pending_placeholder.dart";
+import "../../../core/widgets/widgets.dart";
+import "../data/scholarship_repository.dart";
 import "scholarship_card.dart";
 import "scholarship_providers.dart";
 
 const _fundingTypes = ["FULLY_FUNDED", "PARTIAL"];
-const _degreeLevels = ["UNDERGRADUATE", "MASTERS", "PHD"];
+const _degreeLevels = ["UNDERGRADUATE", "MASTERS", "PHD", "OTHER"];
 
 class ScholarshipListTab extends ConsumerStatefulWidget {
   const ScholarshipListTab({super.key});
@@ -18,9 +20,12 @@ class ScholarshipListTab extends ConsumerStatefulWidget {
   ConsumerState<ScholarshipListTab> createState() => _ScholarshipListTabState();
 }
 
-class _ScholarshipListTabState extends ConsumerState<ScholarshipListTab> {
+class _ScholarshipListTabState extends ConsumerState<ScholarshipListTab> with AutomaticKeepAliveClientMixin {
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -39,148 +44,174 @@ class _ScholarshipListTabState extends ConsumerState<ScholarshipListTab> {
     super.dispose();
   }
 
+  ScholarshipListController get _controller => ref.read(scholarshipListProvider.notifier);
+
   void _submitSearch(String value) {
-    final filters = ref.read(scholarshipListProvider).filters;
-    ref.read(scholarshipListProvider.notifier).updateFilters(filters.copyWith(search: value));
+    _controller.updateFilters(ref.read(scholarshipListProvider).filters.copyWith(search: value));
   }
 
-  void _toggleFilter({String? fundingType, String? degreeLevel}) {
-    final current = ref.read(scholarshipListProvider).filters;
-    final controller = ref.read(scholarshipListProvider.notifier);
-    if (fundingType != null) {
-      controller.updateFilters(current.copyWith(fundingType: current.fundingType == fundingType ? "" : fundingType));
-    } else if (degreeLevel != null) {
-      controller.updateFilters(current.copyWith(degreeLevel: current.degreeLevel == degreeLevel ? "" : degreeLevel));
-    }
+  void _openFilters() {
+    showCareerBottomSheet<void>(
+      context: context,
+      title: "Filters",
+      builder: (sheetContext) => Consumer(
+        builder: (context, ref, _) {
+          final filters = ref.watch(scholarshipListProvider).filters;
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FilterOptionGroup(
+                  title: "Funding",
+                  options: _fundingTypes,
+                  selected: filters.fundingType,
+                  labelFor: humanizeEnum,
+                  onChanged: (v) => _controller.updateFilters(filters.copyWith(fundingType: v)),
+                ),
+                FilterOptionGroup(
+                  title: "Degree level",
+                  options: _degreeLevels,
+                  selected: filters.degreeLevel,
+                  labelFor: humanizeEnum,
+                  onChanged: (v) => _controller.updateFilters(filters.copyWith(degreeLevel: v)),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppOutlineButton(
+                        label: "Clear all",
+                        onPressed: () => _controller.updateFilters(ScholarshipFilters(search: filters.search)),
+                      ),
+                    ),
+                    Gap.sm,
+                    Expanded(child: PrimaryButton(label: "Show results", onPressed: () => Navigator.of(sheetContext).pop())),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final state = ref.watch(scholarshipListProvider);
+    final filters = state.filters;
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: TextField(
-            controller: _searchController,
-            onSubmitted: _submitSearch,
-            decoration: const InputDecoration(hintText: "Search scholarships", prefixIcon: Icon(Icons.search)),
+        FeedToolbar(
+          searchHint: "Search scholarships or providers",
+          searchController: _searchController,
+          onSearchSubmitted: _submitSearch,
+          onOpenFilters: _openFilters,
+          activeFilterCount: filters.activeRefinementCount,
+          quickFilters: [
+            AppFilterChip(
+              label: "Fully funded",
+              selected: filters.fundingType == "FULLY_FUNDED",
+              onSelected: (on) => _controller.updateFilters(filters.copyWith(fundingType: on ? "FULLY_FUNDED" : "")),
+            ),
+            for (final level in const ["MASTERS", "PHD", "UNDERGRADUATE"])
+              AppFilterChip(
+                label: humanizeEnum(level),
+                selected: filters.degreeLevel == level,
+                onSelected: (on) => _controller.updateFilters(filters.copyWith(degreeLevel: on ? level : "")),
+              ),
+          ],
+        ),
+        Expanded(
+          child: _ScholarshipListBody(
+            state: state,
+            scrollController: _scrollController,
+            onClearFilters: () {
+              _searchController.clear();
+              _controller.updateFilters(const ScholarshipFilters());
+            },
           ),
         ),
-        SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: [
-              for (final type in _fundingTypes)
-                _FilterChip(
-                  label: type.replaceAll("_", " "),
-                  selected: state.filters.fundingType == type,
-                  onTap: () => _toggleFilter(fundingType: type),
-                ),
-              for (final level in _degreeLevels)
-                _FilterChip(
-                  label: level,
-                  selected: state.filters.degreeLevel == level,
-                  onTap: () => _toggleFilter(degreeLevel: level),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        Expanded(child: _ScholarshipListBody(state: state, scrollController: _scrollController)),
       ],
     );
   }
 }
 
 class _ScholarshipListBody extends ConsumerWidget {
-  const _ScholarshipListBody({required this.state, required this.scrollController});
+  const _ScholarshipListBody({required this.state, required this.scrollController, required this.onClearFilters});
 
   final ScholarshipListState state;
   final ScrollController scrollController;
+  final VoidCallback onClearFilters;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final controller = ref.read(scholarshipListProvider.notifier);
+
     if (state.isLoading && state.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(padding: EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, AppSpacing.xl));
     }
 
     if (state.error != null && state.items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.muted),
-              const SizedBox(height: 12),
-              Text(state.error!.userMessage, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.read(scholarshipListProvider.notifier).refresh(),
-                child: const Text("Retry"),
-              ),
-            ],
-          ),
-        ),
+      return ErrorState(
+        title: "We couldn't load scholarships",
+        message: state.error!.userMessage,
+        onRetry: controller.refresh,
       );
     }
 
     if (state.items.isEmpty) {
-      return const PhasePendingPlaceholder(
-        icon: Icons.school_outlined,
-        title: "No scholarships found",
-        message: "Try adjusting your search or filters.",
+      return RefreshIndicator(
+        onRefresh: controller.refresh,
+        child: ListView(
+          children: [
+            state.filters.isEmpty
+                ? const EmptyState(
+                    icon: AppIcons.scholarship,
+                    title: "No scholarships right now",
+                    message: "New scholarships appear here as soon as they're published. Pull down to refresh.",
+                  )
+                : EmptyState(
+                    icon: AppIcons.search,
+                    title: "No matches for these filters",
+                    message: "Try removing a filter or searching a broader term.",
+                    actionLabel: "Clear Filters",
+                    onAction: onClearFilters,
+                  ),
+          ],
+        ),
       );
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(scholarshipListProvider.notifier).refresh(),
+      onRefresh: controller.refresh,
       child: ListView.separated(
         controller: scrollController,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        itemCount: state.items.length + (state.hasMore ? 1 : 0),
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, AppSpacing.xl),
+        itemCount: state.items.length + 1 + (state.hasMore ? 1 : 0),
+        separatorBuilder: (context, index) => Gap.sm,
         itemBuilder: (context, index) {
-          if (index >= state.items.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(child: CircularProgressIndicator()),
+          if (index == 0) {
+            return Text(
+              state.total == 1 ? "1 scholarship" : "${state.total} scholarships",
+              style: context.text.labelMedium,
             );
           }
-          final scholarship = state.items[index];
+          final itemIndex = index - 1;
+          if (itemIndex >= state.items.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Center(child: SizedBox.square(dimension: 24, child: CircularProgressIndicator(strokeWidth: 2.4))),
+            );
+          }
+          final scholarship = state.items[itemIndex];
           return ScholarshipCardTile(
             scholarship: scholarship,
             onTap: () => context.push("/scholarships/${scholarship.slug}"),
-            onToggleSave: () => ref.read(scholarshipListProvider.notifier).toggleSave(scholarship.id),
+            onToggleSave: () => controller.toggleSave(scholarship.id),
           );
         },
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        selectedColor: AppColors.blue.withValues(alpha: 0.15),
-        labelStyle: TextStyle(color: selected ? AppColors.blue : AppColors.text),
-        side: BorderSide(color: selected ? AppColors.blue : AppColors.muted.withValues(alpha: 0.3)),
       ),
     );
   }

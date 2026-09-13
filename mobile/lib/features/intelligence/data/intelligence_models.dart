@@ -8,6 +8,7 @@ class IntelligenceCard {
     required this.category,
     this.company,
     this.thumbnailUrl,
+    this.summary,
     this.publishedAt,
     required this.isFeatured,
   });
@@ -18,6 +19,7 @@ class IntelligenceCard {
   final String category;
   final CompanySummary? company;
   final String? thumbnailUrl;
+  final String? summary;
   final DateTime? publishedAt;
   final bool isFeatured;
 
@@ -28,6 +30,7 @@ class IntelligenceCard {
         category: json["category"] as String,
         company: json["company"] != null ? CompanySummary.fromJson(json["company"] as Map<String, dynamic>) : null,
         thumbnailUrl: json["thumbnail_url"] as String?,
+        summary: json["summary"] as String?,
         publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
         isFeatured: json["is_featured"] as bool? ?? false,
       );

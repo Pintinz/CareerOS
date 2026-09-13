@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../data/ats_models.dart";
 
 class AtsResultView extends StatelessWidget {

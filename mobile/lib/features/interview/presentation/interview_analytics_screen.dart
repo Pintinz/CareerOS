@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "interview_providers.dart";
 
 /// Combined Interview Readiness dashboard (spec §25) and Interview Analytics (spec §24). Every

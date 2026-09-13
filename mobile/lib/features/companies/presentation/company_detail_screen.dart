@@ -5,7 +5,7 @@ import "package:go_router/go_router.dart";
 
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../intelligence/data/intelligence_models.dart";
 import "../../intelligence/presentation/intelligence_providers.dart";
 import "../../jobs/data/job_models.dart";

@@ -1,16 +1,15 @@
 import "package:flutter/material.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../aptitude/presentation/preparation_hub_screen.dart";
 import "../../intelligence/presentation/intelligence_feed_tab.dart";
 import "../../opportunities/presentation/opportunities_tab.dart";
 import "../../profile/presentation/profile_tab.dart";
 import "home_tab.dart";
 
-/// Main bottom navigation shell (master spec §6): Home, Opportunities, Prepare,
-/// Intelligence, Profile. Prepare now has a real aptitude assessment engine (Phase 6);
-/// interview preparation (Phase 7) is surfaced honestly as "coming next" inside that tab
-/// rather than as a separate dead placeholder tab.
+/// Main bottom navigation shell — the five CareerOS hubs, in fixed order:
+/// Home · Opportunities · Prepare · Intelligence · Profile (see mobile-navigation.md).
+/// Jobs, scholarships, ATS and tests live inside those hubs, never as extra tabs.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -21,46 +20,42 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
-  static const _tabs = [
-    HomeTab(),
-    OpportunitiesTab(),
-    PreparationHubScreen(),
-    IntelligenceFeedTab(),
-    ProfileTab(),
-  ];
+  void _selectTab(int index) => setState(() => _index = index);
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final tabs = [
+      HomeTab(onSelectTab: _selectTab),
+      const OpportunitiesTab(),
+      const PreparationHubScreen(),
+      const IntelligenceFeedTab(),
+      const ProfileTab(),
+    ];
+
     return Scaffold(
-      body: SafeArea(child: IndexedStack(index: _index, children: _tabs)),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        backgroundColor: AppColors.card,
-        indicatorColor: AppColors.blue.withValues(alpha: 0.12),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: "Home"),
-          NavigationDestination(
-            icon: Icon(Icons.work_outline_rounded),
-            selectedIcon: Icon(Icons.work_rounded),
-            label: "Opportunities",
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check),
-            label: "Prepare",
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.newspaper_outlined),
-            selectedIcon: Icon(Icons.newspaper),
-            label: "Intelligence",
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: "Profile",
-          ),
-        ],
+      body: SafeArea(bottom: false, child: IndexedStack(index: _index, children: tabs)),
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: colors.border))),
+        child: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: _selectTab,
+          destinations: const [
+            NavigationDestination(icon: Icon(AppIcons.home), selectedIcon: Icon(AppIcons.homeSelected), label: "Home"),
+            NavigationDestination(
+              icon: Icon(AppIcons.opportunities),
+              selectedIcon: Icon(AppIcons.opportunitiesSelected),
+              label: "Opportunities",
+            ),
+            NavigationDestination(icon: Icon(AppIcons.prepare), selectedIcon: Icon(AppIcons.prepareSelected), label: "Prepare"),
+            NavigationDestination(
+              icon: Icon(AppIcons.intelligence),
+              selectedIcon: Icon(AppIcons.intelligenceSelected),
+              label: "Intelligence",
+            ),
+            NavigationDestination(icon: Icon(AppIcons.profile), selectedIcon: Icon(AppIcons.profileSelected), label: "Profile"),
+          ],
+        ),
       ),
     );
   }

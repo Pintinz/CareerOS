@@ -5,7 +5,7 @@ import "package:intl/intl.dart";
 
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../applications/presentation/application_providers.dart";
 import "../../ats/presentation/ats_analyze_screen.dart";
 import "../data/job_models.dart";

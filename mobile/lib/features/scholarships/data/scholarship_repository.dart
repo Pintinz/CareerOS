@@ -9,11 +9,19 @@ class ScholarshipFilters {
   final String? degreeLevel;
   final String? fundingType;
 
+  static bool _set(String? value) => value != null && value.isNotEmpty;
+
+  bool get isEmpty => !_set(search) && !_set(country) && !_set(degreeLevel) && !_set(fundingType);
+
+  int get activeRefinementCount => [country, degreeLevel, fundingType].where(_set).length;
+
+  // "" means "cleared" (see copyWith) and must never reach the API — an empty funding_type enum
+  // value fails validation with a 422.
   Map<String, dynamic> toQuery() => {
-        if (search != null && search!.isNotEmpty) "search": search,
-        if (country != null) "country": country,
-        if (degreeLevel != null) "degree_level": degreeLevel,
-        if (fundingType != null) "funding_type": fundingType,
+        if (_set(search)) "search": search,
+        if (_set(country)) "country": country,
+        if (_set(degreeLevel)) "degree_level": degreeLevel,
+        if (_set(fundingType)) "funding_type": fundingType,
       };
 
   ScholarshipFilters copyWith({String? search, String? country, String? degreeLevel, String? fundingType}) =>

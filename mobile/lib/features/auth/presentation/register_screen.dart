@@ -2,7 +2,10 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "auth_controller.dart";
+import "auth_layout.dart";
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -38,85 +41,65 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final isLoading = authState.isLoading;
     final errorMessage = ref.read(authControllerProvider.notifier).errorMessage;
 
-    return Scaffold(
-      appBar: AppBar(),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Create your account", style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 8),
-                Text(
-                  "Start tracking jobs, scholarships and your career progress.",
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 32),
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: "Email"),
-                  validator: (value) {
-                    if (value == null || !value.contains("@")) return "Enter a valid email";
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: "Password",
-                    helperText: "At least 8 characters",
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.length < 8) {
-                      return "Password must be at least 8 characters";
-                    }
-                    return null;
-                  },
-                ),
-                if (errorMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text(errorMessage, style: const TextStyle(color: Colors.red)),
-                ],
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _submit,
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text("Sign Up"),
+    return AuthLayout(
+      showBack: true,
+      title: "Create your account",
+      subtitle: "Start tracking jobs, scholarships and your career progress.",
+      form: Form(
+        key: _formKey,
+        child: AutofillGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(labelText: "Email", prefixIcon: Icon(Icons.alternate_email_rounded)),
+                validator: (value) {
+                  if (value == null || !value.contains("@")) return "Enter a valid email";
+                  return null;
+                },
+              ),
+              Gap.md,
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.newPassword],
+                onFieldSubmitted: (_) => isLoading ? null : _submit(),
+                decoration: InputDecoration(
+                  labelText: "Password",
+                  helperText: "At least 8 characters",
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                  suffixIcon: IconButton(
+                    tooltip: _obscurePassword ? "Show password" : "Hide password",
+                    icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text("Already have an account?"),
-                    TextButton(
-                      onPressed: isLoading ? null : () => context.pop(),
-                      child: const Text("Log in"),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
+                validator: (value) {
+                  if (value == null || value.length < 8) {
+                    return "Password must be at least 8 characters";
+                  }
+                  return null;
+                },
+              ),
+              if (errorMessage != null) ...[
+                Gap.md,
+                AuthErrorBanner(message: errorMessage),
               ],
-            ),
+              Gap.xl,
+              PrimaryButton(label: "Sign Up", isLoading: isLoading, onPressed: _submit),
+            ],
           ),
         ),
+      ),
+      footer: AuthSwitchPrompt(
+        prompt: "Already have an account?",
+        actionLabel: "Log in",
+        onPressed: isLoading ? null : () => context.pop(),
       ),
     );
   }

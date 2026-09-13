@@ -2,6 +2,7 @@
 // tests need a mocked ApiClient/SecureStorage and are a Next Task (see PROJECT_STATUS.md) — this
 // just proves `flutter test` runs against our real app rather than the stock counter template.
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +22,12 @@ class _FakeAppPreferences implements AppPreferences {
 
   @override
   Future<void> setOnboardingComplete() async {}
+
+  @override
+  ThemeMode get themeMode => ThemeMode.light;
+
+  @override
+  Future<void> setThemeMode(ThemeMode mode) async {}
 }
 
 /// A no-op AdService for widget tests (mirrors the fake-`RecordingService` pattern used for

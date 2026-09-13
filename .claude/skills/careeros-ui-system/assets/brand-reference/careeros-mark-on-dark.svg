@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="CareerOS">
+  <!-- Reversed mark for navy/dark grounds: the C turns white; pathway and spark keep brand blue/cyan. -->
+  <defs>
+    <linearGradient id="careeros-path" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#249BFF"/>
+      <stop offset="1" stop-color="#13BDEB"/>
+    </linearGradient>
+  </defs>
+  <path d="M49.5 17.5 A22 22 0 1 0 53 41" fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round"/>
+  <path d="M17 44 C 27 44, 34 38, 44.5 27.5" fill="none" stroke="url(#careeros-path)" stroke-width="6.5" stroke-linecap="round"/>
+  <path d="M57 15 L 51.6 32.4 L 39.6 20.4 Z" fill="url(#careeros-path)" stroke="url(#careeros-path)" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M58 4 L59.4 7.6 L63 9 L59.4 10.4 L58 14 L56.6 10.4 L53 9 L56.6 7.6 Z" fill="#13BDEB"/>
+</svg>

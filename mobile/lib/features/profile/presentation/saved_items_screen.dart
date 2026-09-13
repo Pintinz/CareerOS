@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../../widgets/phase_pending_placeholder.dart";
 import "../../jobs/data/job_models.dart";
 import "../../jobs/presentation/job_card.dart";

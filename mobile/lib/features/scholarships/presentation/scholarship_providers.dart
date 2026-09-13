@@ -108,6 +108,7 @@ class ScholarshipListController extends Notifier<ScholarshipListState> {
       isVerified: item.isVerified,
       isFeatured: item.isFeatured,
       isSaved: !item.isSaved,
+      isDemo: item.isDemo,
     );
     final newItems = [...state.items];
     newItems[index] = updated;

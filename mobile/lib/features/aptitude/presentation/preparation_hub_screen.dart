@@ -3,7 +3,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../interview/presentation/interview_providers.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";

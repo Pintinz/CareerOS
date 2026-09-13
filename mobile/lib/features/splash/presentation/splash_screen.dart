@@ -2,11 +2,11 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/app_providers.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 
-/// Splash screen (master spec §7): shows branding briefly, then routes to onboarding, login,
-/// or home depending on local state. The actual redirect decision lives in app_router.dart's
-/// GoRouter `redirect` — this screen only needs to render while that resolves.
+/// Splash screen (master spec §7): brand moment while auth state resolves. The redirect decision
+/// lives in app_router.dart's GoRouter `redirect` — this screen only renders while that resolves.
 class SplashScreen extends ConsumerWidget {
   const SplashScreen({super.key});
 
@@ -16,36 +16,39 @@ class SplashScreen extends ConsumerWidget {
     // resolves, even though the redirect itself reads the provider via ref.read.
     ref.watch(authStateProvider);
 
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.navy,
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 64),
-            SizedBox(height: 16),
-            Text(
-              "CareerOS",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.2),
+            radius: 1.1,
+            colors: [Color(0xFF0D2E63), AppColors.navy],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              const Spacer(flex: 5),
+              const CareerOSMark(size: 88, onDark: true),
+              Gap.lg,
+              const CareerOSWordmark(fontSize: 34, onDark: true),
+              Gap.sm,
+              Text(
+                "Opportunities Today.\nA Brighter You Tomorrow.",
+                textAlign: TextAlign.center,
+                style: context.text.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.72)),
               ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              "Skills. Opportunities. Intelligence.\nA Brighter You.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4),
-            ),
-            SizedBox(height: 32),
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70),
-            ),
-          ],
+              const Spacer(flex: 6),
+              SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white.withValues(alpha: 0.6)),
+              ),
+              Gap.xxl,
+            ],
+          ),
         ),
       ),
     );

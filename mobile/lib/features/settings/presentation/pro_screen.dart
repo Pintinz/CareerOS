@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 
 /// Settings → CareerOS Pro (spec §10/§57). No purchase flow exists — this screen must never
 /// imply one does. Shows the prepared entitlement architecture (ad-free, unlimited usage,

@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/monetization/monetization_providers.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 
 /// Settings → Ads & Privacy (spec §24-25). Shows consent/personalization status and CareerOS Pro
 /// status, and lets the user revisit Google's own privacy-options form when required — never a

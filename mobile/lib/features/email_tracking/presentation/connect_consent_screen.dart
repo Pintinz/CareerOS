@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../../core/utils/url_launcher_helper.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../data/email_tracking_models.dart";
 
 /// Spec §3 — shown before every OAuth authorization, for both Gmail and Microsoft. Exact required

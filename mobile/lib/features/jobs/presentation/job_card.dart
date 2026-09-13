@@ -1,162 +1,154 @@
-import "package:cached_network_image/cached_network_image.dart";
 import "package:flutter/material.dart";
-import "package:intl/intl.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/job_models.dart";
 
+/// The one job card. `compact` is the fixed-width carousel variant used on Home.
+///
+/// Hierarchy (screen-patterns.md): logo · title · company · location • work mode · employment
+/// type · posted time · bookmark · verified (real) · DEMO for demo data. No descriptions.
 class JobCardTile extends StatelessWidget {
-  const JobCardTile({super.key, required this.job, required this.onTap, required this.onToggleSave});
+  const JobCardTile({
+    super.key,
+    required this.job,
+    required this.onTap,
+    this.onToggleSave,
+    this.compact = false,
+  });
 
   final JobCard job;
   final VoidCallback onTap;
-  final VoidCallback onToggleSave;
 
-  static final _timeFormat = DateFormat("MMM d");
+  /// Null hides the bookmark (e.g. read-only previews).
+  final VoidCallback? onToggleSave;
+  final bool compact;
 
-  String get _employmentTypeLabel => job.employmentType.replaceAll("_", "-").toLowerCase();
-  String get _workModeLabel => job.workMode.replaceAll("_", " ").toLowerCase();
+  String get _meta => [
+        if (job.location != null && job.location!.isNotEmpty) job.location!,
+        humanizeEnum(job.workMode),
+      ].join(" • ");
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _CompanyAvatar(logoUrl: job.company.logoUrl, name: job.company.name),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            job.title,
-                            style: Theme.of(context).textTheme.titleLarge,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          onPressed: onToggleSave,
-                          icon: Icon(
-                            job.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                            color: job.isSaved ? AppColors.blue : AppColors.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(job.company.name, style: Theme.of(context).textTheme.bodyMedium),
-                    if (job.location != null) ...[
-                      const SizedBox(height: 2),
-                      Text(job.location!, style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        _Chip(label: _employmentTypeLabel),
-                        _Chip(label: _workModeLabel),
-                        if (job.isUrgent) const _Chip(label: "Urgent", color: AppColors.danger),
-                        if (job.isDemo) const _Chip(label: "DEMO", color: AppColors.muted),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        if (job.publishedAt != null)
-                          Text(
-                            "Posted ${_timeFormat.format(job.publishedAt!)}",
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          )
-                        else
-                          const SizedBox.shrink(),
-                        if (job.isVerified)
-                          const Row(
-                            children: [
-                              Icon(Icons.verified, size: 14, color: AppColors.success),
-                              SizedBox(width: 4),
-                              Text("Verified", style: TextStyle(fontSize: 12, color: AppColors.success)),
-                            ],
-                          ),
-                      ],
-                    ),
-                  ],
+    return compact ? _buildCompact(context) : _buildList(context);
+  }
+
+  Widget _tags() => Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          TagChip(label: humanizeEnum(job.employmentType)),
+          if (job.experienceLevel != null) TagChip(label: humanizeEnum(job.experienceLevel!)),
+          if (job.isUrgent) const TagChip(label: "Urgent", tone: AppTone.danger),
+          if (job.isDemo) const TagChip(label: "DEMO"),
+        ],
+      );
+
+  Widget _saveButton(BuildContext context) => IconButton(
+        tooltip: job.isSaved ? "Remove from saved" : "Save job",
+        onPressed: onToggleSave,
+        icon: Icon(
+          job.isSaved ? AppIcons.savedSelected : AppIcons.saved,
+          color: job.isSaved ? context.colors.primary : context.colors.textSecondary,
+        ),
+      );
+
+  Widget _footer(BuildContext context) => Row(
+        children: [
+          if (job.publishedAt != null)
+            Flexible(
+              child: Text(DateLabels.published(job.publishedAt!), style: context.text.bodySmall, maxLines: 1),
+            ),
+          if (job.applicationDeadline != null && DateLabels.daysUntil(job.applicationDeadline!) <= 14) ...[
+            if (job.publishedAt != null) Text("  ·  ", style: context.text.bodySmall),
+            Flexible(
+              child: Text(
+                DateLabels.deadline(job.applicationDeadline!),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.text.bodySmall?.copyWith(
+                  color: DateLabels.deadlineTone(job.applicationDeadline!).onTint(context),
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
+            ),
+          ],
+          const Spacer(),
+          if (job.isVerified)
+            Semantics(
+              label: "Verified employer",
+              child: const Icon(AppIcons.verified, size: 16, color: AppColors.success),
+            ),
+        ],
+      );
+
+  Widget _buildList(BuildContext context) {
+    return CareerCard(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xxs, AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NetworkImageWithFallback(url: job.company.logoUrl, fallbackText: job.company.name, size: 48),
+          Gap.sm,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(job.title, style: context.text.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Text(job.company.name, style: context.text.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Icon(AppIcons.location, size: 14, color: context.colors.textSecondary),
+                    const SizedBox(width: 4),
+                    Expanded(child: Text(_meta, style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ],
+                ),
+                Gap.sm,
+                _tags(),
+                Gap.sm,
+                Padding(padding: const EdgeInsets.only(right: AppSpacing.sm), child: _footer(context)),
+              ],
+            ),
           ),
+          if (onToggleSave != null) _saveButton(context) else Gap.sm,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompact(BuildContext context) {
+    return SizedBox(
+      width: 272,
+      child: CareerCard(
+        onTap: onTap,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                NetworkImageWithFallback(url: job.company.logoUrl, fallbackText: job.company.name, size: 40),
+                Gap.sm,
+                Expanded(
+                  child: Text(job.company.name, style: context.text.labelMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                if (job.isVerified) const Icon(AppIcons.verified, size: 16, color: AppColors.success),
+              ],
+            ),
+            Gap.sm,
+            Text(job.title, style: context.text.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 4),
+            Text(_meta, style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+            const Spacer(),
+            _tags(),
+            Gap.sm,
+            _footer(context),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class _CompanyAvatar extends StatelessWidget {
-  const _CompanyAvatar({required this.logoUrl, required this.name});
-
-  final String? logoUrl;
-  final String name;
-
-  @override
-  Widget build(BuildContext context) {
-    final fallback = Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: AppColors.blue.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : "?",
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.blue),
-      ),
-    );
-
-    if (logoUrl == null || logoUrl!.isEmpty) return fallback;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: CachedNetworkImage(
-        imageUrl: logoUrl!,
-        width: 48,
-        height: 48,
-        fit: BoxFit.cover,
-        placeholder: (context, url) => fallback,
-        errorWidget: (context, url, error) => fallback,
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, this.color = AppColors.muted});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
       ),
     );
   }

@@ -4,7 +4,7 @@ import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
 import "../../../core/utils/error_message.dart";
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../../aptitude/data/aptitude_models.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
 import "../../applications/data/application_models.dart";

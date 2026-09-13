@@ -1,12 +1,15 @@
 import "package:flutter/material.dart";
+import "package:go_router/go_router.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../jobs/presentation/job_list_tab.dart";
+import "../../jobs/presentation/job_providers.dart";
 import "../../scholarships/presentation/scholarship_list_tab.dart";
 
-/// Top-level "Opportunities" tab (spec §6/§12): Jobs and Scholarships sub-tabs. Internships and
-/// graduate programmes reuse the job data model (see ARCHITECTURE.md) and aren't separate
-/// sub-tabs yet — revisit once there's enough of that content to warrant splitting it out.
+/// Opportunities hub — "What opportunities can I pursue?". Jobs, Internships and Entry Level are
+/// job-backed feeds (see [JobFeed]); Scholarships has its own model. There is no distinct
+/// graduate-programme type in the backend yet, so none is presented.
 class OpportunitiesTab extends StatefulWidget {
   const OpportunitiesTab({super.key});
 
@@ -15,13 +18,7 @@ class OpportunitiesTab extends StatefulWidget {
 }
 
 class _OpportunitiesTabState extends State<OpportunitiesTab> with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
+  late final TabController _tabController = TabController(length: 4, vsync: this);
 
   @override
   void dispose() {
@@ -32,22 +29,38 @@ class _OpportunitiesTabState extends State<OpportunitiesTab> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Text("Opportunities", style: Theme.of(context).textTheme.headlineMedium),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.md, AppSpacing.xs, 0),
+          child: HubHeader(
+            title: "Opportunities",
+            subtitle: "Jobs, internships and scholarships",
+            trailing: IconButton(
+              tooltip: "Saved opportunities",
+              onPressed: () => context.push("/saved"),
+              icon: const Icon(AppIcons.saved),
+            ),
+          ),
         ),
-        TabBar(
-          controller: _tabController,
-          labelColor: AppColors.blue,
-          unselectedLabelColor: AppColors.muted,
-          indicatorColor: AppColors.blue,
-          tabs: const [Tab(text: "Jobs"), Tab(text: "Scholarships")],
+        Gap.xs,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, 0),
+          child: CareerPillTabBar(
+            controller: _tabController,
+            scrollable: true,
+            tabs: const ["Jobs", "Internships", "Entry Level", "Scholarships"],
+          ),
         ),
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: const [JobListTab(), ScholarshipListTab()],
+            children: const [
+              JobListTab(),
+              JobListTab(feed: JobFeed.internships),
+              JobListTab(feed: JobFeed.entryLevel),
+              ScholarshipListTab(),
+            ],
           ),
         ),
       ],

@@ -1,7 +1,7 @@
 import "package:flutter/material.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../data/interview_models.dart";
 import "interview_configuration_screen.dart";
 

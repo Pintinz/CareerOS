@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
 
-import "../../../theme/app_colors.dart";
+import "../../../core/design/design.dart";
 import "../data/application_models.dart";
 
 /// Bottom sheet returning the (stage, note) the user picked, or null if cancelled. The caller
