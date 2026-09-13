@@ -16,7 +16,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `5d221b3` — Phase 7.5 (Media, Assessment & Interview Hardening) backend + mobile (tagged `phase-7.5-media-hardening`).
 - `27d23bb` — Phase 7.5 commit-hash doc fix.
 - `0ece72a` — Phase 7.5 follow-up: Mock Interview Automatic/Custom Mix builder UI.
-- Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
+- `2b46386` — Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
 
 ## Environment notes (read before assuming anything is verified)
 
