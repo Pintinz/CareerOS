@@ -5,19 +5,25 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserOut
 from app.security.dependencies import get_current_user
+from app.security.rate_limit import login_rate_limit, register_rate_limit
 from app.services.auth_service import AuthService
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(register_rate_limit)],
+)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     service = AuthService(db)
     user = await service.register(email=payload.email, password=payload.password)
     return service.issue_tokens(user)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(login_rate_limit)])
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     service = AuthService(db)
     user = await service.authenticate(email=payload.email, password=payload.password)

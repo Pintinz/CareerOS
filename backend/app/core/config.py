@@ -10,8 +10,20 @@ class Settings(BaseSettings):
     app_name: str = "CareerOS API"
     app_version: str = "0.1.0"
 
-    # Falls back to local SQLite so the backend runs with no Postgres/Docker installed.
+    # Falls back to local SQLite so the backend runs with no Postgres/Docker installed. Production
+    # MUST set a real `postgresql+asyncpg://...` URL — see `uses_insecure_defaults` below, which
+    # refuses to boot a production-flagged process still pointed at the SQLite fallback.
     database_url: str = "sqlite+aiosqlite:///./careeros_dev.db"
+
+    # Phase 11 — production connection pool (spec §7). Ignored for SQLite (which has no real
+    # pooling concept); applied to the async engine for any other dialect. Environment-configurable
+    # so a given deployment can tune it to its managed Postgres plan's connection limit without a
+    # code change.
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # 30 min — safely under most managed Postgres idle-close windows.
+    db_pool_pre_ping: bool = True
 
     jwt_secret_key: str = "dev-only-insecure-secret-change-me"
     jwt_algorithm: str = "HS256"
@@ -83,6 +95,12 @@ class Settings(BaseSettings):
             insecure.append("JWT_SECRET_KEY")
         if "UuQmhsXcogUgfZv-VKXGPr1jS2C5Y0EIytlAc77syfg=" in self.token_encryption_key_list:
             insecure.append("TOKEN_ENCRYPTION_KEYS")
+        # Phase 11 (spec §18): SQLite is a dev/test fallback only — see DATABASE.md/DEPLOYMENT.md
+        # for why (no real FK enforcement guarantee at scale, no real connection pooling, single
+        # file, no concurrent-writer story). A production-flagged process must never silently run
+        # against it.
+        if self.database_url.startswith("sqlite"):
+            insecure.append("DATABASE_URL (SQLite is not a supported production database)")
         return insecure
 
     @property

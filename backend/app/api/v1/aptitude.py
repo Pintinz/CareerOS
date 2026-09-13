@@ -20,6 +20,7 @@ from app.schemas.aptitude import (
 )
 from app.security.dependencies import get_current_user
 from app.services.aptitude_service import AptitudeService
+from app.services.monetization_service import MonetizationService
 
 router = APIRouter()
 
@@ -42,6 +43,7 @@ async def list_topics(
 async def create_session(
     payload: TestSessionCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> TestSessionDetailOut:
+    await MonetizationService(db).enforce_aptitude_limit(user)
     return await AptitudeService(db).create_session(user.id, payload)
 
 

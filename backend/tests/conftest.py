@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
@@ -9,8 +10,17 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.security.rate_limit import reset_all_rate_limiters
 
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters() -> None:
+    # The rate limiters are process-global (Phase 11) — without this, a long test run would
+    # eventually trip a 429 on a perfectly legitimate test that just happens to be the Nth to hit
+    # /auth/login or /auth/register in this pytest process.
+    reset_all_rate_limiters()
 
 
 @pytest_asyncio.fixture

@@ -1,0 +1,17 @@
+# Copy this file to android/key.properties (NOT committed — see .gitignore) and fill in real
+# values before running a signed release build. Never commit the real key.properties, the .jks
+# keystore file, or either password anywhere — not to Git, not to CI logs, not to documentation.
+#
+# Generate a real upload keystore first (once, keep it forever — losing it means you can never
+# update this app again under the same listing without Google's key-recovery process):
+#
+#   keytool -genkey -v -keystore ~/careeros-upload-key.jks -keyalg RSA -keysize 2048 \
+#     -validity 10000 -alias careeros-upload
+#
+# Then fill in the real values below and point storeFile at wherever you saved the .jks file
+# (an absolute path, or a path relative to android/app/).
+
+storePassword=REPLACE_ME
+keyPassword=REPLACE_ME
+keyAlias=careeros-upload
+storeFile=REPLACE_ME_WITH_PATH_TO_YOUR_UPLOAD_KEYSTORE.jks

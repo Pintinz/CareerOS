@@ -4,8 +4,11 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.models.question import Question, QuestionCategory, QuestionDifficulty, QuestionOption, QuestionTopic, QuestionType
 from app.models.test_session import TestSession
+from app.models.user import SubscriptionTier, User
 from tests.test_jobs import _create_company, _job_payload, _user_headers
 
 pytestmark = pytest.mark.asyncio
@@ -325,13 +328,17 @@ async def test_timed_session_reports_remaining_seconds_while_untimed_does_not(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
     await _seed_numerical_bank(db_session)
-    headers = await _user_headers(client)
+    # Two different users (Phase 11 §64: the free tier now allows only 1 aptitude session/day per
+    # user server-side — using separate users here isolates this test from that limit entirely,
+    # since it's testing timed-vs-untimed session shape, not per-user daily quota behavior).
+    timed_headers = await _user_headers(client, "timed-session@example.com")
+    untimed_headers = await _user_headers(client, "untimed-session@example.com")
 
-    timed = await _create_session(client, headers, timing="OVERALL", time_limit_minutes=10)
+    timed = await _create_session(client, timed_headers, timing="OVERALL", time_limit_minutes=10)
     assert timed["remaining_seconds"] is not None
     assert 0 < timed["remaining_seconds"] <= 600
 
-    untimed = await _create_session(client, headers, timing="UNTIMED")
+    untimed = await _create_session(client, untimed_headers, timing="UNTIMED")
     assert untimed["remaining_seconds"] is None
     assert untimed["expires_at"] is None
 
@@ -379,6 +386,12 @@ async def test_analytics_and_weak_topic_recommendation_require_minimum_attempts(
     await db_session.commit()
 
     headers = await _user_headers(client)
+    # This test needs 3 sessions in one day for one user, above the default free-tier limit of 1
+    # (Phase 11 §64 server-side enforcement) — mark them PRO here since the test's actual point is
+    # analytics aggregation across sessions, not free-tier gating.
+    user_result = await db_session.execute(select(User).where(User.email == "candidate@example.com"))
+    user_result.scalar_one().subscription_tier = SubscriptionTier.PRO
+    await db_session.commit()
 
     for _ in range(3):
         session = await _create_session(

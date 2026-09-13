@@ -5,12 +5,13 @@ from app.db.session import get_db
 from app.models.admin_user import AdminUser
 from app.schemas.admin_auth import AdminLoginRequest, AdminTokenResponse, AdminUserOut
 from app.security.admin_dependencies import get_current_admin
+from app.security.rate_limit import admin_login_rate_limit
 from app.services.admin_auth_service import AdminAuthService
 
 router = APIRouter()
 
 
-@router.post("/login", response_model=AdminTokenResponse)
+@router.post("/login", response_model=AdminTokenResponse, dependencies=[Depends(admin_login_rate_limit)])
 async def admin_login(
     payload: AdminLoginRequest, db: AsyncSession = Depends(get_db)
 ) -> AdminTokenResponse:

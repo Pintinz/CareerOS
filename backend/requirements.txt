@@ -1,4 +1,4 @@
-fastapi==0.115.0
+fastapi==0.115.14
 uvicorn[standard]==0.30.6
 sqlalchemy==2.0.35
 greenlet==3.1.1
@@ -7,16 +7,20 @@ asyncpg==0.30.0
 aiosqlite==0.20.0
 pydantic==2.9.2
 pydantic-settings==2.5.2
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 passlib[argon2]==1.7.4
-python-multipart==0.0.9
+python-multipart==0.0.22
 email-validator==2.2.0
 httpx==0.27.2
-python-dotenv==1.0.1
-pypdf==5.0.1
+python-dotenv==1.2.2
+pypdf==6.16.1
 python-docx==1.1.2
 Pillow==12.3.0
 APScheduler==3.11.3
+
+# Phase 11 production server (spec §15) — gunicorn manages a pool of uvicorn worker processes with
+# proper graceful-shutdown/timeout/health behavior; never run `uvicorn --reload` in production.
+gunicorn==23.0.0
 
 pytest==8.3.3
 pytest-asyncio==0.24.0

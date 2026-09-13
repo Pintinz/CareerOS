@@ -1,0 +1,52 @@
+# Production-shaped compose file (Phase 11, spec §14) — NOT the same as docker-compose.yml, which
+# stays dev-only (bundled Postgres/Redis with dev passwords, --reload, source-mounted volumes).
+#
+# This file assumes PostgreSQL, Redis (if/when a real queue is introduced), and object storage are
+# real MANAGED services outside this compose stack (spec §14: "External managed services may
+# include: PostgreSQL, Redis, Object storage") — nothing here runs a database or cache container.
+#
+# There is no separate "worker" service: this codebase has no external task queue deployed yet
+# (see backend/Dockerfile's own comment), so there's nothing distinct for a worker container to
+# run. There is no separate "scheduler" service either — the scheduler runs in-process inside the
+# backend container, protected by a Postgres advisory-lock leader-election check (spec §22,
+# app/scheduler.py), so running `replicas: N` below is safe without duplicate scheduled jobs.
+#
+# All real values (DATABASE_URL, JWT_SECRET_KEY, TOKEN_ENCRYPTION_KEYS, storage credentials, OAuth
+# secrets) MUST come from your host/orchestrator's real secret management at deploy time — never
+# from a committed .env file. This file intentionally has no `env_file:` directive for exactly
+# that reason; set real values via `docker compose --env-file <path-outside-git> ...` or your
+# orchestrator's native secret injection.
+#
+# THIS FILE HAS NEVER BEEN RUN IN THIS ENVIRONMENT — no Docker daemon exists here (see
+# RELEASE_READINESS.md). It is prepared, reviewed code, not a live-verified deployment.
+
+services:
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      TOKEN_ENCRYPTION_KEYS: ${TOKEN_ENCRYPTION_KEYS}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/liveness')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  admin:
+    build:
+      context: ./admin
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend

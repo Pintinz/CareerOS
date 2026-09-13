@@ -12,6 +12,7 @@ from app.schemas.ats import (
 )
 from app.security.dependencies import get_current_user
 from app.services.ats_service import AtsService
+from app.services.monetization_service import MonetizationService
 
 router = APIRouter()
 
@@ -50,6 +51,7 @@ async def analyze(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AtsAnalysisOut:
+    await MonetizationService(db).enforce_ats_limit(user)
     analysis = await AtsService(db).analyze(user.id, payload)
     return AtsAnalysisOut.model_validate(analysis)
 

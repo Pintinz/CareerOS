@@ -169,6 +169,18 @@ async def test_content_expiration_marks_expired_and_is_idempotent(client: AsyncC
     assert await content_lifecycle_service.expire_content(db_session) == 0
 
 
+async def test_scheduler_leader_lock_always_passes_on_sqlite(db_session: AsyncSession) -> None:
+    """Phase 11 §22: this codebase's only exercised database (SQLite, see DATABASE.md) has no
+    advisory-lock primitive and no realistic multi-instance story, so the leader-election check
+    must be a documented no-op pass-through here — never accidentally block every scheduled job
+    from ever running in the one environment this project actually tests against."""
+    from app.scheduler import _acquire_leader_lock
+
+    assert await _acquire_leader_lock(db_session, "some_job") is True
+    # Calling it twice (simulating two instances both checking) must not deadlock or flip-flop.
+    assert await _acquire_leader_lock(db_session, "some_job") is True
+
+
 # ---------------------------------------------------------------------------
 # Content workflow: reviewed_by / published_by tracking (spec §13)
 # ---------------------------------------------------------------------------

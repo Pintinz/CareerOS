@@ -10,7 +10,22 @@ settings = get_settings()
 _is_sqlite = settings.database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
-engine = create_async_engine(settings.database_url, echo=False, connect_args=connect_args)
+# Phase 11 (spec §7): SQLite has no real pool to configure (NullPool-equivalent single-file
+# access) — pool_size/max_overflow/etc. are Postgres-only kwargs and SQLAlchemy rejects them for
+# the SQLite dialect's default pool class, so they're only passed for a real database.
+_pool_kwargs = (
+    {}
+    if _is_sqlite
+    else {
+        "pool_size": settings.db_pool_size,
+        "max_overflow": settings.db_max_overflow,
+        "pool_timeout": settings.db_pool_timeout_seconds,
+        "pool_recycle": settings.db_pool_recycle_seconds,
+        "pool_pre_ping": settings.db_pool_pre_ping,
+    }
+)
+
+engine = create_async_engine(settings.database_url, echo=False, connect_args=connect_args, **_pool_kwargs)
 
 if _is_sqlite:
     # SQLite does NOT enforce foreign keys by default — every ondelete=CASCADE/RESTRICT/SET NULL

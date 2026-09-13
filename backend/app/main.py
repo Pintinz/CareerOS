@@ -38,15 +38,49 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    lifespan=lifespan,
+    # Phase 11 (spec §82): interactive API docs/schema are a dev convenience, not something a
+    # public production deployment needs to expose — they reveal the full route/schema surface to
+    # anyone. Consumer/admin apps never call these; they're purely for human exploration.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
 
 app.add_middleware(
     CORSMiddleware,
+    # Phase 11 (spec §83): never "*" — allow_credentials=True with a wildcard origin is both
+    # rejected by browsers and a real CSRF-adjacent risk if it weren't. cors_origins_list is a
+    # strict, explicit allowlist (see .env.example) — a production deployment must list its real
+    # mobile/admin origins here, never widen this to match "anything".
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Phase 11 (spec §82) — headers safe for a JSON API that never renders third-party HTML and
+    has no OAuth *redirect* endpoints that receive a browser-set cookie (auth is bearer-token
+    only, see SYSTEM_AUDIT.md §18's CSRF finding). No CSP is set: this API returns JSON, not HTML,
+    so a content-security-policy would only matter for the dev-only /docs Swagger UI, and setting
+    one narrow enough for Swagger's own inline scripts while not breaking it is not worth the
+    risk of accidentally breaking OAuth callback pages that redirect through this API — skipped
+    rather than shipped half-right."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    if settings.is_production:
+        # Only meaningful over HTTPS, which is the only way this header could ever be honored —
+        # never set in development, where the backend is normally served over plain HTTP.
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
 
 
 @app.middleware("http")
@@ -84,4 +118,4 @@ app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
 
 @app.get("/")
 async def root() -> dict:
-    return {"service": settings.app_name, "docs": "/docs"}
+    return {"service": settings.app_name, "docs": None if settings.is_production else "/docs"}

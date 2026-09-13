@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ats_analysis import AtsAnalysis
 from app.models.admin_user import AdminRole
+from tests.test_aptitude import _create_session, _seed_numerical_bank
 from tests.test_jobs import _admin_headers, _create_admin, _user_headers
 
 pytestmark = pytest.mark.asyncio
@@ -144,3 +145,87 @@ async def test_admin_can_edit_monetization_config_and_free_limits(
 
     public_config = await client.get("/api/v1/monetization/config")
     assert public_config.json()["ads_enabled"] is False
+
+
+async def test_aptitude_session_creation_is_blocked_past_the_free_daily_limit(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Phase 11 §64 — closes the Phase 10 gap: the backend, not just the mobile UI, is now
+    authoritative for the free-tier daily aptitude limit."""
+    await _seed_numerical_bank(db_session)
+    headers = await _user_headers(client, "limit-enforced@example.com")
+
+    first = await client.post(
+        "/api/v1/aptitude/sessions",
+        headers=headers,
+        json={"sections": ["numerical-test"], "difficulty": "EASY", "question_count": 1, "timing": "UNTIMED"},
+    )
+    assert first.status_code == 201
+
+    second = await client.post(
+        "/api/v1/aptitude/sessions",
+        headers=headers,
+        json={"sections": ["numerical-test"], "difficulty": "EASY", "question_count": 1, "timing": "UNTIMED"},
+    )
+    assert second.status_code == 402
+
+
+async def test_a_claimed_reward_unlocks_exactly_one_extra_aptitude_session_server_side(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_numerical_bank(db_session)
+    headers = await _user_headers(client, "reward-unlocks-session@example.com")
+
+    await _create_session(client, headers, sections=["numerical-test"], question_count=1)
+    blocked = await client.post(
+        "/api/v1/aptitude/sessions",
+        headers=headers,
+        json={"sections": ["numerical-test"], "difficulty": "EASY", "question_count": 1, "timing": "UNTIMED"},
+    )
+    assert blocked.status_code == 402
+
+    claim = await client.post(
+        "/api/v1/monetization/rewards/claim",
+        headers=headers,
+        json={"reward_type": "EXTRA_APTITUDE_TEST", "reference_id": "unlock-a-session"},
+    )
+    assert claim.status_code == 201
+
+    unlocked = await client.post(
+        "/api/v1/aptitude/sessions",
+        headers=headers,
+        json={"sections": ["numerical-test"], "difficulty": "EASY", "question_count": 1, "timing": "UNTIMED"},
+    )
+    assert unlocked.status_code == 201
+
+    # The reward was consumed by that one extra session — a third attempt is blocked again.
+    blocked_again = await client.post(
+        "/api/v1/aptitude/sessions",
+        headers=headers,
+        json={"sections": ["numerical-test"], "difficulty": "EASY", "question_count": 1, "timing": "UNTIMED"},
+    )
+    assert blocked_again.status_code == 402
+
+
+async def test_pro_users_are_never_blocked_by_the_free_daily_limit(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_numerical_bank(db_session)
+    headers = await _user_headers(client, "pro-unlimited@example.com")
+    user_id = await _current_user_id(client, headers)
+
+    from sqlalchemy import select
+
+    from app.models.user import SubscriptionTier, User
+
+    result = await db_session.execute(select(User).where(User.id == user_id))
+    result.scalar_one().subscription_tier = SubscriptionTier.PRO
+    await db_session.commit()
+
+    for _ in range(3):
+        response = await client.post(
+            "/api/v1/aptitude/sessions",
+            headers=headers,
+            json={"sections": ["numerical-test"], "difficulty": "EASY", "question_count": 1, "timing": "UNTIMED"},
+        )
+        assert response.status_code == 201

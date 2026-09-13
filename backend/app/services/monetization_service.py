@@ -79,6 +79,54 @@ class MonetizationService:
             "aptitude_remaining_today": None if is_pro else max(aptitude_limit - aptitude_used, 0),
         }
 
+    async def _enforce_daily_limit(
+        self, user: User, *, model, reward_type: RewardType, limit_key: str, feature_name: str
+    ) -> None:
+        """Phase 11 (spec §64) — closes the Phase 10 gap: the backend is now authoritative for
+        this, not just the mobile UI's soft-gate. Pro users are exempt. A Free user under today's
+        base limit passes with no side effect; over the base limit but holding an unused,
+        unexpired reward of the matching type consumes exactly one reward (marks it `used_at`) to
+        cover this single request; otherwise raises 402 Payment Required — a request for a
+        resource is exactly what's being denied, so this is the closest correct HTTP status. This
+        is a check-then-act sequence (see SYSTEM_AUDIT.md §26's documented race-window caveat for
+        the same pattern elsewhere in this codebase) — acceptable at current scale, not a true
+        row-level lock."""
+        if user.subscription_tier == SubscriptionTier.PRO and (
+            user.entitlement_expires_at is None or _as_aware_utc(user.entitlement_expires_at) > datetime.now(timezone.utc)
+        ):
+            return
+
+        now = datetime.now(timezone.utc)
+        used = await self._count_today(model, user.id, now)
+        limits = await system_settings_service.get_free_tier_limits(self.db)
+        base_limit = limits[limit_key]
+        if used < base_limit:
+            return
+
+        unused_rewards = await self.rewards.list_unused_for_user(user.id, reward_type=reward_type, now=now)
+        if unused_rewards:
+            await self.rewards.mark_used(unused_rewards[0], used_at=now)
+            await self.db.commit()
+            return
+
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Daily free {feature_name} limit reached. Watch a rewarded ad to unlock one more, "
+            "or come back tomorrow.",
+        )
+
+    async def enforce_ats_limit(self, user: User) -> None:
+        await self._enforce_daily_limit(
+            user, model=AtsAnalysis, reward_type=RewardType.EXTRA_ATS_ANALYSIS, limit_key="ats_daily",
+            feature_name="ATS analysis",
+        )
+
+    async def enforce_aptitude_limit(self, user: User) -> None:
+        await self._enforce_daily_limit(
+            user, model=TestSession, reward_type=RewardType.EXTRA_APTITUDE_TEST, limit_key="aptitude_daily",
+            feature_name="aptitude test",
+        )
+
     async def claim_reward(
         self, user_id: str, *, reward_type: RewardType, reference_id: str, source: str = "rewarded_ad"
     ) -> RewardUnlock:
