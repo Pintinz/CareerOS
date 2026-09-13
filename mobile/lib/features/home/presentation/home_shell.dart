@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../aptitude/presentation/preparation_hub_screen.dart";
 import "../../intelligence/presentation/intelligence_feed_tab.dart";
 import "../../opportunities/presentation/opportunities_tab.dart";
@@ -29,7 +30,6 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     final tabs = [
       HomeTab(onSelectTab: _selectTab),
       const OpportunitiesTab(),
@@ -40,27 +40,16 @@ class _HomeShellState extends State<HomeShell> {
 
     return Scaffold(
       body: SafeArea(bottom: false, child: IndexedStack(index: _index, children: tabs)),
-      bottomNavigationBar: DecoratedBox(
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: colors.border))),
-        child: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: _selectTab,
-          destinations: const [
-            NavigationDestination(icon: Icon(AppIcons.home), selectedIcon: Icon(AppIcons.homeSelected), label: "Home"),
-            NavigationDestination(
-              icon: Icon(AppIcons.opportunities),
-              selectedIcon: Icon(AppIcons.opportunitiesSelected),
-              label: "Opportunities",
-            ),
-            NavigationDestination(icon: Icon(AppIcons.prepare), selectedIcon: Icon(AppIcons.prepareSelected), label: "Prepare"),
-            NavigationDestination(
-              icon: Icon(AppIcons.intelligence),
-              selectedIcon: Icon(AppIcons.intelligenceSelected),
-              label: "Intelligence",
-            ),
-            NavigationDestination(icon: Icon(AppIcons.profile), selectedIcon: Icon(AppIcons.profileSelected), label: "Profile"),
-          ],
-        ),
+      bottomNavigationBar: CareerNavigationBar(
+        selectedIndex: _index,
+        onSelected: _selectTab,
+        items: const [
+          CareerNavItem(icon: AppIcons.home, selectedIcon: AppIcons.homeSelected, label: "Home"),
+          CareerNavItem(icon: AppIcons.opportunities, selectedIcon: AppIcons.opportunitiesSelected, label: "Opportunities"),
+          CareerNavItem(icon: AppIcons.prepare, selectedIcon: AppIcons.prepareSelected, label: "Prepare"),
+          CareerNavItem(icon: AppIcons.intelligence, selectedIcon: AppIcons.intelligenceSelected, label: "Intelligence"),
+          CareerNavItem(icon: AppIcons.profile, selectedIcon: AppIcons.profileSelected, label: "Profile"),
+        ],
       ),
     );
   }

@@ -16,11 +16,19 @@
 | `showCareerBottomSheet`, `showCareerDialog` | `career_sheet.dart` | Handle, 24 px top radius |
 | `NetworkImageWithFallback` | `network_image.dart` | Initials/icon fallback, cached |
 | `BottomActionBar` | `bottom_action_bar.dart` | Pinned primary + secondary CTA |
-| `AppTone` | `../design/app_tone.dart` | Semantic color resolution |
+| `CareerPillTabBar` | `career_pill_tab_bar.dart` | Filled-blue segmented pills for peer views (Opportunities, Saved) |
+| `FeedToolbar`, `FilterOptionGroup` | `feed_toolbar.dart` | Search + quick filters + "Filters · n" sheet entry |
+| `DetailScaffold`, `DetailSection`, `BulletList`, `FactRow`, `DetailSkeleton`, `DetailError` | `detail_layout.dart` | Collapsing banner hero, overlapping logo, pinned tabs, fully scrolling tab bodies; `showBanner: false` for records |
+| `CareerListGroup`, `CareerListRow` | `career_list.dart` | Settings/profile/secondary navigation rows in one surface |
+| `IconTile` | `icon_tile.dart` | Tinted icon square/circle |
+| `CareerNavigationBar` | `career_navigation_bar.dart` | Five-hub bottom nav; labels scale down instead of wrapping |
+| `AppTone` | `../design/app_tone.dart` | Semantic color resolution (`color`, `tint`, `onTint` for readable text on tints) |
 
 Domain cards live with their feature but are composed from these primitives, one implementation
-each: `JobCardTile` (jobs), `ScholarshipCardTile` (scholarships), `IntelligenceCardTile`
-(intelligence), `ApplicationCardTile` (applications), `CompanyHeader` (companies).
+each: `JobCardTile` (jobs, `compact:` carousel variant), `ScholarshipCardTile` (scholarships),
+`IntelligenceCardTile` (intelligence), `ApplicationCardTile` + `StageBadge`/`stageTone`/`stageIcon`
+(applications). Dates on cards come from `core/utils/date_labels.dart` (`DateLabels.published`,
+`DateLabels.deadline`, `deadlineTone`, `humanizeEnum`).
 
 ## Home
 Order: greeting hero (date, name, real stats) → recruitment attention cards (only when present) →

@@ -25,10 +25,15 @@ class JobCardTile extends StatelessWidget {
   final VoidCallback? onToggleSave;
   final bool compact;
 
-  String get _meta => [
-        if (job.location != null && job.location!.isNotEmpty) job.location!,
-        humanizeEnum(job.workMode),
-      ].join(" • ");
+  String get _meta {
+    final location = job.location?.trim() ?? "";
+    final workMode = humanizeEnum(job.workMode);
+    return [
+      if (location.isNotEmpty) location,
+      // Avoid "Remote • Remote" when the listing's location already states the work mode.
+      if (location.toLowerCase() != workMode.toLowerCase()) workMode,
+    ].join(" • ");
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +46,12 @@ class JobCardTile extends StatelessWidget {
         children: [
           TagChip(label: humanizeEnum(job.employmentType)),
           if (job.experienceLevel != null) TagChip(label: humanizeEnum(job.experienceLevel!)),
+          if (job.applicationDeadline != null && DateLabels.daysUntil(job.applicationDeadline!) >= 0 && DateLabels.daysUntil(job.applicationDeadline!) <= 14)
+            TagChip(
+              label: DateLabels.deadline(job.applicationDeadline!),
+              icon: AppIcons.deadline,
+              tone: DateLabels.deadlineTone(job.applicationDeadline!),
+            ),
           if (job.isUrgent) const TagChip(label: "Urgent", tone: AppTone.danger),
           if (job.isDemo) const TagChip(label: "DEMO"),
         ],
@@ -61,20 +72,6 @@ class JobCardTile extends StatelessWidget {
             Flexible(
               child: Text(DateLabels.published(job.publishedAt!), style: context.text.bodySmall, maxLines: 1),
             ),
-          if (job.applicationDeadline != null && DateLabels.daysUntil(job.applicationDeadline!) <= 14) ...[
-            if (job.publishedAt != null) Text("  ·  ", style: context.text.bodySmall),
-            Flexible(
-              child: Text(
-                DateLabels.deadline(job.applicationDeadline!),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.text.bodySmall?.copyWith(
-                  color: DateLabels.deadlineTone(job.applicationDeadline!).onTint(context),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
           const Spacer(),
           if (job.isVerified)
             Semantics(

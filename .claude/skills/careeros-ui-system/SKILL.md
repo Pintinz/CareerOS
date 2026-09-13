@@ -45,7 +45,11 @@ solution → components reused → functional risk. Then:
    **empty** (title + helpful sentence + next action) and **error** (friendly copy + Retry; never a
    raw exception) states.
 4. Check small phones (360 logical px), large text (1.3× scale), and dark mode.
-5. Run `flutter analyze` and the relevant widget tests.
+5. Run `flutter analyze` and the relevant widget tests. Add new top-level screens to
+   `mobile/test/ui_audit/ui_audit_test.dart` — it renders each screen in light + dark at 360dp and at
+   320dp with 1.3× text and fails on any overflow. For visual QA without a backend:
+   `flutter test test/ui_audit --dart-define=UI_AUDIT_CAPTURE=true` → `mobile/build/ui_audit/*.png`
+   (button/app-bar labels render as blocks there — a test-font artifact, not a bug).
 
 Screen quality questions are in `references/ux-rules.md` — go through them before calling a screen done.
 

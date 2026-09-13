@@ -143,9 +143,11 @@ class _ScholarshipHeader extends StatelessWidget {
             children: [
               Icon(AppIcons.deadline, size: 16, color: DateLabels.deadlineTone(deadline).onTint(context)),
               const SizedBox(width: 6),
-              Text(
-                "${DateLabels.deadline(deadline)} · ${DateLabels.shortDate(deadline)}",
-                style: context.text.titleSmall?.copyWith(color: DateLabels.deadlineTone(deadline).onTint(context)),
+              Flexible(
+                child: Text(
+                  DateLabels.daysUntil(deadline) <= 30 ? "${DateLabels.deadline(deadline)} · ${DateLabels.shortDate(deadline)}" : DateLabels.deadline(deadline),
+                  style: context.text.titleSmall?.copyWith(color: DateLabels.deadlineTone(deadline).onTint(context)),
+                ),
               ),
             ],
           ),

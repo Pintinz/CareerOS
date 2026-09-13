@@ -37,6 +37,9 @@ Do not introduce feature-specific colors. If something needs color, map it to a 
 Dark mode is designed, not inverted: surfaces step up in lightness for elevation (instead of
 shadows), text is off-white, primary shifts to `brightBlue` for contrast, tinted backgrounds use
 lower alpha. Tone tints: `tone.color.withValues(alpha: isDark ? 0.18 : 0.10)` via `AppTone.tint(context)`.
+Text placed on a tint uses `AppTone.onTint(context)` (amber/cyan/green are darkened in light mode so
+small labels stay readable). Theme mode is user-selectable (Settings → Appearance) and persisted in
+`AppPreferences` via `themeModeProvider`.
 
 ## Typography — `AppTypography` → `Theme.of(context).textTheme` (`context.text`)
 Family: **Plus Jakarta Sans** preferred (not yet bundled) → Inter → SF Pro / Roboto (platform

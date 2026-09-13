@@ -34,14 +34,4 @@ abstract final class AppColors {
   static const darkTextPrimary = Color(0xFFF6F9FF);
   static const darkTextSecondary = Color(0xFF9AA9BD);
   static const darkBorder = Color(0xFF1D3352);
-
-  // ---------------------------------------------------------------------------------------------
-  // Legacy aliases kept only while screens migrate to the design system. They are light-mode
-  // values and will not adapt to dark mode — new code must not use them.
-  // ---------------------------------------------------------------------------------------------
-  static const danger = error;
-  static const background = lightBackground;
-  static const card = lightSurface;
-  static const text = lightTextPrimary;
-  static const muted = lightTextSecondary;
 }

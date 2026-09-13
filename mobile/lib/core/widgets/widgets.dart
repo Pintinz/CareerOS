@@ -6,6 +6,7 @@ export "app_search_field.dart";
 export "bottom_action_bar.dart";
 export "career_card.dart";
 export "career_list.dart";
+export "career_navigation_bar.dart";
 export "career_pill_tab_bar.dart";
 export "career_progress.dart";
 export "career_sheet.dart";
