@@ -17,7 +17,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `27d23bb` — Phase 7.5 commit-hash doc fix.
 - `0ece72a` — Phase 7.5 follow-up: Mock Interview Automatic/Custom Mix builder UI.
 - `2b46386` — Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
-- Phase 9 (Admin CMS, Content Operations & Operational Monitoring) — see below (tagged `phase-9-admin-cms`).
+- `4fc6639` — Phase 9 (Admin CMS, Content Operations & Operational Monitoring) backend + admin web (tagged `phase-9-admin-cms`).
 
 ## Environment notes (read before assuming anything is verified)
 
