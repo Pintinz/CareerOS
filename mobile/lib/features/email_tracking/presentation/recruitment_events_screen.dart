@@ -3,8 +3,9 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/email_tracking_models.dart";
 import "email_tracking_providers.dart";
 
@@ -20,27 +21,37 @@ class RecruitmentEventsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text("Application Updates")),
       body: eventsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.userMessage, style: const TextStyle(color: AppColors.danger))),
+        loading: () => const SkeletonList(),
+        error: (e, _) => ErrorState(
+          title: "We couldn't load your updates",
+          message: e.userMessage,
+          onRetry: () => ref.invalidate(recruitmentEventsProvider),
+        ),
         data: (events) {
           if (events.isEmpty) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text("No recruitment updates detected yet.", style: TextStyle(color: AppColors.muted)),
-              ),
+            return const EmptyState(
+              icon: AppIcons.email,
+              title: "No recruitment updates yet",
+              message: "When Smart Application Tracking spots an assessment invite, interview or offer, it appears here for you to review.",
             );
           }
+          final needsReview = events.where((e) => e.needsReview).toList();
+          final reviewed = events.where((e) => !e.needsReview).toList();
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(recruitmentEventsProvider),
-            child: ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: events.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final event = events[index];
-                return _EventCard(event: event, onTap: () => context.push("/settings/tracking/events/${event.id}"));
-              },
+            child: ListView(
+              padding: AppSpacing.page,
+              children: [
+                if (needsReview.isNotEmpty) ...[
+                  SectionHeader(title: "Needs review", subtitle: "${needsReview.length} waiting for your confirmation"),
+                  _EventGroup(events: needsReview),
+                ],
+                if (reviewed.isNotEmpty) ...[
+                  if (needsReview.isNotEmpty) Gap.section,
+                  const SectionHeader(title: "Recently reviewed"),
+                  _EventGroup(events: reviewed),
+                ],
+              ],
             ),
           );
         },
@@ -49,32 +60,25 @@ class RecruitmentEventsScreen extends ConsumerWidget {
   }
 }
 
-class _EventCard extends StatelessWidget {
-  const _EventCard({required this.event, required this.onTap});
+class _EventGroup extends StatelessWidget {
+  const _EventGroup({required this.events});
 
-  final RecruitmentEmailEvent event;
-  final VoidCallback onTap;
+  final List<RecruitmentEmailEvent> events;
 
   @override
   Widget build(BuildContext context) {
-    final needsReview = event.needsReview;
-    return Card(
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(
-          needsReview ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
-          color: needsReview ? AppColors.blue : AppColors.muted,
-        ),
-        title: Text(
-          event.detectedStage != null ? "Possible ${event.detectedStage!.label} update" : "Recruitment email",
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          "${event.senderDomain} · ${DateFormat.yMMMd().format(event.receivedAt)} · ${_statusLabel(event.status)}",
-          style: const TextStyle(fontSize: 12),
-        ),
-        trailing: event.confidenceLabel != null ? _ConfidenceBadge(label: event.confidenceLabel!) : null,
-      ),
+    return CareerListGroup(
+      children: [
+        for (final event in events)
+          CareerListRow(
+            icon: event.needsReview ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
+            tone: event.needsReview ? AppTone.primary : AppTone.neutral,
+            title: event.detectedStage != null ? "Possible ${event.detectedStage!.label} update" : "Recruitment email",
+            subtitle: "${event.senderDomain} · ${DateFormat.yMMMd().format(event.receivedAt)} · ${_statusLabel(event.status)}",
+            trailing: event.confidenceLabel != null ? _ConfidenceBadge(label: event.confidenceLabel!) : null,
+            onTap: () => context.push("/settings/tracking/events/${event.id}"),
+          ),
+      ],
     );
   }
 
@@ -95,15 +99,16 @@ class _ConfidenceBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (label) {
-      "HIGH" => AppColors.success,
-      "MEDIUM" => AppColors.warning,
-      _ => AppColors.muted,
+    final tone = switch (label) {
+      "HIGH" => AppTone.success,
+      "MEDIUM" => AppTone.warning,
+      _ => AppTone.neutral,
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700)),
-    );
+    final text = switch (label) {
+      "HIGH" => "High",
+      "MEDIUM" => "Medium",
+      _ => "Low",
+    };
+    return StatusChip(label: text, tone: tone, dense: true);
   }
 }

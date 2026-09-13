@@ -4,10 +4,11 @@ import "package:file_picker/file_picker.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../core/design/design.dart";
 import "../../../core/monetization/ad_placement.dart";
 import "../../../core/monetization/monetization_providers.dart";
 import "../../../core/utils/error_message.dart";
-import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "ats_providers.dart";
 import "ats_result_view.dart";
 
@@ -19,6 +20,8 @@ class AtsAnalyzeArgs {
   final String? jobTitle;
 }
 
+/// CV & Career Tools → Analyze CV. Rules-based ATS readiness against a listed job or a pasted
+/// job description. Only implemented tools are offered.
 class AtsAnalyzeScreen extends ConsumerStatefulWidget {
   const AtsAnalyzeScreen({super.key, this.args});
 
@@ -67,10 +70,7 @@ class _AtsAnalyzeScreenState extends ConsumerState<AtsAnalyzeScreen> {
     if (_hasJob) {
       await controller.analyze(cvDocumentId: _selectedCvId, jobId: widget.args!.jobId);
     } else {
-      await controller.analyze(
-        cvDocumentId: _selectedCvId,
-        jobDescription: _jobDescriptionController.text,
-      );
+      await controller.analyze(cvDocumentId: _selectedCvId, jobDescription: _jobDescriptionController.text);
     }
     // Spec §18: a natural pause point (after the result is already shown), never before/during
     // the analysis itself. AdService's own frequency controller decides whether this actually
@@ -84,93 +84,159 @@ class _AtsAnalyzeScreenState extends ConsumerState<AtsAnalyzeScreen> {
   Widget build(BuildContext context) {
     final cvsAsync = ref.watch(cvListProvider);
     final analysisState = ref.watch(atsAnalysisControllerProvider);
+    final colors = context.colors;
+
+    if (analysisState.value != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text("CV Analysis")),
+        body: AtsResultView(
+          analysis: analysisState.value!,
+          onAnalyzeAgain: () => ref.read(atsAnalysisControllerProvider.notifier).reset(),
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Analyze CV")),
-      body: analysisState.value != null
-          ? AtsResultView(
-              analysis: analysisState.value!,
-              onAnalyzeAgain: () => ref.read(atsAnalysisControllerProvider.notifier).reset(),
-            )
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.args?.jobTitle != null) ...[
-                    Text("Analyzing against:", style: Theme.of(context).textTheme.bodyMedium),
-                    Text(widget.args!.jobTitle!, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 20),
-                  ],
-                  Text("1. Choose a CV", style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  cvsAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Text(e.userMessage, style: const TextStyle(color: AppColors.danger)),
-                    data: (cvs) => RadioGroup<String>(
-                      groupValue: _selectedCvId,
-                      onChanged: (value) => setState(() => _selectedCvId = value),
+      appBar: AppBar(title: const Text("CV & Career Tools")),
+      bottomNavigationBar: BottomActionBar(
+        primary: PrimaryButton(
+          label: "Analyze CV",
+          icon: Icons.document_scanner_outlined,
+          isLoading: analysisState.isLoading,
+          onPressed: _selectedCvId == null ? null : _runAnalysis,
+        ),
+      ),
+      body: ListView(
+        padding: AppSpacing.page,
+        children: [
+          CareerCard(
+            variant: CareerCardVariant.feature,
+            child: Row(
+              children: [
+                const IconTile(icon: AppIcons.cv, tone: AppTone.purple, size: 52),
+                Gap.md,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Analyze CV", style: context.text.titleLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        "See how your CV reads to applicant tracking systems and which keywords a role expects.",
+                        style: context.text.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (widget.args?.jobTitle != null) ...[
+            Gap.md,
+            InsightCard(icon: AppIcons.job, title: "Matching against", message: widget.args!.jobTitle!),
+          ],
+          Gap.xl,
+          const _StepHeader(number: 1, title: "Choose a CV"),
+          Gap.sm,
+          cvsAsync.when(
+            loading: () => const SkeletonCard(),
+            error: (e, _) => ErrorState(compact: true, message: e.userMessage, onRetry: () => ref.invalidate(cvListProvider)),
+            data: (cvs) => cvs.isEmpty
+                ? CareerCard(
+                    variant: CareerCardVariant.muted,
+                    child: Row(
+                      children: [
+                        const IconTile(icon: Icons.upload_file_rounded, size: 40),
+                        Gap.sm,
+                        Expanded(child: Text("No CVs uploaded yet. Upload one to get started.", style: context.text.bodyMedium)),
+                      ],
+                    ),
+                  )
+                : RadioGroup<String>(
+                    groupValue: _selectedCvId,
+                    onChanged: (value) => setState(() => _selectedCvId = value),
+                    child: Material(
+                      color: colors.surface,
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.cardAll, side: BorderSide(color: colors.border)),
+                      clipBehavior: Clip.antiAlias,
                       child: Column(
                         children: [
-                          for (final cv in cvs)
+                          for (final (i, cv) in cvs.indexed) ...[
+                            if (i > 0) Divider(height: 1, indent: 56, color: colors.border),
                             RadioListTile<String>(
                               value: cv.id,
-                              title: Text(cv.name),
-                              subtitle: cv.isPrimary ? const Text("Primary CV") : null,
+                              secondary: const Icon(AppIcons.cv),
+                              title: Text(cv.name, style: context.text.titleSmall),
+                              subtitle: cv.isPrimary
+                                  ? Text("Primary CV", style: context.text.bodySmall?.copyWith(color: colors.primary))
+                                  : (cv.originalFilename != null ? Text(cv.originalFilename!, style: context.text.bodySmall) : null),
                             ),
-                          if (cvs.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 8),
-                              child: Text("No CVs uploaded yet.", style: TextStyle(color: AppColors.muted)),
-                            ),
+                          ],
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: _uploading ? null : _uploadNewCv,
-                    icon: _uploading
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.upload_file),
-                    label: Text(_uploading ? "Uploading..." : "Upload a new CV (PDF, DOCX, or TXT)"),
-                  ),
-                  if (_uploadError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_uploadError!, style: const TextStyle(color: AppColors.danger)),
-                  ],
-                  if (!_hasJob) ...[
-                    const SizedBox(height: 24),
-                    Text("2. Paste the job description", style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _jobDescriptionController,
-                      maxLines: 6,
-                      decoration: const InputDecoration(hintText: "Paste the job description here..."),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  if (analysisState.hasError)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(analysisState.error!.userMessage, style: const TextStyle(color: AppColors.danger)),
-                    ),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: analysisState.isLoading || _selectedCvId == null ? null : _runAnalysis,
-                      child: analysisState.isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text("Analyze"),
-                    ),
-                  ),
-                ],
-              ),
+          ),
+          Gap.sm,
+          AppOutlineButton(
+            label: _uploading ? "Uploading…" : "Upload a new CV (PDF, DOCX or TXT)",
+            icon: Icons.upload_file_rounded,
+            isLoading: _uploading,
+            onPressed: _uploadNewCv,
+          ),
+          if (_uploadError != null) ...[
+            Gap.xs,
+            Text(_uploadError!, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+          ],
+          if (!_hasJob) ...[
+            Gap.xl,
+            const _StepHeader(number: 2, title: "Paste the job description"),
+            Gap.xs,
+            Text("Adding a job description checks keywords and requirements for that specific role.", style: context.text.bodySmall),
+            Gap.sm,
+            TextField(
+              controller: _jobDescriptionController,
+              minLines: 5,
+              maxLines: 12,
+              decoration: const InputDecoration(hintText: "Paste the job description here…", alignLabelWithHint: true),
             ),
+          ],
+          if (analysisState.hasError) ...[
+            Gap.md,
+            Text(analysisState.error!.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+          ],
+          Gap.lg,
+          Text(
+            "CareerOS estimates readiness against common ATS parsing patterns. It can't see any employer's own screening system.",
+            style: context.text.labelSmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepHeader extends StatelessWidget {
+  const _StepHeader({required this.number, required this.title});
+
+  final int number;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Row(
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
+          alignment: Alignment.center,
+          child: Text("$number", style: context.text.labelMedium?.copyWith(color: Colors.white)),
+        ),
+        Gap.xs,
+        Semantics(header: true, child: Text(title, style: context.text.titleMedium)),
+      ],
     );
   }
 }

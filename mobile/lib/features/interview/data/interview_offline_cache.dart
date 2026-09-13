@@ -89,6 +89,15 @@ class InterviewOfflineCache {
 
   Future<void> clearSession(String sessionId) => _prefs.remove("$_sessionKeyPrefix$sessionId");
 
+  /// Removes every cached session and pending mutation — used on logout and account deletion so
+  /// no private answers remain on the device for the next user.
+  Future<void> clearAll() async {
+    for (final key in _prefs.getKeys().where((k) => k.startsWith(_sessionKeyPrefix)).toList()) {
+      await _prefs.remove(key);
+    }
+    await _prefs.remove(_mutationsKey);
+  }
+
   List<PendingInterviewMutation> pendingMutationsFor(String sessionId) =>
       _allMutations().where((m) => m.sessionId == sessionId).toList();
 

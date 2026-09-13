@@ -4,7 +4,7 @@ import "package:go_router/go_router.dart";
 
 import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
-import "../../../widgets/phase_pending_placeholder.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../jobs/data/job_models.dart";
 import "../../jobs/presentation/job_card.dart";
 import "../../jobs/presentation/job_providers.dart";
@@ -49,12 +49,12 @@ class _SavedItemsScreenState extends ConsumerState<SavedItemsScreen> with Single
     return Scaffold(
       appBar: AppBar(
         title: const Text("Saved"),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.blue,
-          unselectedLabelColor: AppColors.muted,
-          indicatorColor: AppColors.blue,
-          tabs: const [Tab(text: "Jobs"), Tab(text: "Scholarships")],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, 0, AppSpacing.pageH, AppSpacing.sm),
+            child: CareerPillTabBar(controller: _tabController, tabs: const ["Jobs", "Scholarships"]),
+          ),
         ),
       ),
       body: TabBarView(
@@ -72,22 +72,24 @@ class _SavedJobsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final jobsAsync = ref.watch(_savedJobsProvider);
     return jobsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.userMessage)),
+      loading: () => const SkeletonList(),
+      error: (e, _) => ErrorState(title: "We couldn't load saved jobs", message: e.userMessage, onRetry: () => ref.invalidate(_savedJobsProvider)),
       data: (jobs) {
         if (jobs.isEmpty) {
-          return const PhasePendingPlaceholder(
-            icon: Icons.bookmark_border,
-            title: "No saved jobs",
-            message: "Tap the bookmark icon on a job to save it here.",
+          return EmptyState(
+            icon: AppIcons.saved,
+            title: "No saved jobs yet",
+            message: "Bookmark jobs to compare them later and come back when you're ready to apply.",
+            actionLabel: "Browse Opportunities",
+            onAction: () => context.go("/home?tab=opportunities"),
           );
         }
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(_savedJobsProvider),
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: AppSpacing.page,
             itemCount: jobs.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            separatorBuilder: (context, index) => Gap.sm,
             itemBuilder: (context, index) {
               final job = jobs[index];
               return JobCardTile(
@@ -114,22 +116,28 @@ class _SavedScholarshipsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scholarshipsAsync = ref.watch(_savedScholarshipsProvider);
     return scholarshipsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.userMessage)),
+      loading: () => const SkeletonList(),
+      error: (e, _) => ErrorState(
+        title: "We couldn't load saved scholarships",
+        message: e.userMessage,
+        onRetry: () => ref.invalidate(_savedScholarshipsProvider),
+      ),
       data: (scholarships) {
         if (scholarships.isEmpty) {
-          return const PhasePendingPlaceholder(
-            icon: Icons.bookmark_border,
-            title: "No saved scholarships",
-            message: "Tap the bookmark icon on a scholarship to save it here.",
+          return EmptyState(
+            icon: AppIcons.saved,
+            title: "No saved scholarships yet",
+            message: "Bookmark scholarships to keep track of deadlines and requirements.",
+            actionLabel: "Browse Opportunities",
+            onAction: () => context.go("/home?tab=opportunities"),
           );
         }
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(_savedScholarshipsProvider),
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            padding: AppSpacing.page,
             itemCount: scholarships.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 12),
+            separatorBuilder: (context, index) => Gap.sm,
             itemBuilder: (context, index) {
               final scholarship = scholarships[index];
               return ScholarshipCardTile(

@@ -15,16 +15,32 @@ class CurrentUser {
 }
 
 class UserProfile {
-  const UserProfile({this.fullName, this.professionalTitle, this.location});
+  const UserProfile({
+    this.fullName,
+    this.profilePictureUrl,
+    this.professionalTitle,
+    this.location,
+    this.yearsOfExperience,
+    this.highestEducation,
+    this.fieldOfStudy,
+  });
 
   final String? fullName;
+  final String? profilePictureUrl;
   final String? professionalTitle;
   final String? location;
+  final int? yearsOfExperience;
+  final String? highestEducation;
+  final String? fieldOfStudy;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
         fullName: json["full_name"] as String?,
+        profilePictureUrl: json["profile_picture_url"] as String?,
         professionalTitle: json["professional_title"] as String?,
         location: json["location"] as String?,
+        yearsOfExperience: json["years_of_experience"] as int?,
+        highestEducation: json["highest_education"] as String?,
+        fieldOfStudy: json["field_of_study"] as String?,
       );
 }
 
@@ -43,11 +59,14 @@ class ProfileRepository {
     return UserProfile.fromJson(response.data!);
   }
 
-  Future<UserProfile> updateProfile({String? fullName, String? location}) async {
-    final response = await _apiClient.put<Map<String, dynamic>>(
-      "/profile",
-      data: {if (fullName != null) "full_name": fullName, if (location != null) "location": location},
-    );
+  /// Sends only the keys present in [fields] (API semantics: omitted = unchanged, null = cleared).
+  Future<UserProfile> updateProfileFields(Map<String, Object?> fields) async {
+    final response = await _apiClient.put<Map<String, dynamic>>("/profile", data: fields);
     return UserProfile.fromJson(response.data!);
   }
+
+  Future<UserProfile> updateProfile({String? fullName, String? location}) => updateProfileFields({
+        if (fullName != null) "full_name": fullName,
+        if (location != null) "location": location,
+      });
 }

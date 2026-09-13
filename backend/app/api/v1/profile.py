@@ -31,7 +31,8 @@ async def update_profile(
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
 
-    profile = await repo.update(profile, **payload.model_dump())
+    # exclude_unset: fields the client didn't send stay untouched; an explicit null clears that field.
+    profile = await repo.update(profile, **payload.model_dump(exclude_unset=True))
     await db.commit()
     await db.refresh(profile)
     return ProfileOut.model_validate(profile)

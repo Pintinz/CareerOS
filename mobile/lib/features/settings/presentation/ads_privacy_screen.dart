@@ -1,8 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../core/monetization/monetization_providers.dart";
 import "../../../core/design/design.dart";
+import "../../../core/monetization/monetization_providers.dart";
+import "../../../core/widgets/widgets.dart";
 
 /// Settings → Ads & Privacy (spec §24-25). Shows consent/personalization status and CareerOS Pro
 /// status, and lets the user revisit Google's own privacy-options form when required — never a
@@ -37,8 +38,7 @@ class _AdsPrivacyScreenState extends ConsumerState<AdsPrivacyScreen> {
       await ref.read(consentManagerProvider).showPrivacyOptionsForm();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("Couldn't open privacy options right now.")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't open privacy options right now.")));
       }
     }
   }
@@ -47,50 +47,55 @@ class _AdsPrivacyScreenState extends ConsumerState<AdsPrivacyScreen> {
   Widget build(BuildContext context) {
     final entitlement = ref.watch(entitlementProvider).valueOrNull;
     final config = ref.watch(monetizationConfigProvider).valueOrNull;
+    final isPro = entitlement?.isPro ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Ads & Privacy")),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: AppSpacing.page,
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.workspace_premium_outlined, color: AppColors.blue),
-              title: const Text("CareerOS Pro status"),
-              subtitle: Text(entitlement?.isPro ?? false ? "Pro (no ads)" : "CareerOS Free"),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.ads_click_outlined, color: AppColors.blue),
-              title: const Text("Advertising"),
-              subtitle: Text(
-                entitlement?.isPro ?? false
+          CareerListGroup(
+            title: "Your plan",
+            children: [
+              CareerListRow(
+                icon: AppIcons.pro,
+                tone: AppTone.purple,
+                title: "CareerOS Pro status",
+                subtitle: isPro ? "Pro (no ads)" : "CareerOS Free",
+              ),
+              CareerListRow(
+                icon: Icons.ads_click_outlined,
+                tone: AppTone.neutral,
+                title: "Advertising",
+                subtitle: isPro
                     ? "Disabled — CareerOS Pro shows no ads."
                     : config?.adsEnabled ?? true
                         ? "Enabled — supports CareerOS at no cost to you."
                         : "Currently disabled.",
               ),
-            ),
+            ],
           ),
           if (_privacyOptionsRequired == true) ...[
-            const SizedBox(height: 12),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.tune_outlined, color: AppColors.blue),
-                title: const Text("Privacy choices"),
-                subtitle: const Text("Review or change your ad personalization choices"),
-                trailing: const Icon(Icons.chevron_right, color: AppColors.muted),
-                onTap: _openPrivacyOptions,
-              ),
+            Gap.lg,
+            CareerListGroup(
+              title: "Choices",
+              children: [
+                CareerListRow(
+                  icon: Icons.tune_outlined,
+                  title: "Privacy choices",
+                  subtitle: "Review or change your ad personalization choices",
+                  onTap: _openPrivacyOptions,
+                ),
+              ],
             ),
           ],
-          const SizedBox(height: 20),
-          Text(
-            "CareerOS never uses your CV, application history, email content, interview "
-            "recordings, or other private career data to target ads.",
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+          Gap.lg,
+          const InsightCard(
+            icon: AppIcons.privacy,
+            tone: AppTone.success,
+            title: "Your career data is never used for ads",
+            message:
+                "CareerOS never uses your CV, application history, email content, interview recordings, or other private career data to target ads.",
           ),
         ],
       ),

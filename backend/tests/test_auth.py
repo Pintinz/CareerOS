@@ -93,3 +93,77 @@ async def test_delete_account(client: AsyncClient) -> None:
 
     me_response = await client.get("/api/v1/auth/me", headers=headers)
     assert me_response.status_code == 401
+
+
+async def test_account_deletion_removes_every_row_belonging_to_the_user(client: AsyncClient, db_session) -> None:
+    """Phase 11 §80-81: store policies and PRIVACY.md promise account deletion removes the user's
+    data. Seed data across many user-owned tables, delete the account, and check every table that
+    references users — not just that the login stops working."""
+    import io
+
+    from sqlalchemy import text
+
+    from app.db.base import Base
+
+    headers = {"Authorization": f"Bearer {(await _register(client, 'erase-me@example.com', 'correcthorse1')).json()['access_token']}"}
+    other = {"Authorization": f"Bearer {(await _register(client, 'keep-me@example.com', 'correcthorse1')).json()['access_token']}"}
+    user_id = (await client.get("/api/v1/auth/me", headers=headers)).json()["id"]
+
+    app_resp = await client.post(
+        "/api/v1/applications", headers=headers, json={"company_name": "Acme", "role_title": "Technician"}
+    )
+    await client.post(f"/api/v1/applications/{app_resp.json()['id']}/notes", headers=headers, json={"body": "call back"})
+    await client.post("/api/v1/applications", headers=other, json={"company_name": "Keep", "role_title": "Kept"})
+    await client.post(
+        "/api/v1/ats/cv", headers=headers, files={"file": ("cv.txt", io.BytesIO(b"PLC maintenance technician"), "text/plain")}
+    )
+    await client.post("/api/v1/star-stories", headers=headers, json={"title": "Outage fix", "category": "PROBLEM_SOLVING"})
+    await client.post("/api/v1/push/devices", headers=headers, json={"platform": "ANDROID", "token": "tok-erase"})
+    await client.put("/api/v1/push/preferences", headers=headers, json={"deadlines": False})
+    await client.post(
+        "/api/v1/monetization/rewards/claim", headers=headers, json={"reward_type": "EXTRA_ATS_ANALYSIS", "reference_id": "erase-ref"}
+    )
+
+    user_tables = [
+        (table.name, fk.parent.name)
+        for table in Base.metadata.sorted_tables
+        for fk in table.foreign_keys
+        if fk.column.table.name == "users"
+    ]
+
+    async def owned_rows() -> dict[str, int]:
+        counts = {}
+        for table_name, column in user_tables:
+            result = await db_session.execute(text(f'SELECT count(*) FROM "{table_name}" WHERE "{column}" = :uid'), {"uid": user_id})
+            counts[table_name] = result.scalar_one()
+        return counts
+
+    before = await owned_rows()
+    assert sum(before.values()) >= 6, before  # the seeding above actually created user-owned rows
+
+    assert (await client.delete("/api/v1/auth/me", headers=headers)).status_code == 204
+
+    after = await owned_rows()
+    assert all(count == 0 for count in after.values()), after
+    note_count = (await db_session.execute(text("SELECT count(*) FROM application_notes"))).scalar_one()
+    assert note_count == 0  # rows owned indirectly (via the deleted application) are gone too
+    # Another user's data is untouched.
+    assert (await client.get("/api/v1/applications", headers=other)).json()["total"] == 1
+
+
+async def test_profile_update_leaves_unsent_fields_untouched(client: AsyncClient) -> None:
+    token = (await _register(client, "partial@example.com", "correcthorse1")).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    await client.put(
+        "/api/v1/profile", headers=headers, json={"full_name": "Ada Obi", "professional_title": "Process Engineer"}
+    )
+    response = await client.put("/api/v1/profile", headers=headers, json={"location": "Lagos"})
+
+    body = response.json()
+    assert body["location"] == "Lagos"
+    assert body["full_name"] == "Ada Obi"  # previously wiped to null by a partial update
+    assert body["professional_title"] == "Process Engineer"
+
+    cleared = await client.put("/api/v1/profile", headers=headers, json={"professional_title": None})
+    assert cleared.json()["professional_title"] is None  # explicit null still clears

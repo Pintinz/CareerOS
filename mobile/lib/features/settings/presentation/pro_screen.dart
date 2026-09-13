@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 
 /// Settings → CareerOS Pro (spec §10/§57). No purchase flow exists — this screen must never
 /// imply one does. Shows the prepared entitlement architecture (ad-free, unlimited usage,
@@ -10,74 +11,62 @@ class ProScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    const features = [
+      (Icons.block_outlined, "No ads"),
+      (AppIcons.cv, "Unlimited ATS analyses"),
+      (AppIcons.aptitude, "Unlimited aptitude tests"),
+      (AppIcons.analytics, "Advanced analytics"),
+      (AppIcons.interview, "Premium interview practice content"),
+      (Icons.file_copy_outlined, "Multiple CV features"),
+    ];
+
     return Scaffold(
       appBar: AppBar(title: const Text("CareerOS Pro")),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: AppSpacing.page,
         children: [
-          Card(
-            color: AppColors.blue.withValues(alpha: 0.06),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.workspace_premium_outlined, color: AppColors.blue, size: 28),
-                      const SizedBox(width: 10),
-                      Text("CareerOS Pro", style: Theme.of(context).textTheme.titleLarge),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const _ComingSoonBadge(),
-                ],
-              ),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              borderRadius: AppRadius.heroAll,
+              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors.heroGradient),
+              border: colors.isDark ? Border.all(color: colors.border) : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    CareerOSMark(size: 36, onDark: true),
+                    Gap.sm,
+                    Icon(AppIcons.pro, color: Colors.white),
+                  ],
+                ),
+                Gap.md,
+                Text("CareerOS Pro", style: context.text.headlineSmall?.copyWith(color: Colors.white)),
+                Gap.xs,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: AppRadius.pillAll),
+                  child: Text("Coming Soon", style: context.text.labelMedium?.copyWith(color: Colors.white)),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          const _ProFeatureTile(icon: Icons.block_outlined, title: "No ads"),
-          const _ProFeatureTile(icon: Icons.fact_check_outlined, title: "Unlimited ATS analyses"),
-          const _ProFeatureTile(icon: Icons.quiz_outlined, title: "Unlimited aptitude tests"),
-          const _ProFeatureTile(icon: Icons.insights_outlined, title: "Advanced analytics"),
-          const _ProFeatureTile(icon: Icons.school_outlined, title: "Premium interview practice content"),
-          const _ProFeatureTile(icon: Icons.description_outlined, title: "Multiple CV features"),
-          const SizedBox(height: 20),
+          Gap.section,
+          CareerListGroup(
+            title: "What's planned",
+            children: [for (final (icon, title) in features) CareerListRow(icon: icon, tone: AppTone.purple, title: title)],
+          ),
+          Gap.lg,
           Text(
             "CareerOS Pro purchases are not yet available. This screen shows what's planned — "
             "there is nothing to buy here yet, and nothing on this screen will charge you.",
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+            style: context.text.bodySmall,
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ComingSoonBadge extends StatelessWidget {
-  const _ComingSoonBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: AppColors.muted.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-      child: const Text("Coming Soon", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.muted)),
-    );
-  }
-}
-
-class _ProFeatureTile extends StatelessWidget {
-  const _ProFeatureTile({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.muted),
-      title: Text(title),
     );
   }
 }

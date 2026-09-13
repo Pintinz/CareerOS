@@ -27,6 +27,12 @@ class AuthRepository {
 
   Future<void> logout() => _secureStorage.clear();
 
+  /// Permanently deletes the account server-side (all user-owned data), then clears the session.
+  Future<void> deleteAccount() async {
+    await _apiClient.delete<void>("/auth/me");
+    await _secureStorage.clear();
+  }
+
   Future<void> _storeTokens(Map<String, dynamic> body) => _secureStorage.saveTokens(
         accessToken: body["access_token"] as String,
         refreshToken: body["refresh_token"] as String,

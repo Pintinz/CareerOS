@@ -19,8 +19,9 @@ class ProfileRepository:
         return profile
 
     async def update(self, profile: Profile, **fields: object) -> Profile:
+        # Callers pass only the fields to change (see api/v1/profile.py, exclude_unset) — an explicit None
+        # clears that field.
         for key, value in fields.items():
-            if value is not None:
-                setattr(profile, key, value)
+            setattr(profile, key, value)
         await self.db.flush()
         return profile

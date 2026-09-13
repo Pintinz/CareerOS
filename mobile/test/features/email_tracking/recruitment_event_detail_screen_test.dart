@@ -1,3 +1,4 @@
+import 'package:careeros/core/widgets/widgets.dart';
 import 'package:careeros/features/applications/data/application_models.dart';
 import 'package:careeros/features/applications/presentation/application_providers.dart';
 import 'package:careeros/features/email_tracking/data/email_tracking_models.dart';
@@ -51,7 +52,7 @@ void main() {
     await tester.pumpWidget(_wrapList(emailRepo, appRepo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(Card).first);
+    await tester.tap(find.byType(CareerListRow).first);
     await tester.pumpAndSettle();
 
     expect(find.text('APTITUDE TEST'), findsOneWidget);
@@ -75,7 +76,7 @@ void main() {
 
     await tester.pumpWidget(_wrapList(emailRepo, appRepo));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Card).first);
+    await tester.tap(find.byType(CareerListRow).first);
     await tester.pumpAndSettle();
 
     expect(find.textContaining(event.subject), findsNothing);
@@ -95,7 +96,7 @@ void main() {
 
     await tester.pumpWidget(_wrapList(emailRepo, appRepo));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Card).first);
+    await tester.tap(find.byType(CareerListRow).first);
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Ignore'));
@@ -123,7 +124,7 @@ void main() {
 
     await tester.pumpWidget(_wrapList(emailRepo, appRepo));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Card).first);
+    await tester.tap(find.byType(CareerListRow).first);
     await tester.pumpAndSettle();
 
     expect(find.text('Which Application Does This Belong To?'), findsOneWidget);

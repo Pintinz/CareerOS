@@ -2,6 +2,7 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../../core/app_providers.dart";
 import "../../../core/network/api_client.dart";
+import "../../profile/presentation/profile_providers.dart";
 import "../data/auth_repository.dart";
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -36,7 +37,24 @@ class AuthController extends AsyncNotifier<void> {
 
   Future<void> logout() async {
     await ref.read(authRepositoryProvider).logout();
+    await _clearLocalUserData();
     ref.invalidate(authStateProvider);
+  }
+
+  /// Deletes the account (spec: in-app deletion required by Google Play and the App Store). Throws
+  /// [ApiException] on failure so the caller can show it; local data is only wiped on success.
+  Future<void> deleteAccount() async {
+    await ref.read(authRepositoryProvider).deleteAccount();
+    await _clearLocalUserData();
+    ref.invalidate(authStateProvider);
+  }
+
+  /// Offline practice caches and user-scoped providers must not survive into another account.
+  Future<void> _clearLocalUserData() async {
+    await ref.read(aptitudeOfflineCacheProvider).clearAll();
+    await ref.read(interviewOfflineCacheProvider).clearAll();
+    ref.invalidate(userProfileProvider);
+    ref.invalidate(currentUserProvider);
   }
 
   String? get errorMessage {

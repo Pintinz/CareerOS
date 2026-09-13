@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../design/design.dart";
 import "../ad_placement.dart";
 import "../monetization_models.dart";
 import "../monetization_providers.dart";
@@ -9,7 +10,8 @@ import "../monetization_providers.dart";
 /// session? [Watch Ad & Unlock] / [Come Back Tomorrow]". Returns true only if a reward was
 /// actually granted (the SDK's real earned-reward callback fired AND the server-side idempotent
 /// claim succeeded) — the caller should proceed only on `true`. Never locks basic functionality:
-/// the user can always dismiss and simply not get the extra session (spec §14).
+/// the user can always dismiss and simply not get the extra session (spec §14). The dialog states
+/// exactly what is unlocked before any ad is shown.
 Future<bool> showRewardedUnlockDialog(
   BuildContext context, {
   required String title,
@@ -52,9 +54,7 @@ class _RewardedUnlockDialogState extends ConsumerState<_RewardedUnlockDialog> {
       _error = null;
     });
     try {
-      final granted = await ref
-          .read(adServiceProvider)
-          .showRewarded(placement: widget.placement, rewardType: widget.rewardType);
+      final granted = await ref.read(adServiceProvider).showRewarded(placement: widget.placement, rewardType: widget.rewardType);
       if (!mounted) return;
       if (granted) {
         Navigator.of(context).pop(true);
@@ -76,15 +76,18 @@ class _RewardedUnlockDialogState extends ConsumerState<_RewardedUnlockDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      icon: Icon(Icons.lock_open_rounded, color: context.colors.primary),
       title: Text(widget.title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.message),
+          Text(widget.message, style: context.text.bodyLarge),
+          Gap.sm,
+          Text("You'll watch a short ad, then get one extra session today.", style: context.text.bodySmall),
           if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            Gap.sm,
+            Text(_error!, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
           ],
         ],
       ),
@@ -96,7 +99,7 @@ class _RewardedUnlockDialogState extends ConsumerState<_RewardedUnlockDialog> {
         FilledButton(
           onPressed: _watching ? null : _watchAd,
           child: _watching
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Text("Watch Ad & Unlock"),
         ),
       ],

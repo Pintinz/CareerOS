@@ -3,12 +3,14 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../aptitude/data/aptitude_models.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
 import "../../applications/data/application_models.dart";
 import "../../applications/presentation/application_providers.dart";
+import "../../applications/presentation/stage_badge.dart";
 import "../../interview/data/interview_models.dart";
 import "../../interview/presentation/interview_configuration_screen.dart";
 import "../data/email_tracking_models.dart";
@@ -18,6 +20,7 @@ import "email_tracking_providers.dart";
 /// real, confirmed application-stage change (or is dismissed). `Confirm Stage` is the only button
 /// on this whole screen that can ever change `Application.currentStage`, and it does so purely by
 /// calling the existing confirm endpoint, which itself only ever calls the Phase 5 stage service.
+/// Recruitment intelligence, not an inbox: the email itself stays hidden until the user asks.
 class RecruitmentEventDetailScreen extends ConsumerStatefulWidget {
   const RecruitmentEventDetailScreen({super.key, required this.eventId});
 
@@ -54,8 +57,15 @@ class _RecruitmentEventDetailScreenState extends ConsumerState<RecruitmentEventD
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
+        icon: const Icon(Icons.check_circle_rounded, color: AppColors.success),
         title: const Text("Stage updated."),
-        content: Text(prepFlow == "aptitude" ? "Prepare for Aptitude Test" : prepFlow == "interview" ? "Prepare for Interview" : "Your application timeline has been updated."),
+        content: Text(
+          prepFlow == "aptitude"
+              ? "Prepare for Aptitude Test"
+              : prepFlow == "interview"
+                  ? "Prepare for Interview"
+                  : "Your application timeline has been updated.",
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text("Later")),
           if (prepFlow != null)
@@ -100,6 +110,7 @@ class _RecruitmentEventDetailScreenState extends ConsumerState<RecruitmentEventD
     final chosen = await showModalBottomSheet<String?>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (context) => _AmbiguousApplicationPicker(candidateIds: event.candidateApplicationIds),
     );
     if (chosen == null) return;
@@ -120,97 +131,121 @@ class _RecruitmentEventDetailScreenState extends ConsumerState<RecruitmentEventD
     return Scaffold(
       appBar: AppBar(title: const Text("Recruitment Update Detected")),
       body: eventAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.userMessage, style: const TextStyle(color: AppColors.danger))),
+        loading: () => const SkeletonList(itemCount: 2),
+        error: (e, _) => ErrorState(
+          title: "We couldn't load this update",
+          message: e.userMessage,
+          onRetry: () => ref.invalidate(recruitmentEventDetailProvider(widget.eventId)),
+        ),
         data: (event) => _buildBody(context, event),
       ),
     );
   }
 
   Widget _buildBody(BuildContext context, RecruitmentEmailEvent event) {
-    final applicationAsync = event.matchedApplicationId != null
-        ? ref.watch(applicationDetailProvider(event.matchedApplicationId!))
-        : null;
+    final applicationAsync = event.matchedApplicationId != null ? ref.watch(applicationDetailProvider(event.matchedApplicationId!)) : null;
+    final confidenceTone = switch (event.confidenceLabel) {
+      "HIGH" => AppTone.success,
+      "MEDIUM" => AppTone.warning,
+      _ => AppTone.neutral,
+    };
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (applicationAsync != null)
-            applicationAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
-              data: (application) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: AppSpacing.page,
+      children: [
+        if (applicationAsync != null)
+          applicationAsync.when(
+            loading: () => const SkeletonCard(),
+            error: (_, __) => const SizedBox.shrink(),
+            data: (application) => CareerCard(
+              child: Row(
                 children: [
-                  Text(application.companyName, style: Theme.of(context).textTheme.headlineSmall),
-                  Text(application.roleTitle, style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 16),
+                  NetworkImageWithFallback(url: null, fallbackText: application.companyName, size: 48),
+                  Gap.sm,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Matched application", style: context.text.labelSmall),
+                        Text(application.companyName, style: context.text.titleMedium),
+                        Text(application.roleTitle, style: context.text.bodyMedium),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-          if (event.status == RecruitmentEventStatus.ambiguous)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(color: AppColors.warning.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-              child: const Text(
-                "CareerOS found more than one of your applications this could belong to — pick the right one below.",
-                style: TextStyle(fontSize: 13),
-              ),
-            ),
-          if (event.detectedStage != null) ...[
-            const Text("Possible new stage", style: TextStyle(color: AppColors.muted, fontSize: 12)),
-            const SizedBox(height: 4),
-            Text(event.detectedStage!.label.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
-            const SizedBox(height: 8),
-          ],
-          if (event.confidenceLabel != null) ...[
-            Text("Confidence: ${_confidenceLabel(event.confidenceLabel!)}", style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 16),
-          ],
-          Text(
-            "Detected from:\nRecruitment email received ${DateFormat.yMMMd().format(event.receivedAt)}",
-            style: const TextStyle(color: AppColors.muted),
           ),
-          const SizedBox(height: 20),
-          TextButton.icon(
-            onPressed: () => setState(() => _showEmailDetails = !_showEmailDetails),
-            icon: Icon(_showEmailDetails ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-            label: const Text("View Email Details"),
+        if (event.status == RecruitmentEventStatus.ambiguous) ...[
+          Gap.sm,
+          const InsightCard(
+            icon: Icons.help_outline_rounded,
+            tone: AppTone.warning,
+            title: "More than one possible match",
+            message: "CareerOS found more than one of your applications this could belong to — pick the right one below.",
           ),
-          if (_showEmailDetails) _EmailDetailsCard(event: event),
-          const SizedBox(height: 28),
-          if (event.status == RecruitmentEventStatus.ambiguous)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(onPressed: _busy ? null : () => _pickApplication(event), child: const Text("Which Application Does This Belong To?")),
-            )
-          else if (event.status == RecruitmentEventStatus.suggested) ...[
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(onPressed: _busy ? null : () => _confirm(event), child: const Text("Confirm Stage")),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(onPressed: _busy ? null : () => _pickApplication(event), child: const Text("Wrong Application")),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(onPressed: _busy ? null : () => _ignore(event), child: const Text("Ignore")),
-            ),
-          ] else if (event.status == RecruitmentEventStatus.confirmed)
-            const _StatusBanner(text: "Confirmed", color: AppColors.success)
-          else if (event.status == RecruitmentEventStatus.ignored)
-            const _StatusBanner(text: "Ignored", color: AppColors.muted)
-          else
-            const _StatusBanner(text: "No application matched", color: AppColors.muted),
         ],
-      ),
+        Gap.sm,
+        CareerCard(
+          variant: CareerCardVariant.feature,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (event.detectedStage != null) ...[
+                Text("Possible new stage", style: context.text.labelMedium),
+                Gap.xs,
+                Row(
+                  children: [
+                    IconTile(icon: stageIcon(event.detectedStage!), tone: stageTone(event.detectedStage!), size: 40),
+                    Gap.sm,
+                    Expanded(child: Text(event.detectedStage!.label.toUpperCase(), style: context.text.titleLarge)),
+                  ],
+                ),
+                Gap.md,
+              ],
+              Wrap(
+                spacing: AppSpacing.xs,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  if (event.confidenceLabel != null)
+                    StatusChip(label: "Confidence: ${_confidenceLabel(event.confidenceLabel!)}", tone: confidenceTone, icon: Icons.speed_rounded),
+                  TagChip(label: "Email received ${DateFormat.yMMMd().format(event.receivedAt)}", icon: AppIcons.email),
+                ],
+              ),
+              Gap.sm,
+              AppTextButton(
+                label: "View Email Details",
+                icon: _showEmailDetails ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                onPressed: () => setState(() => _showEmailDetails = !_showEmailDetails),
+              ),
+              if (_showEmailDetails) _EmailDetailsCard(event: event),
+            ],
+          ),
+        ),
+        Gap.md,
+        Row(
+          children: [
+            const Icon(Icons.verified_user_outlined, size: 16, color: AppColors.success),
+            Gap.xs,
+            Expanded(child: Text("Nothing changes on your application until you confirm.", style: context.text.bodySmall)),
+          ],
+        ),
+        Gap.lg,
+        if (event.status == RecruitmentEventStatus.ambiguous)
+          PrimaryButton(label: "Which Application Does This Belong To?", onPressed: _busy ? null : () => _pickApplication(event))
+        else if (event.status == RecruitmentEventStatus.suggested) ...[
+          PrimaryButton(label: "Confirm Stage", icon: AppIcons.check, isLoading: _busy, onPressed: () => _confirm(event)),
+          Gap.sm,
+          AppOutlineButton(label: "Wrong Application", onPressed: _busy ? null : () => _pickApplication(event)),
+          Gap.xs,
+          Center(child: TextButton(onPressed: _busy ? null : () => _ignore(event), child: const Text("Ignore"))),
+        ] else if (event.status == RecruitmentEventStatus.confirmed)
+          const _StatusBanner(text: "Confirmed", tone: AppTone.success)
+        else if (event.status == RecruitmentEventStatus.ignored)
+          const _StatusBanner(text: "Ignored", tone: AppTone.neutral)
+        else
+          const _StatusBanner(text: "No application matched", tone: AppTone.neutral),
+      ],
     );
   }
 
@@ -230,9 +265,9 @@ class _EmailDetailsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.only(top: AppSpacing.xs),
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: AppRadius.mdAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -240,9 +275,9 @@ class _EmailDetailsCard extends StatelessWidget {
           _EmailField(label: "Subject", value: event.subject),
           _EmailField(label: "Date", value: DateFormat.yMMMd().add_jm().format(event.receivedAt)),
           if (event.evidenceExcerpt != null) _EmailField(label: "Excerpt", value: event.evidenceExcerpt!),
-          const SizedBox(height: 8),
-          const Text("Detected because:", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-          for (final reason in event.evidence) Text("• $reason", style: const TextStyle(fontSize: 12)),
+          Gap.xs,
+          Text("Detected because:", style: context.text.labelMedium),
+          for (final reason in event.evidence) Text("• $reason", style: context.text.bodySmall),
         ],
       ),
     );
@@ -261,7 +296,7 @@ class _EmailField extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text.rich(
         TextSpan(
-          style: DefaultTextStyle.of(context).style.copyWith(fontSize: 13),
+          style: context.text.bodyMedium?.copyWith(color: context.colors.textPrimary),
           children: [
             TextSpan(text: "$label: ", style: const TextStyle(fontWeight: FontWeight.w600)),
             TextSpan(text: value),
@@ -273,18 +308,18 @@ class _EmailField extends StatelessWidget {
 }
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.text, required this.color});
+  const _StatusBanner({required this.text, required this.tone});
 
   final String text;
-  final Color color;
+  final AppTone tone;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-      child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(color: tone.tint(context), borderRadius: AppRadius.cardAll),
+      child: Text(text, textAlign: TextAlign.center, style: context.text.titleSmall?.copyWith(color: tone.onTint(context))),
     );
   }
 }
@@ -300,16 +335,17 @@ class _AmbiguousApplicationPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.md, AppSpacing.pageH, AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Which application does this email belong to?", style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
+            Text("Which application does this email belong to?", style: context.text.titleLarge),
+            Gap.sm,
             for (final id in candidateIds) _CandidateTile(applicationId: id),
             const Divider(),
             ListTile(
+              leading: const Icon(Icons.close_rounded),
               title: const Text("None of These"),
               onTap: () => Navigator.of(context).pop(null),
             ),
@@ -329,10 +365,12 @@ class _CandidateTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final applicationAsync = ref.watch(applicationDetailProvider(applicationId));
     return applicationAsync.when(
-      loading: () => const ListTile(title: Text("Loading...")),
+      loading: () => const ListTile(title: LoadingSkeleton(height: 16)),
       error: (_, __) => const SizedBox.shrink(),
       data: (Application application) => ListTile(
+        leading: NetworkImageWithFallback(url: null, fallbackText: application.companyName, size: 40),
         title: Text("${application.companyName} — ${application.roleTitle}"),
+        trailing: StageBadge(stage: application.currentStage, dense: true),
         onTap: () => Navigator.of(context).pop(applicationId),
       ),
     );

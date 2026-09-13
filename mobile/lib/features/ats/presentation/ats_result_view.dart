@@ -1,127 +1,117 @@
 import "package:flutter/material.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/ats_models.dart";
 
+/// ATS results (spec §35): readiness score → breakdown → strengths → missing keywords →
+/// recommended improvements. Rules-based; never claims to replicate an employer's ATS.
 class AtsResultView extends StatelessWidget {
   const AtsResultView({super.key, required this.analysis, this.onAnalyzeAgain});
 
   final AtsAnalysis analysis;
   final VoidCallback? onAnalyzeAgain;
 
-  Color get _scoreColor {
-    if (analysis.overallScore >= 75) return AppColors.success;
-    if (analysis.overallScore >= 50) return AppColors.warning;
-    return AppColors.danger;
+  AppTone get _tone {
+    if (analysis.overallScore >= 75) return AppTone.success;
+    if (analysis.overallScore >= 50) return AppTone.warning;
+    return AppTone.danger;
+  }
+
+  String get _label {
+    if (analysis.overallScore >= 75) return "Strong readiness";
+    if (analysis.overallScore >= 50) return "Room to improve";
+    return "Needs work";
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Column(
-              children: [
-                SizedBox(
-                  width: 120,
-                  height: 120,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 120,
-                        height: 120,
-                        child: CircularProgressIndicator(
-                          value: analysis.overallScore / 100,
-                          strokeWidth: 10,
-                          backgroundColor: AppColors.muted.withValues(alpha: 0.15),
-                          valueColor: AlwaysStoppedAnimation(_scoreColor),
-                        ),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            "${analysis.overallScore}",
-                            style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: _scoreColor),
-                          ),
-                          const Text("Job Match", style: TextStyle(fontSize: 12, color: AppColors.muted)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Rules-based ATS readiness score — not an AI judgment.",
-                  style: TextStyle(fontSize: 12, color: AppColors.muted),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text("Score Breakdown", style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
-          for (final entry in analysis.scoreBreakdown.entries) _ScoreBar(componentKey: entry.key, component: entry.value),
-          if (analysis.strongMatches.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            _KeywordSection(
-              title: "Strong Matches",
-              icon: Icons.check_circle_outline,
-              color: AppColors.success,
-              keywords: analysis.strongMatches,
-            ),
-          ],
-          if (analysis.missingKeywords.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _KeywordSection(
-              title: "Missing Critical Keywords",
-              icon: Icons.error_outline,
-              color: AppColors.danger,
-              keywords: analysis.missingKeywords,
-            ),
-          ],
-          if (analysis.formattingIssues.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Text("Formatting Problems", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            for (final issue in analysis.formattingIssues)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    final improvements = [
+      ...analysis.formattingIssues,
+      if (analysis.missingMetricsNote != null) analysis.missingMetricsNote!,
+    ];
+
+    return ListView(
+      padding: AppSpacing.page,
+      children: [
+        CareerCard(
+          variant: CareerCardVariant.feature,
+          child: Column(
+            children: [
+              CareerProgressRing(
+                value: analysis.overallScore / 100,
+                size: 140,
+                strokeWidth: 13,
+                tone: _tone,
+                semanticLabel: "ATS readiness score",
+                semanticValue: "${analysis.overallScore} out of 100",
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(issue)),
+                    Text("${analysis.overallScore}", style: context.text.displaySmall),
+                    Text("out of 100", style: context.text.bodySmall),
                   ],
                 ),
               ),
-          ],
-          if (analysis.missingMetricsNote != null) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
+              Gap.md,
+              Text(analysis.jobTitle != null ? "Job Match Score" : "ATS Readiness Score", style: context.text.titleLarge),
+              if (analysis.jobTitle != null) ...[
+                const SizedBox(height: 2),
+                Text("for ${analysis.jobTitle}", style: context.text.bodyMedium, textAlign: TextAlign.center),
+              ],
+              Gap.xs,
+              StatusChip(label: _label, tone: _tone),
+              Gap.sm,
+              Text(
+                "Rules-based ATS readiness score — not an AI judgment, and not any employer's actual screening system.",
+                style: context.text.bodySmall,
+                textAlign: TextAlign.center,
               ),
-              child: Text(analysis.missingMetricsNote!, style: const TextStyle(fontSize: 13)),
-            ),
-          ],
-          if (onAnalyzeAgain != null) ...[
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(onPressed: onAnalyzeAgain, child: const Text("Analyze Again")),
-            ),
-          ],
+            ],
+          ),
+        ),
+        Gap.section,
+        const SectionHeader(title: "Score Breakdown"),
+        CareerCard(
+          variant: CareerCardVariant.outlined,
+          child: Column(
+            children: [for (final entry in analysis.scoreBreakdown.entries) _ScoreBar(componentKey: entry.key, component: entry.value)],
+          ),
+        ),
+        if (analysis.strongMatches.isNotEmpty) ...[
+          Gap.xl,
+          _KeywordSection(
+            title: "Strengths",
+            subtitle: "Keywords and skills your CV already matches",
+            icon: Icons.check_circle_outline_rounded,
+            tone: AppTone.success,
+            keywords: analysis.strongMatches,
+          ),
         ],
-      ),
+        if (analysis.missingKeywords.isNotEmpty) ...[
+          Gap.xl,
+          _KeywordSection(
+            title: "Missing Keywords",
+            subtitle: "Add these where they're genuinely true for you",
+            icon: Icons.error_outline_rounded,
+            tone: AppTone.danger,
+            keywords: analysis.missingKeywords,
+          ),
+        ],
+        if (improvements.isNotEmpty) ...[
+          Gap.xl,
+          const SectionHeader(title: "Recommended Improvements"),
+          CareerListGroup(
+            children: [
+              for (final item in improvements) CareerListRow(icon: Icons.tips_and_updates_outlined, tone: AppTone.warning, title: item),
+            ],
+          ),
+        ],
+        if (onAnalyzeAgain != null) ...[
+          Gap.xl,
+          AppOutlineButton(label: "Analyze Again", icon: Icons.refresh_rounded, onPressed: onAnalyzeAgain),
+        ],
+      ],
     );
   }
 }
@@ -135,31 +125,26 @@ class _ScoreBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = atsComponentLabels[componentKey] ?? componentKey;
+    final tone = component.score >= 75
+        ? AppTone.success
+        : component.score >= 50
+            ? AppTone.warning
+            : AppTone.danger;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                "$label (${(component.weight * 100).round()}%)",
-                style: const TextStyle(fontSize: 13, color: AppColors.muted),
-              ),
-              Text("${component.score}%", style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              Expanded(child: Text(label, style: context.text.titleSmall)),
+              Text("weight ${(component.weight * 100).round()}%", style: context.text.labelSmall),
+              Gap.sm,
+              Text("${component.score}%", style: context.text.titleSmall),
             ],
           ),
-          const SizedBox(height: 4),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: component.score / 100,
-              minHeight: 6,
-              backgroundColor: AppColors.muted.withValues(alpha: 0.15),
-              valueColor: const AlwaysStoppedAnimation(AppColors.blue),
-            ),
-          ),
+          Gap.xxs,
+          CareerProgressBar(value: component.score / 100, tone: tone, semanticLabel: label),
         ],
       ),
     );
@@ -167,11 +152,12 @@ class _ScoreBar extends StatelessWidget {
 }
 
 class _KeywordSection extends StatelessWidget {
-  const _KeywordSection({required this.title, required this.icon, required this.color, required this.keywords});
+  const _KeywordSection({required this.title, required this.subtitle, required this.icon, required this.tone, required this.keywords});
 
   final String title;
+  final String subtitle;
   final IconData icon;
-  final Color color;
+  final AppTone tone;
   final List<String> keywords;
 
   @override
@@ -181,23 +167,18 @@ class _KeywordSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 6),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Icon(icon, size: 20, color: tone.color(context)),
+            Gap.xs,
+            Expanded(child: Semantics(header: true, child: Text(title, style: context.text.titleLarge))),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 2),
+        Text(subtitle, style: context.text.bodySmall),
+        Gap.sm,
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final keyword in keywords)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text(keyword, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600)),
-              ),
-          ],
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [for (final keyword in keywords) TagChip(label: keyword, tone: tone)],
         ),
       ],
     );
