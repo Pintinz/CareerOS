@@ -22,6 +22,7 @@ from app.models import (  # noqa: F401
     interview,
     job,
     media,
+    monetization,
     profile,
     question,
     scholarship,

@@ -20,6 +20,8 @@ This file is the single source of truth for build progress. Update it after ever
 - `4fc6639` — Phase 9 (Admin CMS, Content Operations & Operational Monitoring) backend + admin web (tagged `phase-9-admin-cms`).
 - `9485ed6` — docs: record Phase 9 commit hash.
 - `291ccb4` — Phase 9.5 (Full-System Audit, Integration Hardening & Product Coherence Review) — see below and **SYSTEM_AUDIT.md** (tagged `phase-9.5-system-audit`).
+- `af7b8f7` — docs: record Phase 9.5 commit hash.
+- Phase 10 (AdMob, Monetization & Free/Pro Entitlement Architecture) — see below and **MONETIZATION.md** (tagged `phase-10-monetization`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -71,7 +73,7 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 | 8 — Smart Recruitment Email Tracking | IN PROGRESS | Backend: full provider abstraction (`EmailTrackingProvider`/`GmailTrackingProvider`/`OutlookTrackingProvider`/`MockEmailTrackingProvider`), OAuth authorization/callback/state, Fernet token encryption, `email_connections`/`recruitment_email_events`/`oauth_states`/`email_forwarding_aliases` tables, a deterministic phrase-based classifier + weighted application matcher (both config-driven), webhook endpoints (Gmail Pub/Sub, Microsoft Graph notifications + lifecycle) with validate→dedupe→acknowledge→process, watch/subscription renewal, and the atomic confirm-flow that is the *only* code path allowed to call the Phase 5 stage-transition service. Mobile: Smart Application Tracking settings screen, privacy-first Gmail/Outlook consent screens, provider cards (connected/reauthorization/in-development), Recruitment Update Detected confirm/ignore/ambiguous-application-picker screen, Home "Application Updates" card, application detail "Emails" tab. **Verified only against the mock provider and mocked webhook payloads — no real Google/Microsoft OAuth credentials exist in this environment**, see the Phase 8 completion report for the full implemented/mock-verified/blocked-by-credentials breakdown. |
 | 9 — Admin | IN PROGRESS (focused subset, verified) | Real backend + admin web UI for all 15 spec areas: content CMS (jobs/scholarships/intelligence/companies), question banks (CRUD + CSV bulk import w/ dedup), media library (usage-guarded delete), source registry + discovery queue (never auto-publishes), user admin, notifications (architecture-only, no real push), audit log, system settings, a real single-scheduler background job system (email watch renewal / scheduled publish / content expiration) with retry/backoff, and an honest operations dashboard. See the Phase 9 section below for what's real vs. explicitly deferred. |
 | 9.5 — System Audit & Hardening | DONE (see SYSTEM_AUDIT.md) | Full cross-feature audit against Phases 0-9. Found and fixed 13 real issues including a critical systemic one (SQLite foreign-key enforcement was never enabled anywhere, making every `ondelete` behavior in the schema decorative in dev/test), a CASCADE-delete data-loss risk on Company→Jobs, a public-jobs-feed N+1 query, an insecure-production-default gap, a mobile 401-doesn't-force-logout bug, a demo-content mislabeling spec violation, and an external-URL-scheme-safety gap. No major new features added. See SYSTEM_AUDIT.md for the full 48-section audit and the pre-monetization checkpoint verdict. |
-| 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
+| 10 — Monetization | IN PROGRESS (architecture verified with test ads) | Real AdMob integration (banner/interstitial/rewarded), all against Google's official test ad units — no real AdMob account exists. Free/Pro entitlement architecture, idempotent reward ledger, real UMP consent flow, admin-configurable via existing system-settings. App Open architecture prepared but hardcoded disabled. See MONETIZATION.md for the full breakdown and exactly what "test-ad verified" does and doesn't mean. |
 | 11 — Production Hardening | NOT STARTED | |
 
 ## Completed
@@ -725,6 +727,76 @@ CASCADE-delete regression test, 1 new E2E journey test). **No Flutter tests regr
 passing, `flutter analyze` clean, debug APK still builds. **Admin production build**: clean, zero
 TypeScript errors, re-verified after the type additions.
 
+### Phase 10 — AdMob, Monetization & Free/Pro Entitlement Architecture (test-ad verified)
+
+Full detail in the new **MONETIZATION.md**. No production release; no real advertising
+credentials anywhere in this environment — every ad request uses Google's official public test
+ad units. **"Test-ad verified" and "real-AdMob verified" are explicitly different claims — see
+MONETIZATION.md §22 for the exact boundary; this phase only accomplishes the first.**
+
+**Backend** (`app/models/monetization.py`, `app/services/monetization_service.py`,
+`app/api/v1/monetization.py`): `User.subscription_tier`/`entitlement_expires_at` (persisted,
+defaults FREE for everyone, no `if user.email == ...` shortcut anywhere); `RewardUnlock` ledger
+with a database-enforced `UniqueConstraint` on `reference_id` as the actual idempotency mechanism
+(a duplicated reward-claim call can never grant two rewards — matches the same pattern as Phase
+8's email-event dedup and Phase 9's discovery dedup); `GET /monetization/config` (public, no
+auth — non-secret ad/frequency toggles only), `GET /monetization/entitlement`,
+`POST /monetization/rewards/claim`. Reuses Phase 9's `system_settings` table for
+`monetization_config`/`free_tier_limits` — both are automatically editable on the existing admin
+Settings page with zero new admin frontend code. Usage counting (`ats_daily`/`aptitude_daily`) is
+a live UTC-calendar-day date-window query against the existing `AtsAnalysis`/`TestSession` tables
+— no reset job exists anywhere, by design (spec §54). **Honest scoping note**: usage limits are
+computed and reported accurately but **not hard-enforced** at the API layer yet —
+`AtsService`/`AptitudeService` were deliberately not modified to reject over-limit requests, to
+avoid destabilizing their extensive existing test coverage for a phase whose brief explicitly
+warned against enforcing limits without full centralization; see MONETIZATION.md §8 for the
+complete reasoning and what a future hard-enforcement pass would need to do.
+
+**Mobile** (`lib/core/monetization/`): a single `AdService` abstraction (no screen ever
+constructs a `BannerAd`/`InterstitialAd`/`RewardedAd` directly) wrapping `google_mobile_ads`
+9.1.0's banner/interstitial/rewarded APIs plus its bundled UMP consent SDK (`ConsentManager` —
+**no homemade consent dialog exists**). `AdFrequencyController` (pure, fully unit-tested)
+enforces interstitial pacing (8-minute minimum interval, 3-per-session cap, both admin-
+configurable). `MonetizationConfig.appOpenAdsEnabled` is hardcoded `false` client-side regardless
+of server value — App Open architecture exists (`AdFormat.appOpen`, test/production ad unit ids)
+but is unreachable from any screen, per spec's explicit "prepare but keep disabled" instruction.
+Banner ads are live in the jobs feed at a configurable interval (`BannerAdSlot`, graceful
+failure-collapse to `SizedBox.shrink()` — never a blank container or stuck spinner); an
+interstitial is offered after ATS analysis completes; the rewarded-unlock flow ("Daily free limit
+reached... Watch Ad & Unlock / Come Back Tomorrow") is wired into the aptitude test configuration
+screen as the reference implementation. Settings gained **CareerOS Pro** (honestly labeled
+"Coming Soon," no purchasable-looking button, since no payment integration exists) and **Ads &
+Privacy** (consent/personalization status, Google's own Privacy Options form when required, Pro
+status — never a Google-internal identifier).
+
+**Fail-safe production configuration** (spec §5): a genuine production build with no real ad
+unit id configured for a format disables that format outright rather than silently falling back
+to test ads — verified by `ad_unit_config_test.dart`. The Android/iOS native app IDs currently
+hold Google's public test App ID and are clearly commented as must-replace-before-release.
+
+**Forbidden contexts**: no ad code was added anywhere near the aptitude/interview session
+screens, application stage confirmation, recruitment email review, CV/document upload, or
+authentication — a structural absence, not a runtime check — with a dedicated regression test
+(`forbidden_contexts_test.dart`) asserting no ad widget appears during an active aptitude or
+interview session specifically, since those are the two highest-stakes screens in the product.
+
+**Tests**: 25 new Flutter tests (`AdFrequencyController`, `MonetizationConfig`/`Entitlement`
+pure-logic, `adSlotPositionsForFeed`, `AdUnitConfig` fail-safe resolution, the rewarded-unlock
+dialog's success/failure/decline paths, the two forbidden-context assertions, and three jobs-feed
+ad-placement/Pro/disabled scenarios) — 82 total, up from 57, all passing. 7 new backend tests
+(`test_monetization.py`) — 172 total, up from 165, all passing. `flutter analyze` clean, debug
+APK builds, admin production build clean (no admin frontend code changed — the new settings keys
+use the existing generic JSON editor).
+
+**Not built this phase** (documented, not silently skipped): hard enforcement of free-tier usage
+limits at the API layer (see above); AdMob server-side reward verification (the reward-claim
+endpoint is a documented "mock verifier," per spec §55's explicit allowance for development);
+banner ads in the scholarships/company-intelligence feeds (jobs is the reference implementation —
+the same three-line pattern extends trivially, just not done this phase); a real payment/
+subscription integration (CareerOS Pro stays "Coming Soon"); any real AdMob account, ad unit,
+app-ads.txt hosting, or store listing (`app-ads.example.txt` is a placeholder-only reference
+document, explicitly not a real file — see MONETIZATION.md §22 for the exact Phase 11 checklist).
+
 ## Partially Complete
 
 - **Mobile app**: Phase 0-8 core loops written and verified. Not yet built: internships/graduate-
@@ -831,20 +903,31 @@ unrelated sender scores 0 and correctly stays unmatched) and documented why in
 
 ## Tests
 
-- Backend: `pytest -q` → **165 passed** across 15 test files (health, auth, admin/companies, jobs,
+- Backend: `pytest -q` → **172 passed** across 16 test files (health, auth, admin/companies, jobs,
   scholarships, uploads, ATS, intelligence, applications, aptitude, interview, media & hardening,
-  email tracking, admin ops, **`test_config_security.py` — 3 tests, new in Phase 9.5** verifying
-  the insecure-production-default guard, plus 2 new Phase 9.5 regression tests added to
-  `test_jobs.py` (the Company→Jobs CASCADE-to-RESTRICT fix) and a new
-  `test_e2e_journeys.py` (the Journey A cross-feature end-to-end test).
+  email tracking, admin ops, `test_config_security.py`, `test_e2e_journeys.py`, and
+  **`test_monetization.py` — 7 tests, new in Phase 10** — public config has no auth requirement,
+  entitlement defaults to FREE with full daily limits, real ATS usage reduces the remaining count,
+  claiming a reward widens the daily limit, a duplicated reward reference id is idempotent (not
+  double-granted), another user's reference id cannot be reused, and admin can edit the
+  monetization config through the existing settings endpoint).
 - Admin: no automated tests — verified by hand via live browser interaction against the running
   backend (Phase 9: logged in as a seeded admin and exercised Dashboard/Operations/Intelligence/
   Discovery/Sources/Notifications/Settings/Audit/Users/Companies, including a full company +
   intelligence-post create→audit-log→delete round trip). This caught one real bug — see Known Bugs.
-  Phase 9.5 re-verified the production build (clean) after adding TypeScript fields but did not
-  re-run a full live-browser pass since no admin UI behavior changed, only types.
+  Phase 9.5 and Phase 10 both re-verified the production build (clean) without a full live-browser
+  pass, since neither phase changed admin UI behavior — only types (9.5) and no admin code at all
+  (10, since the new monetization settings use the existing generic JSON editor).
 - Mobile: `flutter analyze` clean, `flutter build apk --debug` succeeds, `flutter test` →
-  **57 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
+  **82 passed** (57 baseline + **25 new Phase 10 tests**: `AdFrequencyController` interval/session-
+  cap/reset behavior, `MonetizationConfig`/`Entitlement` pure-logic including the app-open-always-
+  false guarantee and Pro-never-limit-reached, `adSlotPositionsForFeed`'s interval math,
+  `AdUnitConfig`'s production fail-safe resolution, the rewarded-unlock dialog's success/failure/
+  decline paths on the real aptitude configuration screen, the two forbidden-context assertions
+  for active aptitude/interview sessions, and three jobs-feed scenarios — ad placement at the
+  configured interval, zero ads for a Pro user, zero ads when globally disabled) — see
+  MONETIZATION.md for what each test actually proves. Baseline before Phase 10: 57 passed (1
+  pre-existing splash-boot smoke test + 21 Phase 6 widget
   tests + 16 Phase 7 widget tests + 6 Phase 7.5 tests covering the recording state machine via a
   fully fake `RecordingService` — start/permission-denied/stop/stop-failure/delete/cancel; see the
   Phase 7.5 section above for why real `audioplayers` playback isn't similarly unit-tested — +
@@ -986,11 +1069,16 @@ the question, deterministic content, never AI-generated or claimed to be employe
 
 ## Next Tasks
 
-Per the user's explicit instruction, Phase 9.5 is the last phase for now — **do not start Phase 10
-(Monetization) or Phase 11 (Production Hardening) automatically.** See SYSTEM_AUDIT.md §47 for the
-full pre-monetization checkpoint (verdict: **YES, WITH BLOCKERS**). Remaining work, roughly in
-priority order:
+Per the user's explicit instruction, Phase 10 is the last phase for now — **do not start Phase 11
+(Production Hardening, Infrastructure, Store Release & Real-Provider Verification) automatically.**
+Remaining work, roughly in priority order:
 
+-1. (Phase 10 deferred items, see MONETIZATION.md §22 for the complete Phase 11 checklist): hard
+   enforcement of free-tier usage limits at the API layer; AdMob server-side reward verification;
+   banner ads in the scholarships/company-intelligence feeds (jobs is the reference
+   implementation); a real payment/subscription integration; a real AdMob account, real ad units,
+   real app-ads.txt hosting, and store listings — none of which existed or were attempted this
+   phase, by design.
 0. (Phase 9.5 deferred items, see SYSTEM_AUDIT.md §45 for the complete list with reasoning):
    admin question-bank N+1 on options; two admin routes missing audit-log calls (category/topic
    creation); recruitment-email confirm doesn't navigate to the matched application; Gmail/Outlook

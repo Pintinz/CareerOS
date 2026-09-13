@@ -1,7 +1,10 @@
+import "dart:async";
+
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "core/app_providers.dart";
+import "core/monetization/monetization_providers.dart";
 import "core/storage/app_preferences.dart";
 import "features/aptitude/data/aptitude_offline_cache.dart";
 import "features/interview/data/interview_offline_cache.dart";
@@ -26,11 +29,25 @@ Future<void> main() async {
   );
 }
 
-class CareerOSApp extends ConsumerWidget {
+class CareerOSApp extends ConsumerStatefulWidget {
   const CareerOSApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CareerOSApp> createState() => _CareerOSAppState();
+}
+
+class _CareerOSAppState extends ConsumerState<CareerOSApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Fire-and-forget (spec §3: "Ad initialization failure must NOT prevent CareerOS from
+    // launching") — never awaited before the first frame, and AdService.initialize() itself
+    // already catches every failure internally rather than throwing.
+    unawaited(ref.read(adServiceProvider).initialize());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

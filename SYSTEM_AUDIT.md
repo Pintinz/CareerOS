@@ -753,6 +753,91 @@ ad revenue.
 
 ---
 
+## 47a. Phase 10 Monetization Audit (added after Phase 10)
+
+Phase 10 built the AdMob/monetization architecture described in full in **MONETIZATION.md**. This
+section evaluates it against the same rigor as the rest of this document — PASS/WARNING/FAIL/
+DEFERRED, not a restatement of the feature list.
+
+**Ad isolation from sensitive workflows — PASS, CONFIRMED.** No ad-related import or widget was
+added to any aptitude session screen, interview session screen (including the audio-recording
+controller), STAR story editor, application stage-confirmation flow, recruitment-email review
+screen, CV upload, document vault, or authentication screens — verified by direct inspection
+(grep for `monetization`/`ad_service`/`BannerAdSlot` imports across those directories returns
+nothing) and by a dedicated regression test
+(`test/core/monetization/forbidden_contexts_test.dart`) asserting no `BannerAdSlot` appears in the
+widget tree during an active aptitude or interview session specifically — the two highest-stakes,
+highest-policy-risk screens. Apply/external-application-URL and recruitment-update-confirmation
+code paths were not touched at all this phase — no ad requirement was added to either, confirmed
+by inspection of `openExternalUrl` and `recruitment_event_detail_screen.dart`'s diff (none).
+
+**Consent architecture — PASS, CONFIRMED.** `ConsentManager` wraps Google's real UMP SDK
+(`ConsentInformation`/`ConsentForm`, bundled in `google_mobile_ads` 9.1.0) — no homemade consent
+dialog exists anywhere in the codebase (grep for a custom "GDPR"/"consent" dialog widget outside
+`consent_manager.dart` found none). `AdService.initialize()` calls `gatherConsent()` before SDK
+init, and every failure path (form-load error, network failure during consent gathering) resolves
+the initialization future rather than throwing — confirmed by code inspection of `catch` blocks in
+`consent_manager.dart` and `ad_service.dart`.
+
+**Privacy — PASS, CONFIRMED.** `AdRequest()` is constructed with zero custom targeting parameters
+in every `AdService` call site (banner, interstitial, rewarded) — grep-confirmed no CV/email/
+application/interview/document/salary/STAR data is ever passed into an ad request.
+`LoggingAdAnalytics` logs only ad type, placement, and a generic outcome category — never a
+device advertising identifier or private data — matching the same logging discipline already
+verified for the rest of the backend in §36.
+
+**Entitlement architecture — PASS WITH WARNING.** `User.subscription_tier` is persisted, defaults
+`FREE` for everyone, and no code path anywhere sets it to `PRO` (no payment integration exists) or
+contains an `if user.email == ...`-style shortcut — confirmed by grep across `app/services/` and
+`app/api/`. **Warning**: free-tier usage limits are computed and reported accurately by
+`MonetizationService.get_entitlement()` but are **not enforced** at the point of creating a new
+`AtsAnalysis`/`TestSession` — a client that ignores the mobile app's soft-gate UI and calls the
+creation endpoints directly can exceed the configured daily limits today. This is a deliberate,
+documented scoping decision (see MONETIZATION.md §8), not an oversight, but it means the "Free
+tier" is currently advisory rather than authoritative at the API layer. Rated WARNING rather than
+FAIL because: (a) it was an explicit, reasoned trade-off against destabilizing well-tested
+existing services, (b) the audit brief itself said usage limits "may" be implemented and warned
+against enforcing them without full centralization, and (c) no data-integrity or security harm
+results from a user getting more free usage than intended — this is a product/business-model gap,
+not a safety one.
+
+**Reward ledger integrity — PASS, CONFIRMED.** `RewardUnlock.reference_id` carries a database-
+level `UniqueConstraint` (`uq_reward_unlocks_reference_id`) — the actual mechanism preventing a
+duplicated reward-grant callback from creating two rewards, not just an application-layer check.
+Confirmed by two tests: `test_duplicate_reward_reference_id_is_idempotent_not_double_granted`
+(same user, same reference id, called twice → one reward) and
+`test_another_users_reference_id_cannot_be_reused` (a different user attempting to reuse another
+user's reference id → 409, not a silent grant). The mobile `AdService.showRewarded()` only
+generates a `reference_id` and calls the claim endpoint *after* the SDK's real
+`onUserEarnedReward` callback fires — confirmed by reading `ad_service.dart`'s
+`showRewarded` implementation directly: `earnedReward` is set exclusively inside that callback,
+and the claim call is gated on `if (!earnedReward) return false;` before ever reaching the
+network call. **No AdMob server-side verification (SSV) exists** — explicitly documented as the
+"mock verifier" spec §55 allows for development, not silently presented as production-grade
+fraud protection.
+
+**Fail-safe configuration — PASS, CONFIRMED.** Three independent fail-safes were verified by
+direct code inspection and unit test: (1) `MonetizationConfig.disabled` is the fallback if
+`GET /monetization/config` cannot be fetched at all — ads default OFF, never guessed on; (2)
+`MonetizationConfig.appOpenAdsEnabled` is hardcoded `false` in `fromJson` regardless of what the
+backend returns, so even a compromised or misconfigured backend cannot enable App Open ads
+client-side; (3) `AdUnitConfig.resolve()` disables a format outright in a genuine production
+build with no real ad unit id configured, rather than falling back to Google's test units —
+verified by `ad_unit_config_test.dart`'s three fail-safe scenarios.
+
+**Admin controls — PASS, CONFIRMED.** `monetization_config` and `free_tier_limits` are two more
+entries in Phase 9's existing generic `system_settings` JSON editor — SUPER_ADMIN-only, same
+enforcement as every other setting (re-verified: no new admin route was added, so the existing
+RBAC audit in §11 covers it without change). No AdMob credential, OAuth secret, or signing
+material is stored in `system_settings` at all — confirmed by inspecting `KNOWN_SETTINGS`, which
+holds only ad-format toggles and numeric frequency/limit values.
+
+**Overall Phase 10 verdict: PASS WITH WARNING** — the one warning (free-tier limits not hard-
+enforced) is explicitly scoped and documented, not a hidden gap, and does not change the Phase
+9.5 pre-monetization checkpoint's verdict (§47) for the reasons above.
+
+---
+
 ## 48. Known Blockers (carried into any future phase)
 
 - Real Gmail/Outlook OAuth credentials (Phase 8, still unresolved).
@@ -764,3 +849,9 @@ ad revenue.
   manually tapped through on a running app.
 - FCM/APNs credentials (push notifications, still architecture-only).
 - A live RSS/Lever/Ashby ingestion adapter (Discovery is manual-ingest-only, by design).
+- A real AdMob account, real ad units, real app-ads.txt hosting, and AdMob "app readiness"
+  verification (Phase 10 is test-ad-verified only — see MONETIZATION.md §22).
+- AdMob server-side reward verification (SSV) — the reward-claim endpoint is a documented "mock
+  verifier," not production-grade fraud protection against real ad revenue.
+- Hard enforcement of free-tier usage limits at the API layer (Phase 10, §47a above).
+- A real payment/subscription integration (CareerOS Pro is architecture-only, "Coming Soon").

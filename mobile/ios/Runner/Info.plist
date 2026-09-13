@@ -28,6 +28,18 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>CareerOS uses microphone access only when you choose to record an interview practice answer.</string>
+	<!-- Google's official public TEST AdMob App ID (Phase 10) — the same constant Google
+	     documents for every AdMob developer, never a real publisher id. MUST be replaced with a
+	     real iOS App ID from a real AdMob account before any production release — see
+	     MONETIZATION.md and DEPLOYMENT.md. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<!-- Prepared per spec §26, not requested anywhere in app code yet: CareerOS never calls
+	     ATTrackingManager.requestTrackingAuthorization on launch or otherwise. If a future phase
+	     adds an ATT prompt (e.g. for ad personalization), this description is what iOS shows —
+	     accurate today, and the app must continue to function fully if the user denies it. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>CareerOS may use this to show more relevant ads. Declining does not limit any career features.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

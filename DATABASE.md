@@ -287,6 +287,29 @@ RESTRICT, and SET NULL alike — had been silently unenforced in every dev/test 
 connect-event listener that issues this pragma on every new connection. This has no effect on
 Postgres, which enforces FKs natively and always has.
 
+### Phase 10 additions (migration `9ad67addbcef`)
+
+- `users` gained `subscription_tier` (`FREE`/`PRO`, `NOT NULL`, defaults `FREE`) and
+  `entitlement_expires_at` (nullable datetime, unused today — reserved for a future subscription
+  expiry without a schema change).
+- `reward_unlocks` — `id`, `user_id` (FK → `users.id`, CASCADE), `reward_type`
+  (`EXTRA_APTITUDE_TEST`/`EXTRA_ATS_ANALYSIS`/`PREMIUM_PRACTICE_SET`/`ADVANCED_REPORT`),
+  `granted_at`, `expires_at` (24h from grant), `source` (default `"rewarded_ad"`),
+  `reference_id`, `used_at` (nullable — see MONETIZATION.md §8 for why nothing sets this yet).
+  `UniqueConstraint` on `reference_id` — the actual idempotency mechanism preventing a duplicated
+  reward-grant callback from creating two rows, not just an application-layer check (same pattern
+  as Phase 8's `recruitment_email_events` dedup and Phase 9's `DiscoveredItem` dedup).
+- `system_settings` gained two new keys via the existing generic store (no schema change):
+  `monetization_config` (ad-format kill switches, feed interval, interstitial frequency limits)
+  and `free_tier_limits` (`ats_daily`, `aptitude_daily`).
+
+SQLite migration note: adding the `NOT NULL` `subscription_tier` column to the existing `users`
+table needed `server_default='FREE'` inside a `batch_alter_table` block to backfill any
+pre-existing rows, then a second batch block dropping that server default so future inserts go
+through the ORM's Python-level default like every other column in this codebase — the same
+two-step pattern is worth reusing for any future `NOT NULL` column added to a table that might
+already have rows.
+
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
 

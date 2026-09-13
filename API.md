@@ -241,6 +241,18 @@ narrative detail lives in **ADMIN.md**. Existing admin routes (`/admin/jobs`, `/
 | POST | `/api/v1/admin/aptitude/questions/bulk-import` \| `/api/v1/admin/interview/questions/bulk-import` | Multipart CSV upload. Every row validated independently — never imports a broken row silently. Returns `{imported, skipped, errors: [{row, reason}], duplicate_warnings}`; duplicates (exact or normalized-near-identical `question_text`, against both the existing bank and earlier rows in the same file) are skipped, not imported, and reported separately from hard errors. |
 | POST / PUT | `/api/v1/admin/jobs`, `/scholarships`, `/intelligence`, `/companies`, `/aptitude/questions`, `/interview/questions` (existing routes) | Now record who created/reviewed/published the entity (`reviewed_by_admin_id`/`published_by_admin_id`, idempotent) and write an audit-log entry on every create/update/publish/delete. |
 
+## Implemented endpoints (Phase 10 — AdMob, Monetization & Free/Pro Entitlement Architecture)
+
+Full narrative detail in **MONETIZATION.md**. `monetization_config`/`free_tier_limits` are also
+readable/editable via the existing `GET/PUT /api/v1/admin/settings/{key}` (SUPER_ADMIN-only, see
+Phase 9 above) — no new admin routes were added for them.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/monetization/config` | No auth required — non-secret, admin-configured ad/frequency toggles only (`ads_enabled`, per-format kill switches, `feed_ad_interval`, interstitial frequency limits). `app_open_ads_enabled` is always forced `false` client-side regardless of this value (see MONETIZATION.md). Never contains AdMob credentials. |
+| GET | `/api/v1/monetization/entitlement` | Consumer-authenticated. Returns FREE/PRO tier, `should_show_ads`, and today's ATS-analysis/aptitude-test usage and remaining count (UTC calendar day, computed live from `AtsAnalysis`/`TestSession` — no reset job, no separate counter table). |
+| POST | `/api/v1/monetization/rewards/claim` | Consumer-authenticated. Body: `{reward_type, reference_id, source}`. Idempotent on `reference_id` (database `UniqueConstraint`) — a duplicated claim for the same ad-watch returns the existing reward, never a second one. 409 if another user already claimed that exact `reference_id`. The mobile client must only call this from the AdMob SDK's real earned-reward callback — see MONETIZATION.md §9 for why this is documented as a "mock verifier" pending real AdMob server-side verification. |
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```

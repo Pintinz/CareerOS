@@ -173,6 +173,39 @@ notification/lifecycle endpoints implement Graph's own required validation hands
 accepting anything. Email content itself is never rendered as raw HTML in the app — only sanitized,
 short plain-text excerpts are ever displayed.
 
+## Advertising & consent (Phase 10)
+
+Full detail in **MONETIZATION.md**. Privacy-relevant guarantees:
+
+- **No homemade consent dialog.** Consent is gathered exclusively through Google's own User
+  Messaging Platform (UMP) SDK, bundled in `google_mobile_ads` — `ConsentManager` in
+  `lib/core/monetization/consent_manager.dart` wraps it end to end. CareerOS never presents its
+  own GDPR/consent UI.
+- **No private CareerOS data is ever used for ad targeting.** Every `AdRequest()` constructed by
+  `AdService` carries zero custom targeting parameters — CV content, email content, application
+  history, interview recordings, medical-stage information, document contents, salary data, and
+  STAR stories are never read by, or transmitted to, any ad-request code path. Verified by
+  inspection of every `AdService` call site (SYSTEM_AUDIT.md §47a).
+- **No ad-related logging of private data.** `AdAnalytics` logs only ad type, placement, and a
+  generic outcome category — never a device advertising identifier, a full ad request payload, or
+  any user data (matches the logging discipline already established in SYSTEM_AUDIT.md §36).
+- **iOS App Tracking Transparency (ATT)**: `NSUserTrackingUsageDescription` is set in
+  `Info.plist` with accurate wording, but **no code anywhere requests ATT** — CareerOS does not
+  call `ATTrackingManager.requestTrackingAuthorization` at launch or otherwise. The app functions
+  identically regardless of ATT status; ads are never a hard dependency for any core feature.
+- **Settings → Ads & Privacy** lets a user review CareerOS Pro status, current ad-personalization
+  status, and — only when Google's own consent SDK reports it's required for that user/region —
+  reopen Google's privacy-options form. No Google-internal identifier (consent string, advertising
+  ID) is ever displayed.
+- **Advertising is never a precondition for core career functionality.** Tapping Apply opens the
+  external job/scholarship URL directly with no ad requirement; recruitment-email confirmation and
+  aptitude/interview preparation entry points carry no ad-related code. The one place an ad is
+  ever *optional* is the rewarded-unlock flow (an extra practice session), which a user can always
+  decline ("Come Back Tomorrow") with zero functional loss to any basic feature.
+- **No real advertising identifiers or revenue exist in this environment.** Every ad request in
+  development uses Google's official public test ad units — see MONETIZATION.md for what this
+  does and doesn't mean.
+
 ## Admin visibility limits (Phase 9)
 
 The admin CMS gives staff broad content-management power but deliberately narrow visibility into

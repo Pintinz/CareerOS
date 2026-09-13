@@ -499,7 +499,38 @@ yet-consumed).
 | Apple Sign-In | `AuthProvider` | `MockAuthProvider` | Apple Developer capability |
 | Gmail tracking | `EmailProvider` | `MockEmailProvider` | Google OAuth client + `gmail.readonly` scope |
 | Outlook tracking | `EmailProvider` | `MockEmailProvider` | Microsoft Graph app registration |
-| AdMob | `AdProvider` | test ad unit IDs | production `ADMOB_APP_ID` |
+| AdMob | `AdService` (`lib/core/monetization/ad_service.dart`) | Google's official test ad units (`AdUnitConfig`) | real AdMob account + real App IDs + real ad unit IDs via `--dart-define` |
 | Push notifications | `PushProvider` | local-notifications only | FCM server key / APNs cert |
 
 See `PROJECT_STATUS.md` → "Blocked by Credential / Tooling" for current status of each.
+
+## Monetization architecture (`lib/core/monetization/`, `app/services/monetization_service.py`, Phase 10)
+
+Full detail in **MONETIZATION.md**. Architecturally significant points:
+
+- **One `AdService` abstraction** — no screen constructs `BannerAd`/`InterstitialAd`/`RewardedAd`
+  directly. `AdUnitConfig` resolves the correct ad unit id per platform/format, with an explicit
+  fail-safe: a genuine production build with no real ad unit configured for a format disables it
+  outright rather than silently falling back to Google's test units (never the reverse — test
+  traffic must never look like real inventory, nor should a real build silently serve nothing
+  without an obvious cause). `AdFrequencyController` (pure, unit-tested) is the single source of
+  truth for interstitial pacing — no screen makes its own frequency decision.
+- **Consent is Google's own UMP SDK**, wrapped by `ConsentManager` — this codebase has no
+  homemade consent dialog anywhere, matching the same "use the real mechanism, don't invent one"
+  discipline applied elsewhere (e.g. Phase 8's OAuth flows use real provider SDKs, not custom
+  token handling).
+  App Open ads are architected (`AdFormat.appOpen`, test/production ad unit ids exist) but
+  `MonetizationConfig.appOpenAdsEnabled` is hardcoded `false` client-side regardless of the
+  backend value — a deliberate defense-in-depth guarantee, not just a default, since no screen
+  should ever be able to accidentally enable it via a server misconfiguration.
+- **Entitlement is backend-computed, not client-trusted**: `GET /monetization/entitlement`
+  reports FREE/PRO status and today's usage from a live UTC-calendar-day query against the
+  existing `AtsAnalysis`/`TestSession` tables — no separate counter table, no reset job. The
+  reward ledger (`RewardUnlock`, `reward_unlocks` table) uses a database-level
+  `UniqueConstraint` on a client-generated `reference_id` as its idempotency mechanism, the same
+  pattern already established for Phase 8's email-event dedup and Phase 9's discovery dedup —
+  this codebase consistently prefers a database constraint over an application-level check for
+  "this exact thing must never happen twice" guarantees.
+- **Reuses Phase 9's `system_settings` architecture** for all non-secret ad/frequency
+  configuration (`monetization_config`, `free_tier_limits`) — no new admin backend or frontend
+  code was needed; both keys appear automatically in the existing generic settings editor.

@@ -13,6 +13,7 @@ from app.api.v1 import (
     interview,
     jobs,
     me,
+    monetization,
     profile,
     scholarships,
     webhooks,
@@ -47,6 +48,7 @@ api_router.include_router(interview.router, prefix="/interview", tags=["intervie
 api_router.include_router(interview.star_router, prefix="/star-stories", tags=["star-stories"])
 api_router.include_router(me.router, prefix="/me", tags=["me"])
 api_router.include_router(email_tracking.router, prefix="/email-tracking", tags=["email-tracking"])
+api_router.include_router(monetization.router, prefix="/monetization", tags=["monetization"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["webhooks"])
 
 api_router.include_router(admin_auth.router, prefix="/admin/auth", tags=["admin-auth"])

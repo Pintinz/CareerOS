@@ -2,9 +2,14 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../../core/monetization/ad_placement.dart";
+import "../../../core/monetization/feed_ad_interval.dart";
+import "../../../core/monetization/monetization_providers.dart";
+import "../../../core/monetization/widgets/banner_ad_slot.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../theme/app_colors.dart";
 import "../../../widgets/phase_pending_placeholder.dart";
+import "../data/job_models.dart";
 import "job_card.dart";
 import "job_providers.dart";
 
@@ -151,21 +156,39 @@ class _JobListBody extends ConsumerWidget {
       );
     }
 
+    // Ad slots (spec §12): inserted at a configurable interval, never before Pro users, never
+    // when ads/banners are globally disabled. Failure of any single slot to load is handled
+    // entirely inside BannerAdSlot (collapses to nothing) — this list never has to know.
+    final config = ref.watch(monetizationConfigProvider).valueOrNull;
+    final isPro = ref.watch(entitlementProvider).valueOrNull?.isPro ?? false;
+    final showAds = config != null && config.adsEnabled && config.bannerAdsEnabled && !isPro;
+    final adAfterPositions = showAds
+        ? adSlotPositionsForFeed(itemCount: state.items.length, interval: config.feedAdInterval).toSet()
+        : const <int>{};
+
+    final rows = <_FeedRow>[];
+    for (var i = 0; i < state.items.length; i++) {
+      rows.add(_FeedRow.item(state.items[i]));
+      if (adAfterPositions.contains(i + 1)) rows.add(const _FeedRow.ad());
+    }
+
     return RefreshIndicator(
       onRefresh: () => ref.read(jobListProvider.notifier).refresh(),
       child: ListView.separated(
         controller: scrollController,
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        itemCount: state.items.length + (state.hasMore ? 1 : 0),
+        itemCount: rows.length + (state.hasMore ? 1 : 0),
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          if (index >= state.items.length) {
+          if (index >= rows.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          final job = state.items[index];
+          final row = rows[index];
+          if (row.isAd) return const BannerAdSlot(placement: AdPlacement.jobsFeed);
+          final job = row.job!;
           return JobCardTile(
             job: job,
             onTap: () => context.push("/jobs/${job.slug}"),
@@ -175,6 +198,16 @@ class _JobListBody extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _FeedRow {
+  const _FeedRow.item(this.job) : isAd = false;
+  const _FeedRow.ad()
+      : job = null,
+        isAd = true;
+
+  final JobCard? job;
+  final bool isAd;
 }
 
 class _FilterChip extends StatelessWidget {

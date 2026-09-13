@@ -180,6 +180,41 @@ exactly long enough to create the real first admin, then either unset them or ro
 password immediately — they stay effective as a "create if missing" trigger on every subsequent
 restart otherwise.
 
+## AdMob production setup (Phase 10 — not done in this environment)
+
+Full detail in **MONETIZATION.md**. In development, every ad request uses Google's official
+public test ad units (hardcoded in `lib/core/monetization/ad_unit_ids.dart`) and the native App
+IDs in `android/app/src/main/AndroidManifest.xml`/`ios/Runner/Info.plist` are Google's public test
+App IDs. Before any production release:
+
+1. Create a real Google AdMob account and register the Android (and, once buildable/verified,
+   iOS) app inside it.
+2. Create real ad units for each format actually shipped (banner/interstitial/rewarded — app-open
+   only if a future phase decides to enable it).
+3. Supply the real ad unit ids at build time via `--dart-define`:
+   `ADMOB_ANDROID_BANNER_UNIT_ID`, `ADMOB_ANDROID_INTERSTITIAL_UNIT_ID`,
+   `ADMOB_ANDROID_REWARDED_UNIT_ID` (and the `ADMOB_IOS_*` equivalents) — see
+   `AdUnitConfig.fromEnvironment`. **Never hardcode a real production ad unit id in source.**
+4. Replace the test App IDs in `AndroidManifest.xml`'s `com.google.android.gms.ads.APPLICATION_ID`
+   meta-data and `Info.plist`'s `GADApplicationIdentifier` with the real ones from the AdMob
+   console.
+5. Build with `Env.isProduction == true` (the release build's `ENVIRONMENT` dart-define). If any
+   format's production ad unit id is missing at that point, `AdUnitConfig.resolve()` disables
+   that format outright rather than silently serving Google's test units as if they were real
+   inventory — verify this is the intended behavior (it is) rather than treating a "no ads
+   showing" report as a bug during a production rollout with an incomplete ad-unit configuration.
+6. Host a real `app-ads.txt` at the root of a real, owned, HTTPS-reachable developer domain — see
+   `app-ads.example.txt` for the exact file format and the full step-by-step process. A private or
+   local address is explicitly insufficient; AdMob's own "app readiness" and store-listing
+   requirements need a real domain.
+7. Consider adding AdMob server-side reward verification (SSV) before trusting the
+   `POST /monetization/rewards/claim` endpoint against real ad revenue — today it's a documented
+   "mock verifier" (client calls it only after the SDK's real earned-reward callback fires, with
+   database-enforced idempotency, but no cryptographic verification that the callback was genuine).
+
+**None of the above has been done in this environment.** No real AdMob account, ad unit, or
+app-ads.txt exists anywhere in this project as of Phase 10.
+
 ## Android build (once Flutter is installed)
 
 ```bash

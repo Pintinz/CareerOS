@@ -1,0 +1,39 @@
+# app-ads.txt — PLACEHOLDER, NOT A REAL FILE
+#
+# This is documentation, not a live app-ads.txt. It contains no real publisher ID because none
+# exists yet — CareerOS has no real AdMob account in this environment (see MONETIZATION.md and
+# PROJECT_STATUS.md). Do not copy this file to a real domain as-is.
+#
+# Format (per IAB's app-ads.txt spec, as AdMob requires it):
+#   <exchange domain>, <publisher ID>, <relationship>, [certification authority ID]
+#
+# The real line, once a real AdMob account exists, will look like this (values are
+# Google-provided placeholders shown only to illustrate the shape):
+#
+# google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0
+
+google.com, pub-REPLACE-WITH-REAL-PUBLISHER-ID, DIRECT, f08c47fec0942fa0
+
+# ---------------------------------------------------------------------------
+# The real, future process (Phase 11 — see MONETIZATION.md "Production readiness"):
+#
+# 1. Create a real Google AdMob account (requires a Google account and, for payouts, verified
+#    business/tax information).
+# 2. Register the Android app (and iOS app, once built and verified) inside that AdMob account.
+#    Each platform gets its own real App ID (ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY).
+# 3. Create real ad units for each format actually shipped (banner/interstitial/rewarded — and
+#    app-open only if that phase decides to enable it) for each platform.
+# 4. Obtain the AdMob **publisher ID** (pub-XXXXXXXXXXXXXXXX) from the AdMob account's own
+#    Account settings — never invented, never copied from documentation examples.
+# 5. Add the real "google.com, pub-<your id>, DIRECT, f08c47fec0942fa0" line to a real
+#    app-ads.txt file (this exact filename, at the domain root).
+# 6. Host that file at the root of the developer's real, owned domain — e.g.
+#    https://<developer-domain>/app-ads.txt — served over HTTPS, publicly reachable, no
+#    authentication wall. It must NOT live at a private/local address (spec §36) — a real,
+#    reachable production domain is a hard requirement, and store listings/AdMob "app readiness"
+#    checks will fail without one.
+# 7. Verify the file's status inside the AdMob console (Apps → app-ads.txt status). Propagation
+#    can take up to ~24 hours after publishing.
+#
+# Nothing above has happened yet in this project — see PROJECT_STATUS.md and MONETIZATION.md for
+# the current, honest status of every monetization-adjacent capability.

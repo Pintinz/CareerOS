@@ -32,6 +32,8 @@ import "../features/jobs/presentation/job_detail_screen.dart";
 import "../features/onboarding/presentation/onboarding_screen.dart";
 import "../features/profile/presentation/saved_items_screen.dart";
 import "../features/scholarships/presentation/scholarship_detail_screen.dart";
+import "../features/settings/presentation/ads_privacy_screen.dart";
+import "../features/settings/presentation/pro_screen.dart";
 import "../features/settings/presentation/settings_screen.dart";
 import "../features/splash/presentation/splash_screen.dart";
 
@@ -121,6 +123,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: "/saved", builder: (context, state) => const SavedItemsScreen()),
       GoRoute(path: "/settings", builder: (context, state) => const SettingsScreen()),
+      GoRoute(path: "/settings/pro", builder: (context, state) => const ProScreen()),
+      GoRoute(path: "/settings/ads-privacy", builder: (context, state) => const AdsPrivacyScreen()),
       GoRoute(path: "/settings/tracking", builder: (context, state) => const SmartTrackingSettingsScreen()),
       GoRoute(path: "/settings/tracking/events", builder: (context, state) => const RecruitmentEventsScreen()),
       GoRoute(

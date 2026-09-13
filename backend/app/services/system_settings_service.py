@@ -50,6 +50,26 @@ KNOWN_SETTINGS: dict[str, tuple[dict, str]] = {
         {"quiet_hours_start": 21, "quiet_hours_end": 8},
         "Default local-hour window admin-authored notifications should avoid scheduling into.",
     ),
+    "monetization_config": (
+        {
+            "ads_enabled": True,
+            "banner_ads_enabled": True,
+            "interstitial_ads_enabled": True,
+            "rewarded_ads_enabled": True,
+            "app_open_ads_enabled": False,
+            "feed_ad_interval": 6,
+            "interstitial_min_interval_seconds": 480,
+            "interstitial_max_per_session": 3,
+        },
+        "Phase 10 monetization: global ad-format kill switches and frequency limits. "
+        "app_open_ads_enabled stays false by design (spec: architecture prepared, not enabled). "
+        "Never holds AdMob credentials — those stay in mobile build config, never here.",
+    ),
+    "free_tier_limits": (
+        {"ats_daily": 3, "aptitude_daily": 1},
+        "Free-tier daily usage caps (UTC calendar day). A reward unlock adds one-time extra "
+        "capacity on top of these via the reward_unlocks ledger — see app/models/monetization.py.",
+    ),
 }
 
 
@@ -99,3 +119,11 @@ async def get_confidence_thresholds(db: AsyncSession) -> tuple[float, float, flo
     """Returns (high, medium, suggest_min) — the one setting actually wired to its consumer."""
     value = await get_value(db, "email_classifier_confidence_thresholds")
     return value["high"], value["medium"], value["suggest_min"]
+
+
+async def get_monetization_config(db: AsyncSession) -> dict:
+    return await get_value(db, "monetization_config")
+
+
+async def get_free_tier_limits(db: AsyncSession) -> dict:
+    return await get_value(db, "free_tier_limits")

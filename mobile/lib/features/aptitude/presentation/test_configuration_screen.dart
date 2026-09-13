@@ -2,6 +2,10 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../../core/monetization/ad_placement.dart";
+import "../../../core/monetization/monetization_models.dart";
+import "../../../core/monetization/monetization_providers.dart";
+import "../../../core/monetization/widgets/rewarded_unlock_dialog.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../theme/app_colors.dart";
 import "../../applications/presentation/application_providers.dart";
@@ -56,6 +60,23 @@ class _TestConfigurationScreenState extends ConsumerState<TestConfigurationScree
   }
 
   Future<void> _start() async {
+    // Soft gate (spec §14-15): the daily free limit is informational here — backend doesn't hard-
+    // block session creation yet (see PROJECT_STATUS.md's Phase 10 scoping note), but the app
+    // still offers the intended rewarded-unlock flow at the natural point, never blocking a user
+    // who has no more free sessions from at least being offered a path forward.
+    final entitlement = ref.read(entitlementProvider).valueOrNull;
+    if (entitlement != null && entitlement.aptitudeLimitReached) {
+      final unlocked = await showRewardedUnlockDialog(
+        context,
+        title: "Daily free limit reached",
+        message: "You've used today's free aptitude tests. Want another practice session?",
+        placement: AdPlacement.aptitudeUnlock,
+        rewardType: RewardType.extraAptitudeTest,
+      );
+      if (!unlocked) return;
+      ref.invalidate(entitlementProvider);
+    }
+
     final controller = ref.read(sessionCreationControllerProvider.notifier);
     final needsJobContext = _mode == TestMode.jobSpecific || _mode == TestMode.fieldSpecific;
     final session = await controller.create(
@@ -78,6 +99,9 @@ class _TestConfigurationScreenState extends ConsumerState<TestConfigurationScree
     final categoriesAsync = ref.watch(questionCategoriesProvider);
     final creationState = ref.watch(sessionCreationControllerProvider);
     final isPracticeWeakAreas = widget.args.topicSlugs != null;
+    // Watched (not just read in _start()) so it's resolved well before the user can tap Start —
+    // the rewarded-unlock soft gate reads the fully-settled value, never a still-loading one.
+    ref.watch(entitlementProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text("Configure Test")),

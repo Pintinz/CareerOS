@@ -1,7 +1,11 @@
+import "dart:async";
+
 import "package:file_picker/file_picker.dart";
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
+import "../../../core/monetization/ad_placement.dart";
+import "../../../core/monetization/monetization_providers.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../theme/app_colors.dart";
 import "ats_providers.dart";
@@ -67,6 +71,12 @@ class _AtsAnalyzeScreenState extends ConsumerState<AtsAnalyzeScreen> {
         cvDocumentId: _selectedCvId,
         jobDescription: _jobDescriptionController.text,
       );
+    }
+    // Spec §18: a natural pause point (after the result is already shown), never before/during
+    // the analysis itself. AdService's own frequency controller decides whether this actually
+    // shows anything — this call is always safe to make.
+    if (ref.read(atsAnalysisControllerProvider).hasValue) {
+      unawaited(ref.read(adServiceProvider).maybeShowInterstitial(placement: AdPlacement.atsResults));
     }
   }
 
