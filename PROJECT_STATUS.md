@@ -21,7 +21,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `9485ed6` — docs: record Phase 9 commit hash.
 - `291ccb4` — Phase 9.5 (Full-System Audit, Integration Hardening & Product Coherence Review) — see below and **SYSTEM_AUDIT.md** (tagged `phase-9.5-system-audit`).
 - `af7b8f7` — docs: record Phase 9.5 commit hash.
-- Phase 10 (AdMob, Monetization & Free/Pro Entitlement Architecture) — see below and **MONETIZATION.md** (tagged `phase-10-monetization`).
+- `61e2b80` — Phase 10 (AdMob, Monetization & Free/Pro Entitlement Architecture) — see below and **MONETIZATION.md** (tagged `phase-10-monetization`).
 
 ## Environment notes (read before assuming anything is verified)
 
