@@ -92,6 +92,7 @@ class TestSessionQuestion(TimestampMixin, Base):
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     question_type: Mapped[QuestionType] = mapped_column(Enum(QuestionType), nullable=False)
     question_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    question_image_alt_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     passage_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     difficulty: Mapped[QuestionDifficulty] = mapped_column(Enum(QuestionDifficulty), nullable=False)
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)

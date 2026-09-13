@@ -6,6 +6,8 @@ import "../../../core/utils/error_message.dart";
 import "../../../theme/app_colors.dart";
 import "../data/interview_models.dart";
 import "interview_providers.dart";
+import "recording_controller.dart";
+import "recording_widgets.dart";
 
 /// The interview practice/mock session screen (spec §12/§17-18): question, guidance, notes,
 /// self-assessment, and — for Mock Interview — a self-paced per-question timer. Covers both
@@ -105,6 +107,7 @@ class _InterviewSessionScreenState extends ConsumerState<InterviewSessionScreen>
                     child: _QuestionBody(
                       key: ValueKey(question.id),
                       question: question,
+                      sessionId: widget.sessionId,
                       showGuidance: _showGuidance,
                       onToggleGuidance: () => setState(() => _showGuidance = !_showGuidance),
                       answerController: _answerController,
@@ -112,6 +115,8 @@ class _InterviewSessionScreenState extends ConsumerState<InterviewSessionScreen>
                       isMock: isMock,
                       onAnswerChanged: (text) => controller.answer(question.id, answerText: text),
                       onNotesChanged: (text) => controller.answer(question.id, notes: text),
+                      onRecordingReady: (path, duration) =>
+                          controller.answer(question.id, audioPath: path, audioDurationSeconds: duration),
                       onMarkPracticed: () => controller.answer(question.id, isMarkedPracticed: true),
                       onToggleSaved: () => controller.answer(question.id, isSaved: !(question.answerState?.isSaved ?? false)),
                       onSelfAssess: (rating, usedStar, gaveMetric, exact) => controller.answer(
@@ -181,6 +186,7 @@ class _QuestionBody extends StatelessWidget {
   const _QuestionBody({
     super.key,
     required this.question,
+    required this.sessionId,
     required this.showGuidance,
     required this.onToggleGuidance,
     required this.answerController,
@@ -188,12 +194,14 @@ class _QuestionBody extends StatelessWidget {
     required this.isMock,
     required this.onAnswerChanged,
     required this.onNotesChanged,
+    required this.onRecordingReady,
     required this.onMarkPracticed,
     required this.onToggleSaved,
     required this.onSelfAssess,
   });
 
   final SessionQuestion question;
+  final String sessionId;
   final bool showGuidance;
   final VoidCallback onToggleGuidance;
   final TextEditingController answerController;
@@ -201,6 +209,7 @@ class _QuestionBody extends StatelessWidget {
   final bool isMock;
   final ValueChanged<String> onAnswerChanged;
   final ValueChanged<String> onNotesChanged;
+  final void Function(String path, int durationSeconds) onRecordingReady;
   final VoidCallback onMarkPracticed;
   final VoidCallback onToggleSaved;
   final void Function(int rating, bool usedStar, bool gaveMetric, bool exact) onSelfAssess;
@@ -240,6 +249,16 @@ class _QuestionBody extends StatelessWidget {
         const SizedBox(height: 20),
         Text("Your Answer", style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
+        const Text(
+          "Record it, type it, or add notes — whatever works for you. You can combine all three.",
+          style: TextStyle(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 10),
+        RecordingControls(
+          target: RecordingTarget(sessionId: sessionId, questionId: question.id),
+          onRecordingReady: onRecordingReady,
+        ),
+        const SizedBox(height: 12),
         TextField(
           controller: answerController,
           maxLines: 6,

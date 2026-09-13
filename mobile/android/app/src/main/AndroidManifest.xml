@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only ever requested at the moment the user taps Record in interview practice — never at
+         app startup (spec §3/Phase 7.5). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="CareerOS"
         android:name="${applicationName}"

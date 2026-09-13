@@ -7,7 +7,7 @@ JSON/array-heavy columns will need a Postgres-only migration path documented whe
 
 ## Status
 
-Implemented so far (migrations `1787363de7f0` → `e4a80fc268db`, `backend/migrations/versions/`):
+Implemented so far (migrations `1787363de7f0` → `1bee777c8a2b`, `backend/migrations/versions/`):
 
 - `users` — `id` (uuid str pk), `email` (unique, indexed), `hashed_password` (argon2), `is_active`,
   `is_verified`, `created_at`, `updated_at`.
@@ -154,6 +154,28 @@ Implemented so far (migrations `1787363de7f0` → `e4a80fc268db`, `backend/migra
   user-added custom questions), `reviewed_topics` (JSON list of technical topic slugs the user has
   marked reviewed, reusing the aptitude engine's topic taxonomy by slug only — no FK coupling
   between the two engines).
+
+### Phase 7.5 additions (migration `1bee777c8a2b`)
+
+- `questions.question_image_alt_text` / `question_options.option_image_alt_text` — nullable
+  `String(500)`. Written as a neutral structural description, never one that reveals which option
+  is correct (see ARCHITECTURE.md). Snapshotted into `test_session_questions.question_image_alt_text`
+  and `options_snapshot`'s `option_image_alt_text` field exactly like every other question attribute.
+- `test_session_questions.question_image_alt_text` — the frozen, per-session copy (see above).
+- `star_stories.version` / `interview_preparation_progress.version` — `Integer NOT NULL DEFAULT 1`,
+  incremented on every server-side write. Used for optimistic-concurrency conflict detection: an
+  update carrying a stale `expected_version` is rejected with 409 rather than applied (see
+  ARCHITECTURE.md → "Offline-conflict versioning").
+- `media_assets` — `id`, `storage_key`, `url`, `mime_type`, `width`/`height` (nullable), `file_size`,
+  `alt_text` (nullable), `created_at`/`updated_at`. One row per upload through the shared image
+  pipeline (`POST /admin/uploads/image`) — an audit/metadata record, not a binary store; the file
+  itself lives on disk (dev) or object storage (future), never duplicated into Postgres.
+- `interview_recordings` — `id`, `user_id` (FK → `users.id`, CASCADE), `session_id` (FK →
+  `interview_sessions.id`, CASCADE), `session_question_id` (FK → `interview_session_questions.id`,
+  CASCADE), `local_path` (a string meaningful only on the originating device — **never** a server
+  file path; the audio itself never reaches this backend), `duration_seconds`, `title` (nullable),
+  `upload_status` (`"local_only"` always, for now — no upload code path exists; see PRIVACY.md and
+  ARCHITECTURE.md). Indexed on `user_id`/`session_id`/`session_question_id`.
 
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.

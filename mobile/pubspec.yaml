@@ -36,6 +36,11 @@ dependencies:
   cached_network_image: ^3.4.1
   url_launcher: ^6.3.1
 
+  # Audio recording / playback (Phase 7.5 — real interview answer recording)
+  record: ^7.1.1
+  audioplayers: ^6.1.0
+  permission_handler: ^11.3.1
+
   # Charts
   fl_chart: ^0.69.0
 

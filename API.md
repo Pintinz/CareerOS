@@ -61,7 +61,7 @@ responses include an accurate `is_saved`; when absent they still work (anonymous
 | DELETE | `/api/v1/admin/jobs/{id}` | admin bearer (ADMIN+) | |
 | GET/POST/PUT/DELETE | `/api/v1/admin/scholarships[/{id}]` | admin bearer | Same role split as jobs. |
 | GET/POST/PUT/DELETE | `/api/v1/admin/intelligence[/{id}]` | admin bearer | Same role split as jobs. `company_id` is optional (industry-wide news isn't always company-specific). |
-| POST | `/api/v1/admin/uploads/image` | admin bearer (EDITOR+) | Multipart `file`. JPG/PNG/WEBP, 8MB max. Returns `{"url": "..."}` served from local disk under `/uploads/*` (spec Rule 3 — swap for a cloud `StorageProvider` later without changing callers). |
+| POST | `/api/v1/admin/uploads/image` | admin bearer (EDITOR+) | Multipart `file`, optional form field `alt_text`. JPG/PNG/WEBP, 8MB max — **actually decoded with Pillow** (Phase 7.5), not just checked by extension/Content-Type; rejects content that doesn't decode as a real image (422) and dimensions over 4096px either side. Returns `{"url", "media_asset_id", "alt_text", "width", "height", "mime_type", "file_size"}` served from local disk under `/uploads/*` (spec Rule 3 — swap for a cloud `StorageProvider` later without changing callers). Every call also creates a `MediaAsset` audit row. This is the **one shared upload endpoint** used by every feature needing an uploaded image (jobs/companies/intelligence posts, and now aptitude/interview question images too) — never duplicated per-feature. |
 
 **Admin vs. consumer tokens are not interchangeable.** An admin access token carries `aud: admin` and
 a consumer token carries `aud: user`; each router's dependency rejects the wrong audience with 401 —
@@ -151,6 +151,29 @@ story that isn't yours). Practicing here **never** mutates a linked application'
 Admin question-bank CRUD exists under `/api/v1/admin/interview/*` (categories/topics/questions,
 same EDITOR+/REVIEWER role split as aptitude/jobs), including assigning a question to a company,
 role, industry, or experience level — the admin web UI for it is deferred to Phase 9.
+
+## Implemented endpoints (Phase 7.5 — Media, Assessment & Interview Hardening)
+
+All consumer routes require a bearer token and are strictly per-user (404, never 403). `StarStory`/
+`PreparationProgress` updates below accept an optional `expected_version` for offline-conflict
+detection — omit it to update unconditionally (the pre-Phase-7.5 behavior), or pass the last-seen
+`version` to get a 409 instead of silently overwriting a newer remote edit.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/interview/sessions/mock-mix-preview` | Query: `question_count` (default 10), optional `application_id`/`job_id`. Returns `MockMixPreviewOut` (`category_counts`, `category_names`, `source`: `"role_default"` or `"general_default"`) — the role-specific default category mix (`app/interview/role_mix.py`) a Mock Interview's "Automatic Mix" would apply, without creating a session. Registered before `GET /sessions/{id}` so the literal path always wins the route match. |
+| POST | `/api/v1/interview/sessions` | (Extends the Phase 7 endpoint.) New optional body field `auto_mix: bool` — when `true` and `category_counts` isn't given explicitly, derives it from the role-specific default distribution for the resolved field/industry/job_role, falling back to a general default mix when no role match is found. |
+| POST | `/api/v1/interview/recordings` | Body: `session_id`, `session_question_id` (the session-scoped question id, same id used for `/answers/{id}`), `local_path`, `duration_seconds`, optional `title`. Creates a metadata-only row (`upload_status` always `"local_only"` — the audio file itself is never uploaded). 404 if the session or session-question isn't owned by the caller. |
+| GET | `/api/v1/interview/recordings` | Lists the current user's recording metadata, newest first. |
+| PUT | `/api/v1/interview/recordings/{id}` | Body: `title`. Rename. 404 if not owned. |
+| DELETE | `/api/v1/interview/recordings/{id}` | Deletes the metadata row (204). Does **not** delete the local audio file on the device — that's the mobile client's responsibility, since the file lives on-device, not on this backend. |
+| PUT | `/api/v1/star-stories/{id}` | (Extends the Phase 7 endpoint.) Now accepts `expected_version`; response now includes `version`. |
+| PUT | `/api/v1/interview/prep/checklist`, `/prep/questions-to-ask`, `/prep/topics` | (Extend the Phase 7 endpoints.) Now accept `expected_version`; `PreparationProgressOut` now includes `version`. |
+
+`Question`/`QuestionOption`/`SessionQuestionOut`/`ReviewQuestionOut`/`QuestionAdminOut`/`OptionOut`
+(aptitude, Phase 6) all gained `question_image_alt_text`/`option_image_alt_text` fields — neutral
+structural alt text, immutably snapshotted per session like every other question field (see
+ARCHITECTURE.md and DATABASE.md).
 
 ## Planned endpoint groups (filled in per phase, not yet built)
 

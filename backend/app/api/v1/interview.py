@@ -15,9 +15,13 @@ from app.schemas.interview import (
     InterviewSessionDetailOut,
     InterviewSessionListResponse,
     InterviewTopicOut,
+    MockMixPreviewOut,
     PreparationProgressOut,
     QuestionToAskUpdate,
     ReadinessOut,
+    RecordingCreate,
+    RecordingOut,
+    RecordingUpdate,
     SessionCompletionOut,
     SessionQuestionOut,
     StarStoryCreate,
@@ -41,6 +45,19 @@ async def list_categories(db: AsyncSession = Depends(get_db)) -> list[InterviewC
 async def list_topics(category_id: str | None = None, db: AsyncSession = Depends(get_db)) -> list[InterviewTopicOut]:
     topics = await InterviewTopicRepository(db).list_all(category_id=category_id)
     return [InterviewTopicOut.model_validate(t) for t in topics]
+
+
+@router.get("/sessions/mock-mix-preview", response_model=MockMixPreviewOut)
+async def get_mock_mix_preview(
+    question_count: int = Query(default=10, ge=1, le=50),
+    application_id: str | None = None,
+    job_id: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MockMixPreviewOut:
+    return await InterviewService(db).get_mock_mix_preview(
+        user.id, question_count=question_count, application_id=application_id, job_id=job_id
+    )
 
 
 @router.post("/sessions", response_model=InterviewSessionDetailOut, status_code=201)
@@ -122,7 +139,9 @@ async def update_checklist(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PreparationProgressOut:
-    return await InterviewService(db).update_checklist_item(user.id, application_id, payload.key, payload.is_done)
+    return await InterviewService(db).update_checklist_item(
+        user.id, application_id, payload.key, payload.is_done, payload.expected_version
+    )
 
 
 @router.put("/prep/questions-to-ask", response_model=PreparationProgressOut)
@@ -142,7 +161,9 @@ async def update_topic_review(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PreparationProgressOut:
-    return await InterviewService(db).update_topic_review(user.id, application_id, payload.topic_slug, payload.is_reviewed)
+    return await InterviewService(db).update_topic_review(
+        user.id, application_id, payload.topic_slug, payload.is_reviewed, payload.expected_version
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,3 +206,34 @@ async def delete_star_story(
     story_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> None:
     await InterviewService(db).delete_star_story(user.id, story_id)
+
+
+# ---------------------------------------------------------------------------
+# Recordings — metadata only, the audio binary stays on-device (spec §4/§37)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/recordings", response_model=RecordingOut, status_code=201)
+async def create_recording(
+    payload: RecordingCreate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> RecordingOut:
+    return await InterviewService(db).create_recording(user.id, payload)
+
+
+@router.get("/recordings", response_model=list[RecordingOut])
+async def list_recordings(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)) -> list[RecordingOut]:
+    return await InterviewService(db).list_recordings(user.id)
+
+
+@router.put("/recordings/{recording_id}", response_model=RecordingOut)
+async def update_recording(
+    recording_id: str, payload: RecordingUpdate, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> RecordingOut:
+    return await InterviewService(db).update_recording(user.id, recording_id, payload.title)
+
+
+@router.delete("/recordings/{recording_id}", status_code=204)
+async def delete_recording(
+    recording_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> None:
+    await InterviewService(db).delete_recording(user.id, recording_id)

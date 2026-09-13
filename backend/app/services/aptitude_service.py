@@ -182,6 +182,7 @@ class AptitudeService:
                     "id": opt.id,
                     "option_text": opt.option_text,
                     "option_image_url": opt.option_image_url,
+                    "option_image_alt_text": opt.option_image_alt_text,
                     "display_order": opt.display_order,
                 }
                 for opt in options
@@ -198,6 +199,7 @@ class AptitudeService:
                     question_text=question.question_text,
                     question_type=question.question_type,
                     question_image_url=question.question_image_url,
+                    question_image_alt_text=question.question_image_alt_text,
                     passage_text=question.passage_text,
                     difficulty=question.difficulty,
                     explanation=question.explanation,
@@ -301,6 +303,7 @@ class AptitudeService:
                     question_text=sq.question_text,
                     question_type=sq.question_type,
                     question_image_url=sq.question_image_url,
+                    question_image_alt_text=sq.question_image_alt_text,
                     passage_text=sq.passage_text,
                     difficulty=sq.difficulty,
                     marks=sq.marks,
@@ -502,6 +505,7 @@ class AptitudeService:
                     question_text=sq.question_text,
                     question_type=sq.question_type,
                     question_image_url=sq.question_image_url,
+                    question_image_alt_text=sq.question_image_alt_text,
                     passage_text=sq.passage_text,
                     difficulty=sq.difficulty,
                     category_name=sq.category_name,

@@ -21,6 +21,7 @@ class InterviewRepository {
     String? applicationId,
     String? jobId,
     String? companyId,
+    bool autoMix = false,
   }) async {
     final response = await _apiClient.post<Map<String, dynamic>>(
       "/interview/sessions",
@@ -34,9 +35,24 @@ class InterviewRepository {
         if (applicationId != null) "application_id": applicationId,
         if (jobId != null) "job_id": jobId,
         if (companyId != null) "company_id": companyId,
+        "auto_mix": autoMix,
       },
     );
     return InterviewSessionDetail.fromJson(response.data!);
+  }
+
+  /// Preview the role-specific default category mix (spec §9) before actually creating a session,
+  /// so "Automatic Mix" can show the user what it will do.
+  Future<MockMixPreview> getMockMixPreview({int questionCount = 10, String? applicationId, String? jobId}) async {
+    final response = await _apiClient.get<Map<String, dynamic>>(
+      "/interview/sessions/mock-mix-preview",
+      queryParameters: {
+        "question_count": questionCount,
+        if (applicationId != null) "application_id": applicationId,
+        if (jobId != null) "job_id": jobId,
+      },
+    );
+    return MockMixPreview.fromJson(response.data!);
   }
 
   Future<InterviewSessionDetail> getSession(String sessionId) async {
@@ -120,10 +136,12 @@ class InterviewRepository {
     return PreparationProgress.fromJson(response.data!);
   }
 
-  Future<PreparationProgress> updateChecklistItem({required String key, required bool isDone, String? applicationId}) async {
+  Future<PreparationProgress> updateChecklistItem({
+    required String key, required bool isDone, String? applicationId, int? expectedVersion,
+  }) async {
     final response = await _apiClient.put<Map<String, dynamic>>(
       "/interview/prep/checklist",
-      data: {"key": key, "is_done": isDone},
+      data: {"key": key, "is_done": isDone, if (expectedVersion != null) "expected_version": expectedVersion},
       queryParameters: applicationId != null ? {"application_id": applicationId} : null,
     );
     return PreparationProgress.fromJson(response.data!);
@@ -131,6 +149,7 @@ class InterviewRepository {
 
   Future<PreparationProgress> updateQuestionToAsk({
     String? id, String? text, String? category, String? status, bool isCustom = false, String? applicationId,
+    int? expectedVersion,
   }) async {
     final response = await _apiClient.put<Map<String, dynamic>>(
       "/interview/prep/questions-to-ask",
@@ -140,16 +159,23 @@ class InterviewRepository {
         if (category != null) "category": category,
         "status": status,
         "is_custom": isCustom,
+        if (expectedVersion != null) "expected_version": expectedVersion,
       },
       queryParameters: applicationId != null ? {"application_id": applicationId} : null,
     );
     return PreparationProgress.fromJson(response.data!);
   }
 
-  Future<PreparationProgress> updateTopicReview({required String topicSlug, required bool isReviewed, String? applicationId}) async {
+  Future<PreparationProgress> updateTopicReview({
+    required String topicSlug, required bool isReviewed, String? applicationId, int? expectedVersion,
+  }) async {
     final response = await _apiClient.put<Map<String, dynamic>>(
       "/interview/prep/topics",
-      data: {"topic_slug": topicSlug, "is_reviewed": isReviewed},
+      data: {
+        "topic_slug": topicSlug,
+        "is_reviewed": isReviewed,
+        if (expectedVersion != null) "expected_version": expectedVersion,
+      },
       queryParameters: applicationId != null ? {"application_id": applicationId} : null,
     );
     return PreparationProgress.fromJson(response.data!);
@@ -209,6 +235,7 @@ class InterviewRepository {
     List<String>? skillsDemonstrated,
     String? metrics,
     String? companyContext,
+    int? expectedVersion,
   }) async {
     final response = await _apiClient.put<Map<String, dynamic>>(
       "/star-stories/$storyId",
@@ -223,10 +250,46 @@ class InterviewRepository {
         if (skillsDemonstrated != null) "skills_demonstrated": skillsDemonstrated,
         if (metrics != null) "metrics": metrics,
         if (companyContext != null) "company_context": companyContext,
+        if (expectedVersion != null) "expected_version": expectedVersion,
       },
     );
     return StarStory.fromJson(response.data!);
   }
 
   Future<void> deleteStarStory(String storyId) => _apiClient.delete("/star-stories/$storyId");
+
+  Future<Recording> createRecording({
+    required String sessionId,
+    required String sessionQuestionId,
+    required String localPath,
+    required int durationSeconds,
+    String? title,
+  }) async {
+    final response = await _apiClient.post<Map<String, dynamic>>(
+      "/interview/recordings",
+      data: {
+        "session_id": sessionId,
+        "session_question_id": sessionQuestionId,
+        "local_path": localPath,
+        "duration_seconds": durationSeconds,
+        if (title != null) "title": title,
+      },
+    );
+    return Recording.fromJson(response.data!);
+  }
+
+  Future<List<Recording>> listRecordings() async {
+    final response = await _apiClient.get<List<dynamic>>("/interview/recordings");
+    return response.data!.map((e) => Recording.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<Recording> renameRecording(String recordingId, String title) async {
+    final response = await _apiClient.put<Map<String, dynamic>>(
+      "/interview/recordings/$recordingId",
+      data: {"title": title},
+    );
+    return Recording.fromJson(response.data!);
+  }
+
+  Future<void> deleteRecording(String recordingId) => _apiClient.delete("/interview/recordings/$recordingId");
 }

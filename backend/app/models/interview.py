@@ -228,6 +228,8 @@ class StarStory(TimestampMixin, Base):
     company_context: Mapped[str | None] = mapped_column(String(255), nullable=True)
     relevant_roles: Mapped[list | None] = mapped_column(JSON, nullable=True)
     relevant_questions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Same conflict-detection rationale as InterviewPreparationProgress.version below.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 
 class InterviewPreparationProgress(TimestampMixin, Base):
@@ -251,3 +253,32 @@ class InterviewPreparationProgress(TimestampMixin, Base):
     questions_to_ask: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # Technical topic slugs (reusing the aptitude taxonomy's slugs) the user has marked reviewed.
     reviewed_topics: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # Bumped on every server-side write — lets an offline mobile client detect it edited a stale
+    # copy (spec §21/§22: "do not silently overwrite newer remote data") without relying on
+    # wall-clock timestamps, which can skew between devices.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+
+class InterviewRecording(TimestampMixin, Base):
+    """Metadata only — the audio binary itself lives on the user's device and is never uploaded
+    automatically (spec §1-2/§4/§37). `local_path` is meaningful only on the device that created
+    it; a recording synced from a different device would show `upload_status != "local_only"`,
+    which nothing in this phase actually produces yet (no upload flow exists)."""
+
+    __tablename__ = "interview_recordings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    session_question_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("interview_session_questions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    local_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    upload_status: Mapped[str] = mapped_column(String(30), nullable=False, default="local_only")

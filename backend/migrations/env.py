@@ -19,6 +19,7 @@ from app.models import (  # noqa: F401
     intelligence_post,
     interview,
     job,
+    media,
     profile,
     question,
     scholarship,

@@ -41,6 +41,31 @@ Verified working combination for Flutter 3.47.4 on this project (as of this writ
    `flutter build apk --debug` (see `PROJECT_STATUS.md` for this project's actual results).
 6. iOS builds require a Mac with Xcode — cannot be done or verified on Windows at all.
 
+### Known transient failure: Maven Central 403s during `flutter build apk` (Phase 7.5)
+
+Adding `permission_handler` pulled in `permission_handler_android`, whose own `build.gradle`
+declares a legacy `buildscript { classpath 'com.android.tools.build:gradle:8.0.0' }` block — AGP
+8.0.0's own transitive tree includes `io.grpc:grpc-netty` (and its netty/guava/httpcore
+dependencies), which Maven Central intermittently answered with `403 Forbidden` for a handful of
+artifacts per attempt during this session's build (each individual artifact was reachable via a
+direct `curl`, so this reads as upstream rate-limiting rather than a real block). Simply retrying
+`flutter build apk --debug` a few times let Gradle's dependency cache fill in incrementally until a
+full resolution succeeded — no project configuration change was needed for this part. If it recurs
+persistently, `gradle.properties` → `systemProp.http(s).proxyHost`/retry tuning, or a Gradle mirror
+repository, would be the next thing to try — not attempted here since retrying resolved it.
+
+### Real fix required: `record` package version bump (Phase 7.5)
+
+`record: ^5.2.0` (the initial constraint added for interview audio recording) resolves an old
+`record_linux` (0.7.2) that does not implement the newer `record_platform_interface` (1.6.0) that
+another transitive dependency pulls in — a genuine version-matrix inconsistency in that release of
+the `record` package, unrelated to any platform this app actually ships (Android/iOS), but still
+fatal to compilation since Flutter compiles every federated platform implementation regardless of
+target. **Fix**: bump the constraint to `record: ^7.1.1` in `mobile/pubspec.yaml` and re-run
+`flutter pub get` — this resolves a consistent `record_platform_interface 2.1.0` across every
+platform package. No `RecordingService` code changes were required; `flutter analyze`/`flutter test`
+were clean both before and after the bump.
+
 ## Environment variables
 
 Never commit real secrets. Each app ships a `.env.example`; copy to `.env` (`admin` uses `.env.local`)

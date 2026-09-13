@@ -38,6 +38,7 @@ class FakeInterviewRepository extends InterviewRepository {
     String? applicationId,
     String? jobId,
     String? companyId,
+    bool autoMix = false,
   }) async {
     return onCreateSession?.call() ?? buildSampleInterviewSession();
   }
@@ -78,6 +79,8 @@ class FakeInterviewRepository extends InterviewRepository {
       answerState: SessionAnswerState(
         answerText: answerText ?? question.answerState?.answerText,
         notes: notes ?? question.answerState?.notes,
+        audioPath: audioPath ?? question.answerState?.audioPath,
+        audioDurationSeconds: audioDurationSeconds ?? question.answerState?.audioDurationSeconds,
         selfRating: selfRating ?? question.answerState?.selfRating,
         usedStar: usedStar ?? question.answerState?.usedStar,
         gaveMeasurableResult: gaveMeasurableResult ?? question.answerState?.gaveMeasurableResult,

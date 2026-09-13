@@ -212,6 +212,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
     String questionId, {
     String? answerText,
     String? notes,
+    String? audioPath,
+    int? audioDurationSeconds,
     int? selfRating,
     bool? usedStar,
     bool? gaveMeasurableResult,
@@ -221,7 +223,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
     bool? isSaved,
   }) async {
     _applyLocalAnswer(
-      questionId, answerText: answerText, notes: notes, selfRating: selfRating, usedStar: usedStar,
+      questionId, answerText: answerText, notes: notes, audioPath: audioPath, audioDurationSeconds: audioDurationSeconds,
+      selfRating: selfRating, usedStar: usedStar,
       gaveMeasurableResult: gaveMeasurableResult, answeredExactQuestion: answeredExactQuestion,
       isSkipped: isSkipped, isMarkedPracticed: isMarkedPracticed, isSaved: isSaved,
     );
@@ -229,7 +232,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
     try {
       await _syncPending();
       final updated = await _repo.updateAnswer(
-        sessionId: arg, questionId: questionId, answerText: answerText, notes: notes, selfRating: selfRating,
+        sessionId: arg, questionId: questionId, answerText: answerText, notes: notes, audioPath: audioPath,
+        audioDurationSeconds: audioDurationSeconds, selfRating: selfRating,
         usedStar: usedStar, gaveMeasurableResult: gaveMeasurableResult, answeredExactQuestion: answeredExactQuestion,
         isSkipped: isSkipped, isMarkedPracticed: isMarkedPracticed, isSaved: isSaved,
       );
@@ -239,7 +243,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
     } on ApiException catch (e) {
       if (e.kind == ApiErrorKind.network) {
         await _cache.enqueueMutation(PendingInterviewMutation(
-          sessionId: arg, questionId: questionId, answerText: answerText, notes: notes, selfRating: selfRating,
+          sessionId: arg, questionId: questionId, answerText: answerText, notes: notes, audioPath: audioPath,
+          audioDurationSeconds: audioDurationSeconds, selfRating: selfRating,
           usedStar: usedStar, gaveMeasurableResult: gaveMeasurableResult, answeredExactQuestion: answeredExactQuestion,
           isSkipped: isSkipped, isMarkedPracticed: isMarkedPracticed, isSaved: isSaved,
         ));
@@ -250,7 +255,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
 
   void _applyLocalAnswer(
     String questionId, {
-    String? answerText, String? notes, int? selfRating, bool? usedStar, bool? gaveMeasurableResult,
+    String? answerText, String? notes, String? audioPath, int? audioDurationSeconds, int? selfRating,
+    bool? usedStar, bool? gaveMeasurableResult,
     bool? answeredExactQuestion, bool? isSkipped, bool? isMarkedPracticed, bool? isSaved,
   }) {
     final session = state.session;
@@ -263,8 +269,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
         answerState: SessionAnswerState(
           answerText: answerText ?? current?.answerText,
           notes: notes ?? current?.notes,
-          audioPath: current?.audioPath,
-          audioDurationSeconds: current?.audioDurationSeconds,
+          audioPath: audioPath ?? current?.audioPath,
+          audioDurationSeconds: audioDurationSeconds ?? current?.audioDurationSeconds,
           selfRating: selfRating ?? current?.selfRating,
           usedStar: usedStar ?? current?.usedStar,
           gaveMeasurableResult: gaveMeasurableResult ?? current?.gaveMeasurableResult,
@@ -284,7 +290,8 @@ class InterviewSessionController extends FamilyNotifier<InterviewSessionState, S
       try {
         await _repo.updateAnswer(
           sessionId: mutation.sessionId, questionId: mutation.questionId, answerText: mutation.answerText,
-          notes: mutation.notes, selfRating: mutation.selfRating, usedStar: mutation.usedStar,
+          notes: mutation.notes, audioPath: mutation.audioPath, audioDurationSeconds: mutation.audioDurationSeconds,
+          selfRating: mutation.selfRating, usedStar: mutation.usedStar,
           gaveMeasurableResult: mutation.gaveMeasurableResult, answeredExactQuestion: mutation.answeredExactQuestion,
           isSkipped: mutation.isSkipped, isMarkedPracticed: mutation.isMarkedPracticed, isSaved: mutation.isSaved,
         );

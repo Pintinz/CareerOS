@@ -13,6 +13,8 @@ class PendingInterviewMutation {
     required this.questionId,
     this.answerText,
     this.notes,
+    this.audioPath,
+    this.audioDurationSeconds,
     this.selfRating,
     this.usedStar,
     this.gaveMeasurableResult,
@@ -26,6 +28,8 @@ class PendingInterviewMutation {
   final String questionId;
   final String? answerText;
   final String? notes;
+  final String? audioPath;
+  final int? audioDurationSeconds;
   final int? selfRating;
   final bool? usedStar;
   final bool? gaveMeasurableResult;
@@ -39,6 +43,8 @@ class PendingInterviewMutation {
         "question_id": questionId,
         "answer_text": answerText,
         "notes": notes,
+        "audio_path": audioPath,
+        "audio_duration_seconds": audioDurationSeconds,
         "self_rating": selfRating,
         "used_star": usedStar,
         "gave_measurable_result": gaveMeasurableResult,
@@ -53,6 +59,8 @@ class PendingInterviewMutation {
         questionId: json["question_id"] as String,
         answerText: json["answer_text"] as String?,
         notes: json["notes"] as String?,
+        audioPath: json["audio_path"] as String?,
+        audioDurationSeconds: json["audio_duration_seconds"] as int?,
         selfRating: json["self_rating"] as int?,
         usedStar: json["used_star"] as bool?,
         gaveMeasurableResult: json["gave_measurable_result"] as bool?,
@@ -132,6 +140,8 @@ class InterviewOfflineCache {
                       : {
                           "answer_text": q.answerState!.answerText,
                           "notes": q.answerState!.notes,
+                          "audio_path": q.answerState!.audioPath,
+                          "audio_duration_seconds": q.answerState!.audioDurationSeconds,
                           "self_rating": q.answerState!.selfRating,
                           "used_star": q.answerState!.usedStar,
                           "gave_measurable_result": q.answerState!.gaveMeasurableResult,

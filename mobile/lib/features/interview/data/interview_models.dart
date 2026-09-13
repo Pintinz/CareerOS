@@ -399,6 +399,7 @@ class StarStory {
     required this.completeness,
     required this.createdAt,
     required this.updatedAt,
+    this.version = 1,
   });
 
   final String id;
@@ -417,6 +418,7 @@ class StarStory {
   final StarCompleteness completeness;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int version;
 
   factory StarStory.fromJson(Map<String, dynamic> json) => StarStory(
         id: json["id"] as String,
@@ -435,6 +437,7 @@ class StarStory {
         completeness: StarCompleteness.fromJson(json["completeness"] as Map<String, dynamic>),
         createdAt: DateTime.parse(json["created_at"] as String),
         updatedAt: DateTime.parse(json["updated_at"] as String),
+        version: json["version"] as int? ?? 1,
       );
 }
 
@@ -599,18 +602,82 @@ class QuestionToAsk {
       );
 }
 
+class Recording {
+  const Recording({
+    required this.id,
+    required this.sessionId,
+    required this.sessionQuestionId,
+    required this.localPath,
+    required this.durationSeconds,
+    this.title,
+    required this.uploadStatus,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String sessionId;
+  final String sessionQuestionId;
+  final String localPath;
+  final int durationSeconds;
+  final String? title;
+  final String uploadStatus;
+  final DateTime createdAt;
+
+  factory Recording.fromJson(Map<String, dynamic> json) => Recording(
+        id: json["id"] as String,
+        sessionId: json["session_id"] as String,
+        sessionQuestionId: json["session_question_id"] as String,
+        localPath: json["local_path"] as String,
+        durationSeconds: json["duration_seconds"] as int,
+        title: json["title"] as String?,
+        uploadStatus: json["upload_status"] as String,
+        createdAt: DateTime.parse(json["created_at"] as String),
+      );
+}
+
+class MockMixPreview {
+  const MockMixPreview({required this.categoryCounts, required this.categoryNames, required this.source});
+
+  final Map<String, int> categoryCounts;
+  final Map<String, String> categoryNames;
+  final String source;
+
+  int get total => categoryCounts.values.fold(0, (a, b) => a + b);
+
+  factory MockMixPreview.fromJson(Map<String, dynamic> json) => MockMixPreview(
+        categoryCounts: (json["category_counts"] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as int)),
+        categoryNames: (json["category_names"] as Map<String, dynamic>).map((k, v) => MapEntry(k, v as String)),
+        source: json["source"] as String,
+      );
+}
+
 class PreparationProgress {
-  const PreparationProgress({this.applicationId, required this.checklist, required this.questionsToAsk, required this.reviewedTopics});
+  const PreparationProgress({
+    this.applicationId, required this.checklist, required this.questionsToAsk, required this.reviewedTopics,
+    this.version = 1,
+  });
 
   final String? applicationId;
   final List<ChecklistItem> checklist;
   final List<QuestionToAsk> questionsToAsk;
   final List<String> reviewedTopics;
+  final int version;
 
   factory PreparationProgress.fromJson(Map<String, dynamic> json) => PreparationProgress(
         applicationId: json["application_id"] as String?,
         checklist: (json["checklist"] as List).map((e) => ChecklistItem.fromJson(e as Map<String, dynamic>)).toList(),
         questionsToAsk: (json["questions_to_ask"] as List).map((e) => QuestionToAsk.fromJson(e as Map<String, dynamic>)).toList(),
         reviewedTopics: (json["reviewed_topics"] as List).map((e) => e as String).toList(),
+        version: json["version"] as int? ?? 1,
       );
+
+  Map<String, dynamic> toJson() => {
+        "application_id": applicationId,
+        "checklist": checklist.map((c) => {"key": c.key, "label": c.label, "is_done": c.isDone}).toList(),
+        "questions_to_ask": questionsToAsk
+            .map((q) => {"id": q.id, "text": q.text, "category": q.category, "status": q.status, "is_custom": q.isCustom})
+            .toList(),
+        "reviewed_topics": reviewedTopics,
+        "version": version,
+      };
 }

@@ -126,7 +126,12 @@ class InterviewSessionCreate(BaseModel):
     mode: InterviewSessionMode = InterviewSessionMode.PRACTICE
     categories: list[str] = Field(default_factory=list, description="Category slugs; empty = mixed, all categories")
     category_counts: dict[str, int] | None = Field(
-        default=None, description="Category slug -> exact question count (Mock Interview builder)"
+        default=None, description="Category slug -> exact question count (Mock Interview Custom Mix builder)"
+    )
+    auto_mix: bool = Field(
+        default=False,
+        description="Mock Interview 'Automatic Mix' — derives category_counts from the role-specific "
+        "default distribution (app/interview/role_mix.py) when category_counts isn't given explicitly.",
     )
     difficulty: str = Field(default="MIXED", description="EASY|MEDIUM|HARD|EXPERT|MIXED")
     question_count: int = Field(default=10, ge=1, le=50)
@@ -253,6 +258,10 @@ class StarStoryCreate(BaseModel):
 
 
 class StarStoryUpdate(BaseModel):
+    # When set, the update is rejected with 409 if the server's current version has already moved
+    # past it — an offline edit queued against a stale copy must never silently clobber a newer
+    # server write (spec §21). Omit to update unconditionally (the normal online-editing path).
+    expected_version: int | None = None
     title: str | None = None
     category: StarCategory | None = None
     situation: str | None = None
@@ -287,6 +296,7 @@ class StarStoryOut(BaseModel):
     company_context: str | None = None
     relevant_roles: list | None = None
     relevant_questions: list | None = None
+    version: int
     completeness: StarCompletenessOut
     created_at: datetime
     updated_at: datetime
@@ -377,11 +387,13 @@ class PreparationProgressOut(BaseModel):
     checklist: list[ChecklistItemOut]
     questions_to_ask: list[QuestionToAskOut]
     reviewed_topics: list[str]
+    version: int
 
 
 class ChecklistUpdate(BaseModel):
     key: str
     is_done: bool
+    expected_version: int | None = None
 
 
 class QuestionToAskUpdate(BaseModel):
@@ -390,8 +402,46 @@ class QuestionToAskUpdate(BaseModel):
     category: str | None = None
     status: str | None = None
     is_custom: bool = False
+    expected_version: int | None = None
 
 
 class TopicReviewUpdate(BaseModel):
     topic_slug: str
     is_reviewed: bool
+    expected_version: int | None = None
+
+
+class MockMixPreviewOut(BaseModel):
+    category_counts: dict[str, int]
+    category_names: dict[str, str]
+    source: str  # "role_default" | "general_default"
+
+
+# ---------------------------------------------------------------------------
+# Recordings (metadata only — the audio binary stays on-device, spec §4/§37)
+# ---------------------------------------------------------------------------
+
+
+class RecordingCreate(BaseModel):
+    session_id: str
+    session_question_id: str
+    local_path: str = Field(min_length=1)
+    duration_seconds: int = Field(ge=0)
+    title: str | None = None
+
+
+class RecordingUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+
+class RecordingOut(BaseModel):
+    id: str
+    session_id: str
+    session_question_id: str
+    local_path: str
+    duration_seconds: int
+    title: str | None = None
+    upload_status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

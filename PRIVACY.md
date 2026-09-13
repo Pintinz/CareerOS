@@ -13,7 +13,11 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
   is served only via a short-lived signed URL issued to the owning user's authenticated session.
   No document is ever publicly listable or accessible without authentication.
 - Uploads are validated by content-type and size before storage (see `API.md` → `/documents`, and
-  spec §74 Image Handling for images specifically).
+  spec §74 Image Handling for images specifically). Since Phase 7.5, every image upload through the
+  shared pipeline (`POST /admin/uploads/image`) is also **actually decoded** with Pillow before being
+  written to disk — content that merely claims to be an image via extension/Content-Type but doesn't
+  decode is rejected (422), not stored. Storage keys are randomized (never derived from the
+  client-supplied filename), defending against path traversal and filename collisions.
 - **CVs specifically** (`cv_documents` table, Phase 3 ATS): the uploaded file's binary is never
   persisted — only the plain text extracted from it server-side (`app/services/document_extraction.py`)
   and never sent anywhere outside this backend. `GET /ats/cv` and `POST /ats/analyze` both require the
@@ -57,10 +61,18 @@ ever sent to a third-party AI API — scoring/matching/classification are local,
 - Session data, STAR stories, answers, and preparation progress are visible only to the owning
   user — every interview/STAR endpoint 404s (never 403) on a resource that isn't the caller's, same
   isolation pattern as aptitude/applications.
-- **Audio recordings remain local by default.** `interview_answers.audio_path` stores a path to a
-  file on the device only; the binary audio is **never automatically uploaded** to this backend or
-  any third party. The mobile UI provides explicit Play/Rename/Delete controls, and recording only
-  starts after the user explicitly grants microphone permission — nothing records automatically.
+- **Audio recordings remain local by default (implemented Phase 7.5).** `interview_answers.audio_path`
+  and the separate `interview_recordings` metadata table both store a path to a file **on the
+  device only**; the binary audio is **never automatically uploaded** to this backend or any third
+  party — `interview_recordings.upload_status` stays `"local_only"` because no upload code path
+  exists at all, by design. The mobile session screen provides explicit Start/Stop/Play/Delete
+  controls (a dedicated Rename control lives on the repository/API layer — `PUT
+  /interview/recordings/{id}` — ready for the not-yet-built Recordings Manager screen; see
+  PROJECT_STATUS.md). Recording only starts after the user explicitly taps "Start Recording" and
+  grants microphone permission at that moment — **never at app startup**, and nothing records
+  automatically. Before a user's first-ever recording attempt, the app shows a one-time notice —
+  "Interview recordings are stored locally on this device unless you explicitly choose to upload or
+  share them." with **Continue**/**Not Now** — and never repeats it once dismissed either way.
 - **No external AI processing of interview answers.** Typed answers are checked only via the
   deterministic, local "Answer Structure Check" (word count, metric-presence, STAR-keyword hints —
   `app/interview/answer_check.py`); nothing is sent to an LLM or third-party analysis API.
@@ -93,6 +105,11 @@ exceptions), not a soft "deactivate" that leaves data recoverable indefinitely.
   "could affect demand for...") — it never states that a news item guarantees hiring.
 - Skill proficiency levels are user-declared (Beginner/Intermediate/Advanced/Expert) unless a real
   assessment produced a score; no fabricated percentages.
+- Interview readiness is a CareerOS product heuristic (six weighted, capped activity components —
+  see ARCHITECTURE.md), **not** a scientifically validated predictor of real interview outcomes.
+  Copy is phrased as "Interview Preparation Readiness: 72%", never as a probability claim like "72%
+  chance of passing" — reviewed as part of Phase 7.5; no wording changes were needed since the
+  Phase 7 backend/mobile copy already used the correct framing throughout.
 
 ## Demo/seed data
 
@@ -101,3 +118,10 @@ All seed content used in development is clearly flagged in the database. `compan
 convention applies to questions/applications/news once those tables exist. Demo content must never be
 presented to a production user as a real, current vacancy or opportunity — the mobile/admin UI should
 visibly badge `is_demo` records once real-vs-demo content coexists in the same environment.
+
+The 30 abstract-reasoning image questions seeded in Phase 7.5 (`scripts/generate_abstract_images.py`
++ `seed_abstract_image_questions.py`) are **original, procedurally-generated shapes** — not scans,
+screenshots, or reproductions of any real commercial aptitude test — and are marked `is_demo=True`
+like every other seeded question. The mobile UI continues to show the existing "CareerOS practice
+assessment... not an official employer assessment" disclaimer wherever aptitude question content is
+displayed (unchanged by this phase).

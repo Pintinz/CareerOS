@@ -10,10 +10,12 @@ from app.security.password import hash_password
 
 pytestmark = pytest.mark.asyncio
 
-# Smallest possible valid PNG (1x1 transparent pixel).
+# A genuinely valid 2x2 PNG (Pillow-encoded, so its IDAT checksum is actually correct) — the
+# storage provider now decodes every upload with Pillow (spec §14/§31), so a fixture with a
+# well-formed header but a broken chunk checksum would rightly be rejected as not a real image.
 _TINY_PNG = bytes.fromhex(
-    "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
-    "53de0000000c4944415408d763f8ffff3f0005fe02fea7d3e0940000000049454e44ae426082"
+    "89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a730000001049444154789c"
+    "63fccf00024c609201000d1d010382c971ff0000000049454e44ae426082"
 )
 
 

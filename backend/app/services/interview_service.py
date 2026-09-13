@@ -13,6 +13,7 @@ from app.interview.checklist import (
 from app.interview.generator import generate_questions
 from app.interview.job_role_topic_map import topics_for
 from app.interview.readiness import compute_readiness
+from app.interview.role_mix import GENERAL_DEFAULT_MIX, category_counts_for_mix, default_mix_for
 from app.interview.star_check import star_completeness_check
 from app.models.company import Company
 from app.models.interview import (
@@ -20,6 +21,7 @@ from app.models.interview import (
     InterviewPreparationProgress,
     InterviewQuestion,
     InterviewQuestionCategory,
+    InterviewRecording,
     InterviewSession,
     InterviewSessionQuestion,
     InterviewSessionStatus,
@@ -29,6 +31,7 @@ from app.models.interview import (
 from app.repositories.application_repository import ApplicationRepository
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.interview_progress_repository import InterviewProgressRepository
+from app.repositories.interview_recording_repository import InterviewRecordingRepository
 from app.repositories.interview_repository import (
     InterviewCategoryRepository,
     InterviewQuestionRepository,
@@ -53,11 +56,14 @@ from app.schemas.interview import (
     InterviewSessionDetailOut,
     InterviewSessionOut,
     InterviewTopicCreate,
+    MockMixPreviewOut,
     OpenJobOut,
     PreparationProgressOut,
     QuestionToAskOut,
     ReadinessOut,
     RecentDevelopmentOut,
+    RecordingCreate,
+    RecordingOut,
     SessionAnswerStateOut,
     SessionCompletionOut,
     SessionQuestionOut,
@@ -77,6 +83,7 @@ class InterviewService:
         self.topics = InterviewTopicRepository(db)
         self.stars = StarStoryRepository(db)
         self.progress = InterviewProgressRepository(db)
+        self.recordings = InterviewRecordingRepository(db)
 
     # -- admin: question bank CRUD -------------------------------------------------------------
 
@@ -134,13 +141,34 @@ class InterviewService:
         await self.questions.delete(question)
         await self.db.commit()
 
+    async def get_mock_mix_preview(
+        self, user_id: str, *, question_count: int, application_id: str | None, job_id: str | None
+    ) -> MockMixPreviewOut:
+        fake_payload = InterviewSessionCreate(
+            question_count=question_count, application_id=application_id, job_id=job_id
+        )
+        field, industry, job_role, _, _ = await self._resolve_context(user_id, fake_payload)
+        mix = default_mix_for(field=field, industry=industry, job_role=job_role)
+        counts = category_counts_for_mix(mix, question_count)
+        names = {}
+        for slug in counts:
+            category = await self.categories.get_by_slug(slug)
+            names[slug] = category.name if category else slug
+        source = "general_default" if mix is GENERAL_DEFAULT_MIX else "role_default"
+        return MockMixPreviewOut(category_counts=counts, category_names=names, source=source)
+
     # -- session creation -----------------------------------------------------------------------
 
     async def create_session(self, user_id: str, payload: InterviewSessionCreate) -> InterviewSessionDetailOut:
-        category_ids = await self._resolve_category_ids(payload.categories, payload.category_counts)
-        category_counts_by_id = await self._resolve_category_counts(payload.category_counts)
-
         field, industry, job_role, company_id, job_id = await self._resolve_context(user_id, payload)
+
+        category_counts_slugs = payload.category_counts
+        if payload.auto_mix and not category_counts_slugs:
+            mix = default_mix_for(field=field, industry=industry, job_role=job_role)
+            category_counts_slugs = category_counts_for_mix(mix, payload.question_count)
+
+        category_ids = await self._resolve_category_ids(payload.categories, category_counts_slugs)
+        category_counts_by_id = await self._resolve_category_counts(category_counts_slugs)
 
         candidate_questions = await generate_questions(
             self.questions,
@@ -522,7 +550,8 @@ class InterviewService:
             "task": story.task, "action": story.action, "result": story.result, "lessons": story.lessons,
             "skills_demonstrated": story.skills_demonstrated, "metrics": story.metrics,
             "company_context": story.company_context, "relevant_roles": story.relevant_roles,
-            "relevant_questions": story.relevant_questions, "created_at": story.created_at, "updated_at": story.updated_at,
+            "relevant_questions": story.relevant_questions, "version": story.version,
+            "created_at": story.created_at, "updated_at": story.updated_at,
             "completeness": StarCompletenessOut(**check),
         }
         return StarStoryOut.model_validate(base)
@@ -548,8 +577,14 @@ class InterviewService:
         story = await self.stars.get_owned(story_id, user_id)
         if story is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="STAR story not found")
-        for field, value in payload.model_dump(exclude_unset=True).items():
+        if payload.expected_version is not None and payload.expected_version != story.version:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This story was updated elsewhere since you last loaded it.",
+            )
+        for field, value in payload.model_dump(exclude_unset=True, exclude={"expected_version"}).items():
             setattr(story, field, value)
+        story.version += 1
         self.db.add(story)
         await self.db.commit()
         await self.db.refresh(story)
@@ -642,22 +677,35 @@ class InterviewService:
             checklist=checklist_out,
             questions_to_ask=catalog_out + custom_out,
             reviewed_topics=progress.reviewed_topics,
+            version=progress.version,
         )
 
-    async def update_checklist_item(self, user_id: str, application_id: str | None, key: str, is_done: bool) -> PreparationProgressOut:
+    def _check_version(self, progress: InterviewPreparationProgress, expected_version: int | None) -> None:
+        if expected_version is not None and expected_version != progress.version:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This preparation progress was updated elsewhere since you last loaded it.",
+            )
+
+    async def update_checklist_item(
+        self, user_id: str, application_id: str | None, key: str, is_done: bool, expected_version: int | None = None
+    ) -> PreparationProgressOut:
         progress = await self.progress.get_or_create(user_id, application_id)
+        self._check_version(progress, expected_version)
         valid_keys = {k for k, _ in DEFAULT_CHECKLIST_ITEMS}
         if key not in valid_keys:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Unknown checklist item '{key}'")
         checklist = dict(progress.checklist)
         checklist[key] = is_done
         progress.checklist = checklist
+        progress.version += 1
         self.db.add(progress)
         await self.db.commit()
         return self._progress_out(progress)
 
     async def update_question_to_ask(self, user_id: str, application_id: str | None, payload) -> PreparationProgressOut:
         progress = await self.progress.get_or_create(user_id, application_id)
+        self._check_version(progress, payload.expected_version)
         entries = [q for q in progress.questions_to_ask if q["id"] != payload.id] if payload.id else list(progress.questions_to_ask)
         entry_id = payload.id or f"custom-{uuid.uuid4().hex[:8]}"
         if payload.status is not None or payload.is_custom or payload.text:
@@ -669,21 +717,68 @@ class InterviewService:
                 "is_custom": payload.is_custom,
             })
         progress.questions_to_ask = entries
+        progress.version += 1
         self.db.add(progress)
         await self.db.commit()
         return self._progress_out(progress)
 
-    async def update_topic_review(self, user_id: str, application_id: str | None, topic_slug: str, is_reviewed: bool) -> PreparationProgressOut:
+    async def update_topic_review(
+        self, user_id: str, application_id: str | None, topic_slug: str, is_reviewed: bool, expected_version: int | None = None
+    ) -> PreparationProgressOut:
         progress = await self.progress.get_or_create(user_id, application_id)
+        self._check_version(progress, expected_version)
         reviewed = set(progress.reviewed_topics)
         if is_reviewed:
             reviewed.add(topic_slug)
         else:
             reviewed.discard(topic_slug)
         progress.reviewed_topics = list(reviewed)
+        progress.version += 1
         self.db.add(progress)
         await self.db.commit()
         return self._progress_out(progress)
+
+    # -- recordings (metadata only — the audio binary stays on-device, spec §4/§37) -----------------
+
+    async def create_recording(self, user_id: str, payload: RecordingCreate) -> RecordingOut:
+        session = await self._get_owned_or_404(user_id, payload.session_id)
+        session_question = await self.sessions.get_session_question(session.id, payload.session_question_id)
+        if session_question is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found in this session")
+
+        recording = InterviewRecording(
+            user_id=user_id,
+            session_id=payload.session_id,
+            session_question_id=payload.session_question_id,
+            local_path=payload.local_path,
+            duration_seconds=payload.duration_seconds,
+            title=payload.title,
+        )
+        self.recordings.add(recording)
+        await self.db.commit()
+        await self.db.refresh(recording)
+        return RecordingOut.model_validate(recording)
+
+    async def list_recordings(self, user_id: str) -> list[RecordingOut]:
+        recordings = await self.recordings.list_for_user(user_id)
+        return [RecordingOut.model_validate(r) for r in recordings]
+
+    async def update_recording(self, user_id: str, recording_id: str, title: str) -> RecordingOut:
+        recording = await self.recordings.get_owned(recording_id, user_id)
+        if recording is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found")
+        recording.title = title
+        self.db.add(recording)
+        await self.db.commit()
+        await self.db.refresh(recording)
+        return RecordingOut.model_validate(recording)
+
+    async def delete_recording(self, user_id: str, recording_id: str) -> None:
+        recording = await self.recordings.get_owned(recording_id, user_id)
+        if recording is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found")
+        await self.recordings.delete(recording)
+        await self.db.commit()
 
 
 def _as_aware_utc(value: datetime) -> datetime:

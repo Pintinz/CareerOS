@@ -13,6 +13,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `1a58ef3` — Phase 5 (Applications) backend + mobile.
 - `6775869` — Phase 6 (Aptitude Testing) backend + mobile (tagged `phase-6-aptitude`).
 - `d9fe06f` — Phase 7 (Interview Preparation & STAR) backend + mobile (tagged `phase-7-interview`).
+- Phase 7.5 (Media, Assessment & Interview Hardening) backend + mobile (tagged `phase-7.5-media-hardening`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -37,6 +38,10 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 - Phase 5 (Applications) added: 201.3MB APK, built in **31 seconds**.
 - Phase 6 (Aptitude Testing) added: 192.1MB APK, built in **125 seconds**.
 - Phase 7 (Interview Preparation) added: 192.2MB APK, built in **86 seconds**.
+- Phase 7.5 (Media & Interview Hardening) added: real audio recording (`record`/`audioplayers`/
+  `permission_handler`) plus a required `record` 5.2.0→7.1.1 bump (see Known Bugs) — 192.4MB APK,
+  built in **~5 minutes** cold (Maven Central intermittently 403'd mid-resolution on the new
+  `permission_handler_android`/AGP-8.0.0-buildscript transitive tree; retried clean).
 
 ## Phase Status
 
@@ -49,7 +54,8 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 | 4 — Company Intelligence | IN PROGRESS | Backend + mobile screens (feed, detail, follow, company profile) built and verified. Admin CMS UI for intelligence posts NOT built (API-only). |
 | 5 — Applications | IN PROGRESS | Backend + mobile screens (list, detail w/ timeline, stage update, notes, manual + from-job creation) built and verified. Missing: document attachments (needs the general document vault), email-detected stage confirmation (Phase 8). |
 | 6 — Aptitude Testing | IN PROGRESS | Backend (question bank, snapshot-based sessions, deterministic generation/grading, analytics) + mobile (Prep Hub, configuration, exam screen, navigator, results, review, analytics, application/home/profile integration) built and verified. Missing: real image assets for Abstract-reasoning questions (text/emoji placeholders), per-section timing (only overall timing built), Company-Specific mode UI (architected, not built per spec). |
-| 7 — Interview Preparation | IN PROGRESS | Backend (10-category question bank, snapshot-based sessions, deterministic generation/self-paced mock timer/company+job bias, STAR stories + completeness check + question matching, readiness/analytics, company-research prep) + mobile (Interview Home, configuration, session screen, results, STAR builder, analytics/readiness, company prep + checklist, application/home/profile integration) built and verified. Missing: real audio recording (UI is designed for it but not implemented — see Known limitations), per-category Mock Interview count builder UI (backend supports `category_counts`, mobile only exposes even category selection), offline caching of STAR stories/checklist/analytics (only the active session itself is offline-cached). |
+| 7 — Interview Preparation | IN PROGRESS | Backend (10-category question bank, snapshot-based sessions, deterministic generation/self-paced mock timer/company+job bias, STAR stories + completeness check + question matching, readiness/analytics, company-research prep) + mobile (Interview Home, configuration, session screen, results, STAR builder, analytics/readiness, company prep + checklist, application/home/profile integration) built and verified. Real audio recording landed in Phase 7.5 (see below); still missing: per-category Mock Interview count builder **UI** (backend now fully supports it, see Phase 7.5), offline caching of STAR stories/checklist/analytics (only the active session itself is offline-cached). |
+| 7.5 — Media, Assessment & Interview Hardening | IN PROGRESS | Backend: shared image-upload pipeline hardened with real Pillow decode validation + `MediaAsset` audit rows, `question_image_alt_text`/`option_image_alt_text` (immutably snapshotted like every other question field), 30 real procedurally-generated (non-AI, non-copyrighted) abstract-reasoning images seeded, `StarStory.version`/`InterviewPreparationProgress.version` for offline conflict detection (409 on stale `expected_version`), `InterviewRecording` metadata model + CRUD, centralized role-specific Mock Interview mix config (`app/interview/role_mix.py`) + preview endpoint. Mobile: real microphone recording/playback wired into the interview session screen (record/stop/play/delete, consent dialog, every failure mode mapped to a message, never a crash), `version`-aware STAR/PreparationProgress models ready for offline sync. Missing (see Known limitations): Mock Interview Automatic/Custom Mix **UI**, abstract-image rendering/caching/zoom in the aptitude UI, offline STAR/checklist CRUD with conflict resolution, cache-management screen, Recordings Manager screen, retention settings, resume-active-activity, unified preparation history. |
 | 8 — Email Tracking | NOT STARTED | |
 | 9 — Admin | IN PROGRESS | Jobs/Companies/Scholarships/Aptitude/Interview question-bank CMS **APIs** built (admin web UI for aptitude/interview questions not built — Phase 9 UI work). Intelligence posts, source registry, discovery queue, user management NOT STARTED (or API-only). |
 | 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
@@ -273,21 +279,107 @@ Foundation, auth/profile, opportunities (jobs/scholarships/companies, backend+ad
   when the server is unreachable) — 39 Flutter tests total together with Phases 6 and the original
   smoke test, all passing.
 
+### Phase 7.5 — Media, Assessment & Interview Hardening (focused subset, verified)
+
+This phase was explicitly scoped down from a 42-section spec to a focused, fully real subset —
+see Known limitations for what was deliberately deferred rather than half-built.
+
+**Backend** (`app/models/media.py`, `app/services/storage_provider.py`,
+`app/api/v1/admin/uploads.py`, `app/interview/role_mix.py`, `app/services/interview_service.py`):
+- The **existing** shared image-upload endpoint (`POST /admin/uploads/image`) — already used across
+  the admin UI — was extended in place rather than duplicated: it now actually decodes every upload
+  with Pillow (`.verify()`), rejects content that merely claims to be an image via
+  extension/Content-Type but doesn't decode, extracts real width/height/mime/file-size, and writes a
+  `MediaAsset` audit row. Storage keys stay randomized UUIDs (never derived from the client
+  filename), unchanged from before.
+- `Question.question_image_alt_text` / `QuestionOption.option_image_alt_text`: neutral structural
+  descriptions ("A sequence of three rotating arrows, followed by a question mark panel") that never
+  reveal an Abstract-reasoning answer. Both are snapshotted into `test_session_questions`/
+  `options_snapshot` exactly like every other question field — a session's images/alt-text can never
+  change after the fact even if the master question is edited later, verified by a test that mutates
+  the master question mid-session and asserts the session detail is unchanged.
+- `StarStory.version` / `InterviewPreparationProgress.version`: integers bumped on every write.
+  `StarStoryUpdate`/`ChecklistUpdate`/`QuestionToAskUpdate`/`TopicReviewUpdate` all accept an
+  optional `expected_version` — a mismatch returns 409 Conflict rather than silently overwriting a
+  newer remote edit. This is the backend half of offline conflict handling; the mobile UI/queue that
+  uses it (spec §21) is not yet built — see Known limitations.
+- `InterviewRecording` model (`id`/`user_id`/`session_id`/`session_question_id`/`local_path`/
+  `duration_seconds`/`title`/`upload_status`) — metadata only, `upload_status` stays `"local_only"`
+  since no upload path exists (by design: audio never leaves the device automatically). Full CRUD at
+  `POST/GET /interview/recordings`, `PUT/DELETE /interview/recordings/{id}`, owner-isolated
+  (404-not-403, matching every other resource in this codebase).
+- `app/interview/role_mix.py`: centralized, keyword-matched default category-mix-by-role config
+  (e.g. Process/Operations → Technical 40%/Behavioral 25%/Safety 20%/HR 15%), mirroring the existing
+  `job_role_topic_map.py` pattern rather than inventing a new one. `category_counts_for_mix` uses
+  largest-remainder rounding so percentages always sum to exactly the requested question count — no
+  category silently drops to zero. `GET /interview/sessions/mock-mix-preview` lets a client preview
+  the distribution before creating a session; `InterviewSessionCreate.auto_mix=true` applies it.
+- 30 real, original, procedurally-generated abstract-reasoning images
+  (`scripts/generate_abstract_images.py`, Pillow `ImageDraw` primitives — rotation arrows, shape-count
+  sequences, mirrored shapes, odd-one-out sets, checkerboard matrices; each mathematically
+  parameterized, not copied from any real test) seeded as real `IMAGE_BASED` questions
+  (`scripts/seed_abstract_image_questions.py`, idempotent, `is_demo=True`) — closes the Phase 6
+  documented gap ("Abstract-reasoning questions use text/emoji placeholders").
+- 9 new backend tests: image-upload metadata/validation (valid + disguised-as-image rejection),
+  question/option image immutable snapshotting, STAR/checklist stale-`expected_version` 409s,
+  recording CRUD + cross-user isolation, role-mix keyword matching + percentage-sum invariants, the
+  mock-mix-preview endpoint against a real job.
+- Caught and fixed one real pre-existing bug: `tests/test_uploads.py`'s "smallest possible valid PNG"
+  fixture actually had a corrupted IDAT chunk checksum — invisible before this phase because the old
+  validation never decoded image content, only checked headers/extension/Content-Type. The new
+  Pillow-decode validation correctly rejected it; the fixture was regenerated with a genuinely valid
+  Pillow-encoded PNG.
+
+**Mobile** (`lib/features/interview/data/recording_service.dart`,
+`lib/features/interview/presentation/recording_controller.dart`, `recording_widgets.dart`):
+- Real microphone recording via the `record` package (`AudioRecorder`, AAC-LC), wired into the
+  interview session screen as an explicit alternative to (and combinable with) the existing typed-
+  answer/notes fields — never a requirement. Microphone permission (`permission_handler`) is
+  requested **only** when the user taps Start Recording, never at app startup (Android
+  `RECORD_AUDIO` + iOS `NSMicrophoneUsageDescription` both added accordingly).
+- The one-time local-storage privacy notice ("Interview recordings are stored locally on this
+  device unless you explicitly choose to upload or share them." / Continue / Not Now) shows once
+  before the first recording attempt (persisted via `SharedPreferences`) and never again.
+- Every recording/playback failure mode (permission denied, permanently denied, mic unavailable,
+  interrupted, storage failure, file missing, playback failure) is caught into a typed
+  `RecordingErrorKind` and surfaced as a message — never an uncaught exception; the typed-answer and
+  notes fields on the same screen remain fully usable regardless of what recording did.
+  `▶ 01:42`-style playback (via `audioplayers`) with Play/Pause/Delete controls.
+- A completed recording both updates the in-session answer state (`audioPath`/
+  `audioDurationSeconds`, synced through the existing offline-queue-aware `answer()` path — extended
+  this phase to carry those two fields end-to-end alongside the pre-existing text/notes/self-rating
+  fields) and syncs its own metadata row via `POST /interview/recordings` (best-effort; a sync
+  failure never blocks the local recording or in-session answer).
+- `StarStory`/`PreparationProgress` mobile models now carry `version` (defaulting to 1 for any
+  cached data saved before this phase) and the repository's `updateStarStory`/`updateChecklistItem`/
+  `updateQuestionToAsk`/`updateTopicReview`/`createSession` calls accept `expectedVersion`/
+  `autoMix` — the data-layer prerequisite for the offline STAR/checklist sync UI that is not yet
+  built (see Known limitations).
+- 6 new Flutter tests covering the recording state machine (start→recording, permission-denied→error
+  without crashing, stop→recorded with path+duration, a stop failure surfacing as an error rather
+  than a crash, delete→idle, cancel→idle) via a fully fake `RecordingService` subclass — no real
+  platform channel touched. Real audio playback (`audioplayers`) could not be similarly unit-tested:
+  `AudioPlayer`'s own constructor opens a real platform/event channel unconditionally, even from a
+  subclass, so there is no way to fake it without an actual platform — see Known limitations.
+
 ## Partially Complete
 
-- **Mobile app**: Phase 0-7 core loops written and verified. Not yet built: internships/graduate-
+- **Mobile app**: Phase 0-7.5 core loops written and verified. Not yet built: internships/graduate-
   programme-specific UI, CV rename/set-primary, career-preferences-driven personalization anywhere,
-  application document attachments, per-section aptitude timing, real image assets for Abstract-
-  reasoning questions, real interview audio recording, offline caching of STAR stories/checklist/
-  interview analytics.
+  application document attachments, per-section aptitude timing, abstract-reasoning image rendering
+  in the active-test/review UI (the images/alt-text now exist end-to-end on the backend — see Phase
+  7.5 — but the Flutter aptitude screens still render `question_image_url` with a plain
+  `Image.network`, not yet swapped to a caching+zoom widget), Mock Interview Automatic/Custom Mix
+  UI (backend fully supports it), offline caching/sync of STAR stories/checklist/interview
+  analytics, cache-management screen, Recordings Manager screen, recording retention settings,
+  resume-active-activity on the Preparation Hub, unified preparation history.
 - Admin web: no UI yet for intelligence posts, the aptitude question bank, or the interview
   question bank (all three API-only).
 
 ## Not Started
 
 - Mobile: Google/Apple Sign-In, forgot-password, email verification, settings, profile-setup wizard
-  beyond name/location/experience, real audio recording for interview practice (data model and UI
-  hooks exist; no recording plugin is wired up — see Known limitations).
+  beyond name/location/experience.
 - Admin web: intelligence post CMS UI, aptitude question-bank CMS UI, interview question-bank CMS UI,
   source registry, discovery queue, user mgmt.
 - Everything under Phases 8-11 (email classifier, AdMob integration code, production hardening).
@@ -316,21 +408,30 @@ interview generator's `_select_with_preference` combined topic bias and company 
 ANDed database filter, so a job-specific session would fail to prefer topic-matched questions (e.g.
 "Pumps") whenever none of them happened to also be tagged to that job's specific company — fixed by
 trying topic+company, topic-only, company-only, and general as independent fallback tiers, covered
-by `test_job_specific_generation_prefers_mapped_topics`.
+by `test_job_specific_generation_prefers_mapped_topics`. Phase 7.5 caught and fixed one real
+pre-existing bug before it shipped: `tests/test_uploads.py`'s "smallest possible valid PNG" fixture
+had a corrupted IDAT chunk checksum, invisible until this phase's Pillow-decode validation actually
+opened the bytes — fixed by regenerating a genuinely valid Pillow-encoded fixture (see the Phase 7.5
+section above). Phase 7.5 also hit one real dependency-resolution bug (not a code bug, but real
+enough to block the build): `record: ^5.2.0` resolves an old `record_linux` (0.7.2) that doesn't
+implement the newer `record_platform_interface` (1.6.0) another transitive dependency pulls in —
+Flutter's own `AudioRecorder`/`record_linux` version matrix was inconsistent, unrelated to any
+platform this app actually ships (Android/iOS) but still fatal to compilation since Flutter compiles
+all federated platform implementations. Fixed by bumping to `record: ^7.1.1` (no `RecordingService`
+API changes were needed — `flutter analyze`/`test` stayed clean before and after).
 
 ## Tests
 
-- Backend: `pytest -q` → **91 passed** across 10 test files (health, auth, admin/companies, jobs,
-  scholarships, uploads, ATS, intelligence, applications, aptitude, **interview — 16 tests, new this
-  phase**).
+- Backend: `pytest -q` → **100 passed** across 11 test files (health, auth, admin/companies, jobs,
+  scholarships, uploads, ATS, intelligence, applications, aptitude, interview, **media & hardening —
+  9 tests, new this phase**, in `test_media_and_hardening.py`).
 - Admin: no automated tests — verified by hand via live browser interaction.
-- Mobile: `flutter test` → **39 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
-  tests + **16 new Phase 7 widget tests** across Interview Home, configuration, the session screen
-  (practice + mock + guidance + answering + self-rating + navigation + timer), STAR story creation/
-  completeness/list, company preparation + checklist, readiness/analytics, the application
-  "Interview Preparation" card across all four interview-related stages, and an offline-cached
-  session continuing to work when the server is unreachable). Widget/unit tests for the Phase 2-5
-  screens are still a Next Task — this phase only added coverage for the screens it built.
+- Mobile: `flutter test` → **45 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
+  tests + 16 Phase 7 widget tests + **6 new Phase 7.5 tests** covering the recording state machine
+  via a fully fake `RecordingService` — start/permission-denied/stop/stop-failure/delete/cancel; see
+  the Phase 7.5 section above for why real `audioplayers` playback isn't similarly unit-tested).
+  Widget/unit tests for the Phase 2-5 screens are still a Next Task — this phase only added coverage
+  for what it built.
 - **Not performed**: interactive manual acceptance testing on a real device/emulator, for the same
   reason as Phase 6 (no Android emulator or physical device available in this environment). The four
   acceptance flows Phase 7 asks for are each covered by an equivalent automated test instead:
@@ -363,9 +464,12 @@ by `test_job_specific_generation_prefers_mapped_topics`.
 - `ApplicationUpdate` (`PUT /applications/{id}`) intentionally cannot change `current_stage` — only
   `/stage` can, so every stage change leaves a timeline entry. Make sure any future mobile "quick
   edit" form respects this and doesn't try to slip a stage change through the generic update.
-- Abstract-reasoning aptitude questions use text/emoji shape sequences, not real images — no image-
-  asset pipeline exists yet for the question bank (`question_image_url` stays null on every seeded
-  question). Revisit once admin image upload is wired to the question CMS.
+- 30 real abstract-reasoning image questions now exist in the seed data (Phase 7.5,
+  `is_demo=True`, `question_image_url`/`question_image_alt_text` populated end-to-end through
+  session snapshotting) alongside the 21 original text/emoji Abstract questions from Phase 6 — but
+  the Flutter aptitude active-test/review screens still render `question_image_url` with a plain
+  `Image.network` (no caching, no offline resilience, no zoom/fullscreen). Revisit before claiming
+  the abstract-reasoning image experience is complete on mobile.
 - Aptitude timing only supports "Untimed" and "Overall Timer" — `TestSession.time_limit_seconds` is a
   single overall value; there's no per-section time allocation in the schema. Per-section timing is not
   implemented, even though the spec lists it as an option. Documented rather than faked in the mobile
@@ -373,31 +477,46 @@ by `test_job_specific_generation_prefers_mapped_topics`.
 - `TestMode.COMPANY_SPECIFIC` exists in the backend enum (spec asks for it to be architected, not
   built) but has no generation logic behind it and is not selectable in the mobile UI — selecting it
   via a raw API call would just behave like a normal session with no company-specific bias.
-- No interactive manual QA pass on a real device/emulator for the Phase 6 or 7 acceptance flows —
-  see Tests section above for what automated coverage substitutes for it.
-- **Interview audio recording is not implemented.** The data model (`interview_answers.audio_path`/
-  `audio_duration_seconds`) and API support exist, but no mobile recording plugin is wired up — the
-  session screen currently offers a typed-answer field and notes only, not Start/Stop Recording or
-  Play/Rename/Delete controls. This is a real, acknowledged gap against spec §18-19, not a silent
-  omission: recording requires adding a platform audio plugin, requesting microphone permission, and
-  building playback UI, which didn't fit this pass. Revisit before claiming audio-based mock
-  interviews are complete.
-- The Mock Interview per-category count builder (spec §17's "Technical 4 / Behavioral 3 / Safety 2 /
-  HR 1" style configuration) is fully supported by the backend (`category_counts` on
-  `InterviewSessionCreate`) but the mobile configuration screen only exposes even-distribution
-  category multi-select, not a per-category count stepper UI. A real, working simplification — not
-  a fake feature — but narrower than the spec's example.
-- Interview offline caching covers only the active session (questions/answers/notes/self-ratings) —
-  STAR stories, the preparation checklist, and analytics/readiness are always fetched fresh and will
-  show a loading/error state rather than cached data when offline. Spec §36 lists all of these as
-  things to cache; only the highest-value piece (the in-progress session itself) was built this pass.
+- No interactive manual QA pass on a real device/emulator for the Phase 6, 7, or 7.5 acceptance
+  flows — see Tests section above for what automated coverage substitutes for it. Recording/
+  playback in particular has never been exercised against a real microphone/speaker; only the
+  fully-mocked state-machine tests and `flutter analyze`/`build apk --debug` back it.
+- **Interview audio recording is now implemented** (Phase 7.5) — record/stop/play/delete, consent
+  dialog, permission-timing, and every documented failure mode are real and covered by tests. Not
+  yet built on top of it: a Recordings Manager screen (Profile → Interview Preparation → "Practice
+  Recordings"), recording retention settings (keep-forever / 30-day / after-session-completion), and
+  a "Storage & Offline Data" cache-management screen (spec §22-24) — recordings accumulate locally
+  with no UI to review, rename, or bulk-delete them outside the one-recording-per-question controls
+  on the session screen itself.
+- The Mock Interview per-category count builder is now **fully supported end-to-end on the
+  backend** (Phase 7.5: `app/interview/role_mix.py`'s keyword-matched role defaults,
+  `category_counts_for_mix`'s largest-remainder rounding, `GET /interview/sessions/mock-mix-preview`,
+  `InterviewSessionCreate.auto_mix`) but the mobile configuration screen still only exposes
+  even-distribution category multi-select — the Automatic Mix / Custom Mix stepper **UI** itself
+  was not built this pass. A real, working backend capability without its mobile surface yet, not a
+  fake feature.
+- Interview offline caching covers only the active session (questions/answers/notes/self-ratings/
+  recordings-in-progress) — STAR stories, the preparation checklist, and analytics/readiness are
+  always fetched fresh and will show a loading/error state rather than cached data when offline.
+  The backend now has everything needed for conflict-safe offline editing of STAR stories and the
+  checklist (`version`/`expected_version`, 409-on-stale-write, Phase 7.5) and the mobile models
+  (`StarStory.version`, `PreparationProgress.version`) already parse it — but the mobile offline
+  cache, mutation queue, and conflict-resolution UI for STAR/checklist editing were not built this
+  pass. Only the in-progress session itself is offline-cached.
+- The Preparation Hub does not yet detect and surface an in-progress aptitude test or interview
+  session ahead of new-session actions ("Continue Assessment"/"Continue Interview Practice" — spec
+  §28), and there is no unified Aptitude+Interview preparation history view (spec §29) — both
+  documented as not built rather than attempted partially.
 - Interview readiness/analytics use targets (e.g. 30 questions practiced, 5 ready STAR stories) that
   are configured constants (`app/interview/scoring.py`), not derived from any research — same
-  category of documented simplification as the aptitude engine's targets.
+  category of documented simplification as the aptitude engine's targets. Phase 7.5 did not move
+  these into a separate `readiness_config` module as one spec section suggested (a naming/location
+  change only, not a behavior change) — deferred as low-value relative to the phase's real gaps.
 
 ## Metrics: what's system-calculated vs. user self-rated vs. editorially tagged
 
-Spec §46 requires this distinction never be blurred. As of Phase 7:
+Spec §46 requires this distinction never be blurred. As of Phase 7.5 (unchanged from Phase 7 —
+Phase 7.5 added no new AI-adjacent scoring, only real recording/media/versioning infrastructure):
 
 **System-calculated** (derived by backend code from stored activity, never user-editable):
 Aptitude score/percentage/section breakdown/performance label; aptitude analytics (tests
@@ -423,12 +542,20 @@ the question, deterministic content, never AI-generated or claimed to be employe
 
 ## Next Tasks
 
-1. Commit the Phase 7 (Interview Preparation & STAR) backend + mobile work — currently uncommitted.
-2. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
+1. Commit the Phase 7.5 (Media, Assessment & Interview Hardening) backend + mobile work — currently
+   uncommitted.
+2. Mobile UI for the now-real backend capabilities from Phase 7.5 that don't have a mobile surface
+   yet: Mock Interview Automatic/Custom Mix stepper, abstract-reasoning image rendering with caching
+   + zoom in the aptitude screens, a Recordings Manager + retention settings screen, a cache-
+   management ("Storage & Offline Data") screen.
+3. Offline STAR story + checklist editing with conflict resolution, now that the backend
+   (`version`/`expected_version`, 409-on-stale-write) and mobile models are ready for it — the
+   mutation queue and conflict UI are the remaining piece.
+4. Widget tests for the save/unsave flows and the application stage-update flow (Phase 5 gap), given
    how many real bugs this session's manual review process has caught in exactly this kind of code.
-3. Real interview audio recording (plugin integration, permission flow, playback UI) to close the
-   most significant Phase 7 gap, or Phase 8 (Email Tracking), or an admin CMS UI for intelligence
-   posts / the aptitude+interview question banks to close out Phase 9's remaining gaps — whichever
-   the user prioritizes.
-4. A real interactive QA pass on an emulator/device once one is available in this environment, to
-   validate the Phase 6 and 7 acceptance flows beyond what automated tests can confirm.
+5. Phase 8 (Email Tracking), or an admin CMS UI for intelligence posts / the aptitude+interview
+   question banks to close out Phase 9's remaining gaps — whichever the user prioritizes. Per the
+   user's explicit instruction, Phase 8 was NOT started automatically after Phase 7.5.
+6. A real interactive QA pass on an emulator/device once one is available in this environment, to
+   validate the Phase 6, 7, and 7.5 acceptance flows beyond what automated tests can confirm —
+   recording/playback against a real microphone/speaker especially.

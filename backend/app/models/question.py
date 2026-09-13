@@ -61,6 +61,10 @@ class Question(TimestampMixin, Base):
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     question_type: Mapped[QuestionType] = mapped_column(Enum(QuestionType), nullable=False)
     question_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # Neutral description for screen readers (spec §17) — must never describe the pattern in a
+    # way that gives away an Abstract-reasoning question's answer (e.g. "three triangles then a
+    # square" for an odd-one-out question). Admin-authored, not auto-generated.
+    question_image_alt_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Only meaningful for PASSAGE_BASED — multiple questions can share the same passage text by
     # simply repeating it verbatim; no separate passages table (documented simplification).
     passage_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -103,5 +107,6 @@ class QuestionOption(TimestampMixin, Base):
     )
     option_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     option_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    option_image_alt_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

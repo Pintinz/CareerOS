@@ -53,6 +53,7 @@ class QuestionTopicCreate(BaseModel):
 class QuestionOptionIn(BaseModel):
     option_text: str | None = None
     option_image_url: str | None = None
+    option_image_alt_text: str | None = None
     is_correct: bool = False
     display_order: int = 0
 
@@ -67,6 +68,7 @@ class QuestionCreate(BaseModel):
     question_text: str = Field(min_length=1)
     question_type: QuestionType
     question_image_url: str | None = None
+    question_image_alt_text: str | None = None
     passage_text: str | None = None
     category_id: str
     topic_id: str | None = None
@@ -89,6 +91,7 @@ class QuestionUpdate(BaseModel):
     question_text: str | None = None
     question_type: QuestionType | None = None
     question_image_url: str | None = None
+    question_image_alt_text: str | None = None
     passage_text: str | None = None
     category_id: str | None = None
     topic_id: str | None = None
@@ -111,6 +114,7 @@ class QuestionAdminOut(BaseModel):
     question_text: str
     question_type: QuestionType
     question_image_url: str | None = None
+    question_image_alt_text: str | None = None
     passage_text: str | None = None
     category_id: str
     topic_id: str | None = None
@@ -158,6 +162,7 @@ class OptionOut(BaseModel):
     id: str
     option_text: str | None = None
     option_image_url: str | None = None
+    option_image_alt_text: str | None = None
     display_order: int
 
 
@@ -175,6 +180,7 @@ class SessionQuestionOut(BaseModel):
     question_text: str
     question_type: QuestionType
     question_image_url: str | None = None
+    question_image_alt_text: str | None = None
     passage_text: str | None = None
     difficulty: QuestionDifficulty
     marks: float
@@ -254,6 +260,7 @@ class ReviewQuestionOut(BaseModel):
     question_text: str
     question_type: QuestionType
     question_image_url: str | None = None
+    question_image_alt_text: str | None = None
     passage_text: str | None = None
     difficulty: QuestionDifficulty
     category_name: str

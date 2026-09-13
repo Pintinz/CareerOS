@@ -197,6 +197,83 @@ appropriate without coupling the two engines incorrectly"):
   job-role topic map for "likely topics." It never claims to know a company's actual interview
   questions; every response carries a fixed disclaimer (spec §35, see also PRIVACY.md).
 
+## Shared media pipeline (`app/services/storage_provider.py`, Phase 7.5)
+
+One `StorageProvider` abstraction (`LocalStorageProvider` for dev, designed for an
+`S3CompatibleStorageProvider`/`SupabaseStorageProvider` later — no cloud credentials required this
+phase) backs **every** feature that needs an uploaded image: it already served the admin web upload
+widget before Phase 7.5, and Phase 7.5 deliberately extended it in place rather than building a
+second, parallel implementation for aptitude/interview question images (explicit spec instruction:
+"do not create completely separate upload/storage implementations").
+
+- `save_image_with_metadata` actually decodes every upload with Pillow (`Image.open(...).verify()`)
+  before writing it to disk — rejects content that merely claims to be an image via
+  extension/Content-Type but doesn't decode, extracts real width/height/mime-type/file-size, and
+  enforces a max dimension (`MAX_DIMENSION_PX = 4096`) and the pre-existing max upload size.
+- Every upload through `POST /admin/uploads/image` creates a `MediaAsset` row (`app/models/media.py`)
+  — storage key, URL, mime type, dimensions, file size, optional alt text — a lightweight audit trail
+  shared across features, not a per-feature table.
+- Storage keys are randomized (`uuid4()` + extension), never derived from the client-supplied
+  filename — defends against path traversal and filename collisions; this predates Phase 7.5 and was
+  simply carried forward, now explicitly documented.
+- `Question.question_image_alt_text` / `QuestionOption.option_image_alt_text` follow the exact same
+  immutable-snapshot pattern Phase 6 established for every other question field: they're copied into
+  `test_session_questions`/`options_snapshot` at session-creation time, so editing a master
+  question's image or alt text later can never alter a past session — proven by a test that mutates
+  the master question mid-session and asserts the session detail is unchanged.
+- Alt text for Abstract-reasoning images is written to describe visual **structure** only ("A
+  sequence of three rotating arrows, followed by a question mark panel"), never which option is
+  correct — screen-reader accessible without leaking the answer.
+
+## Original (non-copyrighted) abstract-reasoning image generation (`backend/scripts/`, Phase 7.5)
+
+`generate_abstract_images.py` renders real PNG assets procedurally with Pillow's `ImageDraw`
+primitives — rotation arrows, shape-count sequences, mirrored asymmetric shapes, odd-one-out shape
+sets, checkerboard matrices — each mathematically parameterized (e.g. a rotation question's correct
+answer is always exactly `start_angle + 3*step`), never copied from or resembling any real
+commercial aptitude test. `seed_abstract_image_questions.py` seeds 30 of these as real, `is_demo`
+`IMAGE_BASED` questions, idempotently (re-running it is a no-op once the images already exist).
+
+## Offline-conflict versioning (`StarStory.version`, `InterviewPreparationProgress.version`, Phase 7.5)
+
+Both models carry an integer `version`, default 1, incremented on every server-side write. Update
+schemas (`StarStoryUpdate`, `ChecklistUpdate`, `QuestionToAskUpdate`, `TopicReviewUpdate`) accept an
+optional `expected_version`; a mismatch raises 409 Conflict rather than silently applying the write.
+This is deliberately a version counter, not a wall-clock timestamp comparison — two devices editing
+offline can have clocks that drift or are simply wrong, but an integer that only the server
+increments can't be spoofed into looking "newer" by a client with a fast clock. The **mobile** side
+of conflict resolution (an offline mutation queue that carries `expected_version` and surfaces a
+conflict to the user rather than silently overwriting) is not yet built — see PROJECT_STATUS.md.
+
+## Interview audio recording (`mobile/lib/features/interview/`, Phase 7.5)
+
+- `RecordingService` (`data/recording_service.dart`) wraps the `record` package's `AudioRecorder`
+  behind a small interface returning a typed `RecordingException` (`RecordingErrorKind`: permission
+  denied/permanently denied, mic unavailable, interrupted, storage failure, file missing, playback
+  failure) for every failure mode — nothing it does can crash the interview session; a failure just
+  means the typed-answer/notes fields remain the only way to answer that question. The underlying
+  `AudioRecorder` is constructed **lazily** (on first actual use, not in the constructor) so a fully
+  fake subclass used in tests never touches a real platform channel unless a test actually calls
+  `start()`.
+- Microphone permission (`permission_handler`) is requested **only** inside `startRecording()` —
+  never during app bootstrap — per explicit spec instruction, satisfied by construction rather than
+  by a runtime check (there is no code path that calls `Permission.microphone.request()` outside
+  this one method).
+- `RecordingController` (`presentation/recording_controller.dart`, one instance per
+  `RecordingTarget` = session + session-question id via Riverpod's `.family`) owns the
+  record/pause/stop/cancel/play/delete state machine and syncs a stopped recording's metadata to
+  `POST /interview/recordings` (best-effort — a sync failure never blocks the local file or the
+  in-session answer state). Playback uses `audioplayers`' `AudioPlayer`, constructed lazily for the
+  same testability reason as the recorder — though unlike `AudioRecorder`, `AudioPlayer`'s own
+  constructor opens a real platform/event channel unconditionally even from a subclass, so playback
+  itself has no unit-test coverage, only `flutter analyze`/`build apk --debug` verification.
+- The one-time consent dialog (`recording_widgets.dart`'s `ensureRecordingConsent`) is gated by a
+  single `SharedPreferences` boolean, shown before the first recording attempt only, regardless of
+  which question or session it happens in.
+- Audio never uploads anywhere: `InterviewRecording.upload_status` stays `"local_only"` because no
+  upload code path exists (by design, not by omission) — only the metadata row (duration, title,
+  which question) is synced, never the audio bytes themselves.
+
 ## Recruitment email classification
 
 Deterministic rule-based keyword/phrase classifier (`app/services/email_classifier.py`), not an LLM
