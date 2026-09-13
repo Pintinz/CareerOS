@@ -1,8 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";
 
@@ -30,47 +31,48 @@ class _QuestionReviewScreenState extends ConsumerState<QuestionReviewScreen> {
       appBar: AppBar(title: const Text("Review Answers")),
       body: reviewAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.userMessage)),
+        error: (e, _) => ErrorState(
+          title: "We couldn't load your review",
+          message: e.userMessage,
+          onRetry: () => ref.invalidate(sessionReviewProvider(widget.sessionId)),
+        ),
         data: (review) {
           if (review.questions.isEmpty) {
-            return const Center(child: Text("No questions to review.", style: TextStyle(color: AppColors.muted)));
+            return const EmptyState(
+              icon: AppIcons.aptitude,
+              title: "No questions to review",
+              message: "This session didn't include any questions.",
+            );
           }
-          final question = review.questions[_index.clamp(0, review.questions.length - 1)];
+          final total = review.questions.length;
+          final question = review.questions[_index.clamp(0, total - 1)];
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Text("Question ${_index + 1} of ${review.questions.length}", style: const TextStyle(color: AppColors.muted)),
+                padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xxs, AppSpacing.pageH, AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text("Question ${_index + 1} of $total", style: context.text.titleSmall),
+                    Gap.xs,
+                    CareerProgressBar(value: (_index + 1) / total, height: 6, semanticLabel: "Review progress"),
+                  ],
+                ),
               ),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                  child: _ReviewQuestionBody(question: question),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, AppSpacing.xl),
+                  child: _ReviewQuestionBody(key: ValueKey(question.id), question: question),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(color: AppColors.card, border: Border(top: BorderSide(color: Color(0x1A000000)))),
-                child: SafeArea(
-                  top: false,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _index > 0 ? () => setState(() => _index--) : null,
-                          child: const Text("Previous"),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _index < review.questions.length - 1 ? () => setState(() => _index++) : null,
-                          child: const Text("Next"),
-                        ),
-                      ),
-                    ],
-                  ),
+              BottomActionBar(
+                secondary: AppOutlineButton(
+                  expand: false,
+                  label: "Previous",
+                  onPressed: _index > 0 ? () => setState(() => _index--) : null,
                 ),
+                primary: PrimaryButton(label: "Next", onPressed: _index < total - 1 ? () => setState(() => _index++) : null),
               ),
             ],
           );
@@ -81,67 +83,84 @@ class _QuestionReviewScreenState extends ConsumerState<QuestionReviewScreen> {
 }
 
 class _ReviewQuestionBody extends StatelessWidget {
-  const _ReviewQuestionBody({required this.question});
+  const _ReviewQuestionBody({super.key, required this.question});
 
   final ReviewQuestion question;
 
   @override
   Widget build(BuildContext context) {
     final isCorrect = question.isCorrect;
+    final colors = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
         Wrap(
-          spacing: 8,
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
           children: [
-            _Badge(
+            StatusChip(
               label: isCorrect == null ? "Unanswered" : (isCorrect ? "Correct" : "Incorrect"),
-              color: isCorrect == null ? AppColors.muted : (isCorrect ? AppColors.success : AppColors.danger),
+              tone: isCorrect == null ? AppTone.neutral : (isCorrect ? AppTone.success : AppTone.danger),
+              icon: isCorrect == null ? Icons.remove_rounded : (isCorrect ? AppIcons.check : Icons.close_rounded),
             ),
-            _Badge(label: question.difficulty.label, color: AppColors.blue),
-            if (question.topicName != null) _Badge(label: question.topicName!, color: AppColors.purple),
+            TagChip(label: question.difficulty.label),
+            if (question.topicName != null) TagChip(label: question.topicName!, tone: AppTone.purple),
           ],
         ),
-        const SizedBox(height: 16),
+        Gap.md,
         if (question.passageText != null) ...[
           Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
-            child: Text(question.passageText!, style: const TextStyle(height: 1.4)),
-          ),
-          const SizedBox(height: 16),
-        ],
-        Text(question.questionText, style: Theme.of(context).textTheme.titleLarge),
-        if (question.questionImageUrl != null) ...[
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(question.questionImageUrl!, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-          ),
-        ],
-        const SizedBox(height: 20),
-        if (question.questionType.isNumericEntry) ...[
-          _AnswerRow(label: "Your answer", value: question.answerNumericValue?.toString() ?? "—"),
-          _AnswerRow(label: "Correct answer", value: question.correctNumericValue?.toString() ?? "—"),
-        ] else
-          for (final option in question.options)
-            _ReviewOptionTile(
-              option: option,
-              wasSelected: question.selectedOptionIds?.contains(option.id) ?? false,
-            ),
-        if (question.explanation != null) ...[
-          const SizedBox(height: 16),
-          Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(color: colors.surfaceMuted, borderRadius: AppRadius.cardAll),
+            child: Text(question.passageText!, style: context.text.bodyLarge?.copyWith(height: 1.55)),
+          ),
+          Gap.lg,
+        ],
+        Text(question.questionText, style: context.text.titleLarge?.copyWith(height: 1.4)),
+        if (question.questionImageUrl != null) ...[
+          Gap.md,
+          ClipRRect(
+            borderRadius: AppRadius.cardAll,
+            child: Image.network(question.questionImageUrl!, semanticLabel: "Question image", errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+          ),
+        ],
+        Gap.lg,
+        if (question.questionType.isNumericEntry)
+          CareerCard(
+            variant: CareerCardVariant.outlined,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+            child: Column(
+              children: [
+                FactRow(icon: AppIcons.profile, label: "Your answer", value: question.answerNumericValue?.toString() ?? "—"),
+                FactRow(
+                  icon: Icons.check_circle_outline_rounded,
+                  label: "Correct answer",
+                  value: question.correctNumericValue?.toString() ?? "—",
+                  valueColor: AppTone.success.onTint(context),
+                ),
+              ],
+            ),
+          )
+        else
+          for (final option in question.options)
+            _ReviewOptionTile(option: option, wasSelected: question.selectedOptionIds?.contains(option.id) ?? false),
+        if (question.explanation != null) ...[
+          Gap.md,
+          CareerCard(
+            color: colors.tint(colors.primary),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Explanation", style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text(question.explanation!),
+                Row(
+                  children: [
+                    Icon(Icons.lightbulb_outline_rounded, size: 18, color: colors.primary),
+                    Gap.xs,
+                    Text("Explanation", style: context.text.titleSmall),
+                  ],
+                ),
+                Gap.xs,
+                Text(question.explanation!, style: context.text.bodyLarge),
               ],
             ),
           ),
@@ -159,75 +178,50 @@ class _ReviewOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final isCorrect = option.isCorrect ?? false;
-    Color borderColor = AppColors.muted.withValues(alpha: 0.3);
-    IconData icon = Icons.circle_outlined;
-    Color iconColor = AppColors.muted;
+    var border = colors.border;
+    Color? fill;
+    var icon = Icons.circle_outlined;
+    var iconColor = colors.border;
+    String? stateLabel;
 
     if (isCorrect) {
-      borderColor = AppColors.success;
+      border = AppColors.success;
+      fill = AppTone.success.tint(context);
       icon = Icons.check_circle;
       iconColor = AppColors.success;
+      stateLabel = "Correct option";
     } else if (wasSelected) {
-      borderColor = AppColors.danger;
+      border = AppColors.error;
+      fill = AppTone.danger.tint(context);
       icon = Icons.cancel;
-      iconColor = AppColors.danger;
+      iconColor = AppColors.error;
+      stateLabel = "Incorrect option";
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          border: Border.all(color: borderColor),
-          borderRadius: BorderRadius.circular(12),
-          color: isCorrect ? AppColors.success.withValues(alpha: 0.06) : null,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: iconColor, size: 20),
-            const SizedBox(width: 12),
-            Expanded(child: Text(option.optionText ?? "")),
-            if (wasSelected) const Text("Your answer", style: TextStyle(fontSize: 11, color: AppColors.muted)),
-          ],
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Semantics(
+        label: [option.optionText ?? "", if (stateLabel != null) stateLabel, if (wasSelected) "your answer"].join(", "),
+        excludeSemantics: true,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          decoration: BoxDecoration(border: Border.all(color: border, width: 1.4), borderRadius: AppRadius.cardAll, color: fill ?? colors.surface),
+          child: Row(
+            children: [
+              Icon(icon, color: iconColor, size: 22),
+              Gap.sm,
+              Expanded(child: Text(option.optionText ?? "", style: context.text.bodyLarge)),
+              if (wasSelected) ...[
+                Gap.xs,
+                Text("Your answer", style: context.text.labelSmall),
+              ],
+            ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _AnswerRow extends StatelessWidget {
-  const _AnswerRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(width: 140, child: Text(label, style: const TextStyle(color: AppColors.muted))),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
     );
   }
 }

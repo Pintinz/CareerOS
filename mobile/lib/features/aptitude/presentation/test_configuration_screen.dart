@@ -2,12 +2,13 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
+import "../../../core/design/design.dart";
 import "../../../core/monetization/ad_placement.dart";
 import "../../../core/monetization/monetization_models.dart";
 import "../../../core/monetization/monetization_providers.dart";
 import "../../../core/monetization/widgets/rewarded_unlock_dialog.dart";
 import "../../../core/utils/error_message.dart";
-import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../applications/presentation/application_providers.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";
@@ -26,6 +27,7 @@ class AptitudeConfigureArgs {
 }
 
 const _kQuestionCounts = [10, 20, 30, 40, 60];
+const _kDifficultyLabels = {"EASY": "Easy", "MEDIUM": "Medium", "HARD": "Hard", "MIXED": "Mixed"};
 
 class TestConfigurationScreen extends ConsumerStatefulWidget {
   const TestConfigurationScreen({super.key, required this.args});
@@ -60,10 +62,8 @@ class _TestConfigurationScreenState extends ConsumerState<TestConfigurationScree
   }
 
   Future<void> _start() async {
-    // Soft gate (spec §14-15): the daily free limit is informational here — backend doesn't hard-
-    // block session creation yet (see PROJECT_STATUS.md's Phase 10 scoping note), but the app
-    // still offers the intended rewarded-unlock flow at the natural point, never blocking a user
-    // who has no more free sessions from at least being offered a path forward.
+    // Soft gate (spec §14-15): offer the rewarded-unlock flow at the natural point when today's
+    // free sessions are used up; the backend enforces the real limit.
     final entitlement = ref.read(entitlementProvider).valueOrNull;
     if (entitlement != null && entitlement.aptitudeLimitReached) {
       final unlocked = await showRewardedUnlockDialog(
@@ -94,173 +94,233 @@ class _TestConfigurationScreenState extends ConsumerState<TestConfigurationScree
     }
   }
 
+  static String _modeDescription(TestMode mode) => switch (mode) {
+        TestMode.practice => "Learn at your own pace, then review every answer.",
+        TestMode.timed => "Work against the clock to build speed and accuracy.",
+        TestMode.mock => "A full assessment under exam-like conditions.",
+        TestMode.jobSpecific => "Technical questions weighted toward a role you're applying for.",
+        TestMode.fieldSpecific => "Questions weighted toward an application's field and industry.",
+        TestMode.companySpecific => "Questions shaped around a specific employer.",
+      };
+
+  static IconData _modeIcon(TestMode mode) => switch (mode) {
+        TestMode.practice => Icons.school_outlined,
+        TestMode.timed => AppIcons.timer,
+        TestMode.mock => Icons.assignment_outlined,
+        TestMode.jobSpecific => AppIcons.job,
+        TestMode.fieldSpecific => Icons.category_outlined,
+        TestMode.companySpecific => AppIcons.company,
+      };
+
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final categoriesAsync = ref.watch(questionCategoriesProvider);
     final creationState = ref.watch(sessionCreationControllerProvider);
     final isPracticeWeakAreas = widget.args.topicSlugs != null;
+    final timerForced = _mode == TestMode.timed || _mode == TestMode.mock;
     // Watched (not just read in _start()) so it's resolved well before the user can tap Start —
     // the rewarded-unlock soft gate reads the fully-settled value, never a still-loading one.
     ref.watch(entitlementProvider);
 
+    final summary = [
+      "$_questionCount questions",
+      _kDifficultyLabels[_difficulty]!,
+      _timing == "OVERALL" ? "$_timeLimitMinutes min" : "Untimed",
+    ].join(" · ");
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Configure Test")),
+      appBar: AppBar(title: const Text("Set Up Assessment")),
+      bottomNavigationBar: BottomActionBar(
+        leading: Text(summary, style: context.text.labelMedium, maxLines: 2),
+        primary: PrimaryButton(label: "Start Assessment", isLoading: creationState.isLoading, onPressed: _start),
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: AppSpacing.page,
         children: [
-          if (isPracticeWeakAreas)
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.only(bottom: 16),
-              decoration: BoxDecoration(color: AppColors.blue.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-              child: const Text(
-                "This session is weighted toward your weakest topics based on your past results.",
-                style: TextStyle(fontSize: 13),
-              ),
+          if (isPracticeWeakAreas) ...[
+            const InsightCard(
+              icon: Icons.track_changes_rounded,
+              tone: AppTone.purple,
+              title: "Practice Weak Areas",
+              message: "This session is weighted toward your weakest topics based on your past results.",
             ),
-          Text("Test Mode", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final mode in [TestMode.practice, TestMode.timed, TestMode.mock, TestMode.jobSpecific, TestMode.fieldSpecific])
-                ChoiceChip(
-                  label: Text(mode.label),
-                  selected: _mode == mode,
-                  onSelected: (_) => setState(() {
-                    _mode = mode;
-                    if (mode == TestMode.timed || mode == TestMode.mock) _timing = "OVERALL";
-                  }),
-                ),
-            ],
-          ),
-          if (_mode == TestMode.jobSpecific || _mode == TestMode.fieldSpecific) ...[
-            const SizedBox(height: 20),
-            Text("Base this on which application?", style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text(
-              "Technical questions are weighted toward that role's field and industry.",
-              style: TextStyle(color: AppColors.muted, fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            _ApplicationPicker(
-              selectedId: _selectedApplicationId,
-              onChanged: (id) => setState(() => _selectedApplicationId = id),
-            ),
+            Gap.lg,
           ],
-          if (!isPracticeWeakAreas) ...[
-            const SizedBox(height: 20),
-            Text("Sections", style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            const Text("Leave all unselected for a mixed test across every section.", style: TextStyle(color: AppColors.muted, fontSize: 13)),
-            const SizedBox(height: 8),
-            categoriesAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-              error: (e, _) => Text(e.userMessage, style: const TextStyle(color: AppColors.danger)),
-              data: (categories) => Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final category in categories)
-                    FilterChip(
-                      label: Text(category.name),
-                      selected: _selectedSections.contains(category.slug),
-                      onSelected: (selected) => setState(() {
-                        if (selected) {
-                          _selectedSections.add(category.slug);
-                        } else {
-                          _selectedSections.remove(category.slug);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Text("Difficulty", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final entry in const {"EASY": "Easy", "MEDIUM": "Medium", "HARD": "Hard", "MIXED": "Mixed"}.entries)
-                ChoiceChip(
-                  label: Text(entry.value),
-                  selected: _difficulty == entry.key,
-                  onSelected: (_) => setState(() => _difficulty = entry.key),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text("Number of Questions", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final count in _kQuestionCounts)
-                ChoiceChip(
-                  label: Text("$count"),
-                  selected: _questionCount == count,
-                  onSelected: (_) => setState(() => _questionCount = count),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text("Timing", style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          if (_mode == TestMode.timed || _mode == TestMode.mock)
-            const Text("Timed and Mock Assessment modes require a timer.", style: TextStyle(color: AppColors.muted, fontSize: 13)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: [
-              ChoiceChip(
-                label: const Text("Untimed"),
-                selected: _timing == "UNTIMED",
-                onSelected: (_mode == TestMode.timed || _mode == TestMode.mock)
-                    ? null
-                    : (_) => setState(() => _timing = "UNTIMED"),
-              ),
-              ChoiceChip(
-                label: const Text("Overall Timer"),
-                selected: _timing == "OVERALL",
-                onSelected: (_) => setState(() => _timing = "OVERALL"),
-              ),
-            ],
-          ),
-          if (_timing == "OVERALL") ...[
-            const SizedBox(height: 12),
-            Row(
+          _ConfigSection(
+            title: "Test Mode",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Time limit:"),
-                Expanded(
-                  child: Slider(
-                    value: _timeLimitMinutes.toDouble(),
-                    min: 5,
-                    max: 90,
-                    divisions: 17,
-                    label: "$_timeLimitMinutes min",
-                    onChanged: (value) => setState(() => _timeLimitMinutes = value.round()),
-                  ),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final mode in const [TestMode.practice, TestMode.timed, TestMode.mock, TestMode.jobSpecific, TestMode.fieldSpecific])
+                      ChoiceChip(
+                        avatar: Icon(_modeIcon(mode), size: 16, color: _mode == mode ? Colors.white : colors.textSecondary),
+                        label: Text(mode.label),
+                        selected: _mode == mode,
+                        selectedColor: colors.primary,
+                        labelStyle: context.text.labelMedium?.copyWith(color: _mode == mode ? Colors.white : colors.textPrimary),
+                        onSelected: (_) => setState(() {
+                          _mode = mode;
+                          if (mode == TestMode.timed || mode == TestMode.mock) _timing = "OVERALL";
+                        }),
+                      ),
+                  ],
                 ),
-                SizedBox(width: 56, child: Text("$_timeLimitMinutes min", textAlign: TextAlign.end)),
+                Gap.sm,
+                AnimatedSwitcher(
+                  duration: AppMotion.of(context, AppMotion.fast),
+                  child: Text(_modeDescription(_mode), key: ValueKey(_mode), style: context.text.bodySmall),
+                ),
+                if (_mode == TestMode.jobSpecific || _mode == TestMode.fieldSpecific) ...[
+                  Gap.md,
+                  Text("Base this on which application?", style: context.text.titleSmall),
+                  const SizedBox(height: 2),
+                  Text("Technical questions are weighted toward that role's field and industry.", style: context.text.bodySmall),
+                  Gap.xs,
+                  _ApplicationPicker(
+                    selectedId: _selectedApplicationId,
+                    onChanged: (id) => setState(() => _selectedApplicationId = id),
+                  ),
+                ],
               ],
             ),
-          ],
-          const SizedBox(height: 28),
-          if (creationState.hasError)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(creationState.error!.userMessage, style: const TextStyle(color: AppColors.danger)),
-            ),
-          ElevatedButton(
-            onPressed: creationState.isLoading ? null : _start,
-            child: creationState.isLoading
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text("Start Test"),
           ),
+          if (!isPracticeWeakAreas)
+            _ConfigSection(
+              title: "Sections",
+              subtitle: "Leave all unselected for a mixed test across every section.",
+              child: categoriesAsync.when(
+                loading: () => const LoadingSkeleton(height: 36, radius: AppRadius.pill),
+                error: (e, _) => Text(e.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+                data: (categories) => Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    for (final category in categories)
+                      FilterChip(
+                        label: Text(category.name),
+                        selected: _selectedSections.contains(category.slug),
+                        showCheckmark: true,
+                        checkmarkColor: colors.primary,
+                        onSelected: (selected) => setState(() {
+                          if (selected) {
+                            _selectedSections.add(category.slug);
+                          } else {
+                            _selectedSections.remove(category.slug);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          _ConfigSection(
+            title: "Difficulty",
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  for (final entry in _kDifficultyLabels.entries) ButtonSegment(value: entry.key, label: Text(entry.value)),
+                ],
+                selected: {_difficulty},
+                onSelectionChanged: (value) => setState(() => _difficulty = value.first),
+              ),
+            ),
+          ),
+          _ConfigSection(
+            title: "Number of Questions",
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<int>(
+                showSelectedIcon: false,
+                segments: [for (final count in _kQuestionCounts) ButtonSegment(value: count, label: Text("$count"))],
+                selected: {_questionCount},
+                onSelectionChanged: (value) => setState(() => _questionCount = value.first),
+              ),
+            ),
+          ),
+          _ConfigSection(
+            title: "Timing",
+            subtitle: timerForced ? "Timed and Mock Assessment modes require a timer." : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  children: [
+                    ChoiceChip(
+                      label: const Text("Untimed"),
+                      selected: _timing == "UNTIMED",
+                      onSelected: timerForced ? null : (_) => setState(() => _timing = "UNTIMED"),
+                    ),
+                    ChoiceChip(
+                      avatar: const Icon(AppIcons.timer, size: 16),
+                      label: const Text("Overall Timer"),
+                      selected: _timing == "OVERALL",
+                      onSelected: (_) => setState(() => _timing = "OVERALL"),
+                    ),
+                  ],
+                ),
+                if (_timing == "OVERALL") ...[
+                  Gap.sm,
+                  Row(
+                    children: [
+                      Text("Time limit", style: context.text.bodyMedium),
+                      Expanded(
+                        child: Slider(
+                          value: _timeLimitMinutes.toDouble(),
+                          min: 5,
+                          max: 90,
+                          divisions: 17,
+                          label: "$_timeLimitMinutes min",
+                          onChanged: (value) => setState(() => _timeLimitMinutes = value.round()),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 60,
+                        child: Text("$_timeLimitMinutes min", textAlign: TextAlign.end, style: context.text.titleSmall),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (creationState.hasError)
+            Text(creationState.error!.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
         ],
+      ),
+    );
+  }
+}
+
+class _ConfigSection extends StatelessWidget {
+  const _ConfigSection({required this.title, required this.child, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: CareerCard(
+        variant: CareerCardVariant.outlined,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: context.text.titleMedium),
+            if (subtitle != null) ...[const SizedBox(height: 2), Text(subtitle!, style: context.text.bodySmall)],
+            Gap.sm,
+            child,
+          ],
+        ),
       ),
     );
   }
@@ -276,9 +336,9 @@ class _ApplicationPicker extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final listState = ref.watch(applicationListProvider);
     if (listState.items.isEmpty) {
-      return const Text(
+      return Text(
         "No tracked applications yet — this session will use general questions for the selected sections.",
-        style: TextStyle(color: AppColors.muted, fontSize: 13),
+        style: context.text.bodySmall,
       );
     }
     return DropdownButtonFormField<String>(

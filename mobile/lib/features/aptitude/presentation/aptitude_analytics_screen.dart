@@ -2,18 +2,29 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "aptitude_providers.dart";
 import "test_configuration_screen.dart";
 
 class AptitudeAnalyticsScreen extends ConsumerWidget {
   const AptitudeAnalyticsScreen({super.key});
 
+  static AppTone _tone(double percentage) => percentage >= 70
+      ? AppTone.success
+      : percentage >= 50
+          ? AppTone.warning
+          : AppTone.danger;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final analyticsAsync = ref.watch(aptitudeAnalyticsProvider);
     final recommendationsAsync = ref.watch(aptitudeRecommendationsProvider);
+
+    Widget pair(Widget a, Widget b) => IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: a), Gap.sm, Expanded(child: b)]),
+        );
 
     return Scaffold(
       appBar: AppBar(title: const Text("Aptitude Performance")),
@@ -23,147 +34,129 @@ class AptitudeAnalyticsScreen extends ConsumerWidget {
           ref.invalidate(aptitudeRecommendationsProvider);
         },
         child: analyticsAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text(e.userMessage)),
+          loading: () => const SkeletonList(itemCount: 3),
+          error: (e, _) => ErrorState(
+            title: "We couldn't load your performance",
+            message: e.userMessage,
+            onRetry: () => ref.invalidate(aptitudeAnalyticsProvider),
+          ),
           data: (analytics) {
             if (analytics.testsCompleted == 0) {
               return ListView(
-                padding: const EdgeInsets.all(32),
-                children: const [
-                  SizedBox(height: 80),
-                  Icon(Icons.insights_outlined, size: 48, color: AppColors.muted),
-                  SizedBox(height: 16),
-                  Text(
-                    "No tests completed yet. Once you finish a test, your performance shows up here.",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.muted),
+                children: [
+                  EmptyState(
+                    icon: AppIcons.analytics,
+                    title: "No results yet",
+                    message: "No tests completed yet. Once you finish a test, your performance shows up here.",
+                    actionLabel: "Start a Practice Test",
+                    onAction: () => context.push("/prepare/aptitude/configure", extra: const AptitudeConfigureArgs()),
                   ),
                 ],
               );
             }
             return ListView(
-              padding: const EdgeInsets.all(20),
+              padding: AppSpacing.page,
               children: [
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.6,
-                  children: [
-                    _StatCard(label: "Tests Completed", value: "${analytics.testsCompleted}"),
-                    _StatCard(
-                      label: "Average Score",
-                      value: analytics.averageScore != null ? "${analytics.averageScore!.round()}%" : "—",
-                    ),
-                    _StatCard(label: "Questions Answered", value: "${analytics.questionsAnswered}"),
-                    _StatCard(
-                      label: "Best Score",
-                      value: analytics.bestScore != null ? "${analytics.bestScore!.round()}%" : "—",
-                    ),
-                  ],
+                pair(
+                  StatCard(label: "Tests Completed", value: "${analytics.testsCompleted}", icon: Icons.task_alt_rounded),
+                  StatCard(
+                    label: "Average Score",
+                    value: analytics.averageScore != null ? "${analytics.averageScore!.round()}%" : "—",
+                    icon: Icons.insights_rounded,
+                    tone: AppTone.success,
+                  ),
                 ),
-                const SizedBox(height: 28),
+                Gap.sm,
+                pair(
+                  StatCard(label: "Questions Answered", value: "${analytics.questionsAnswered}", icon: AppIcons.aptitude, tone: AppTone.purple),
+                  StatCard(
+                    label: "Best Score",
+                    value: analytics.bestScore != null ? "${analytics.bestScore!.round()}%" : "—",
+                    icon: Icons.emoji_events_outlined,
+                    tone: AppTone.warning,
+                  ),
+                ),
                 if (analytics.byCategory.isNotEmpty) ...[
-                  Text("By Section", style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 12),
-                  for (final entry in analytics.byCategory.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(entry.key),
-                              Text(
-                                "${entry.value.correct}/${entry.value.attempted} (${entry.value.percentage.round()}%)",
-                                style: const TextStyle(color: AppColors.muted, fontSize: 12),
-                              ),
-                            ],
+                  Gap.section,
+                  const SectionHeader(title: "By Section"),
+                  CareerCard(
+                    variant: CareerCardVariant.outlined,
+                    child: Column(
+                      children: [
+                        for (final entry in analytics.byCategory.entries)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: Text(entry.key, style: context.text.titleSmall)),
+                                    Text(
+                                      "${entry.value.correct}/${entry.value.attempted} (${entry.value.percentage.round()}%)",
+                                      style: context.text.labelMedium,
+                                    ),
+                                  ],
+                                ),
+                                Gap.xs,
+                                CareerProgressBar(
+                                  value: entry.value.percentage / 100,
+                                  tone: _tone(entry.value.percentage),
+                                  semanticLabel: entry.key,
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(value: entry.value.percentage / 100, minHeight: 6),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  const SizedBox(height: 24),
+                  ),
                 ],
                 recommendationsAsync.when(
                   loading: () => const SizedBox.shrink(),
                   error: (_, __) => const SizedBox.shrink(),
                   data: (recommendations) {
                     if (recommendations.weakTopics.isEmpty) return const SizedBox.shrink();
-                    final practiceableSlugs =
-                        recommendations.weakTopics.map((t) => t.topicSlug).whereType<String>().toList();
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("Recommended Practice", style: Theme.of(context).textTheme.titleLarge),
-                        const SizedBox(height: 4),
-                        Text(
-                          "Based on topics with at least ${recommendations.minAttemptsRequired} attempted questions.",
-                          style: const TextStyle(color: AppColors.muted, fontSize: 12),
-                        ),
-                        const SizedBox(height: 12),
-                        for (final topic in recommendations.weakTopics)
-                          Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              title: Text(topic.topicName),
-                              subtitle: Text("${topic.categoryName} · ${topic.attempted} attempted"),
-                              trailing: Text(
-                                "${topic.accuracy.round()}%",
-                                style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600),
+                    final practiceableSlugs = recommendations.weakTopics.map((t) => t.topicSlug).whereType<String>().toList();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.section),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SectionHeader(
+                            title: "Recommended Practice",
+                            subtitle: "Based on topics with at least ${recommendations.minAttemptsRequired} attempted questions.",
+                          ),
+                          CareerListGroup(
+                            children: [
+                              for (final topic in recommendations.weakTopics)
+                                CareerListRow(
+                                  icon: Icons.track_changes_rounded,
+                                  tone: AppTone.danger,
+                                  title: topic.topicName,
+                                  subtitle: "${topic.categoryName} · ${topic.attempted} attempted",
+                                  trailing: StatusChip(label: "${topic.accuracy.round()}% accuracy", tone: AppTone.danger, dense: true),
+                                ),
+                            ],
+                          ),
+                          if (practiceableSlugs.isNotEmpty) ...[
+                            Gap.md,
+                            PrimaryButton(
+                              label: "Practice Weak Areas",
+                              icon: Icons.track_changes_rounded,
+                              onPressed: () => context.push(
+                                "/prepare/aptitude/configure",
+                                extra: AptitudeConfigureArgs(topicSlugs: practiceableSlugs),
                               ),
                             ),
-                          ),
-                        const SizedBox(height: 8),
-                        if (practiceableSlugs.isNotEmpty)
-                          ElevatedButton(
-                            onPressed: () => context.push(
-                              "/prepare/aptitude/configure",
-                              extra: AptitudeConfigureArgs(topicSlugs: practiceableSlugs),
-                            ),
-                            child: const Text("Practice Weak Areas"),
-                          ),
-                      ],
+                          ],
+                        ],
+                      ),
                     );
                   },
                 ),
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-          ],
         ),
       ),
     );

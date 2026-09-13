@@ -1,5 +1,7 @@
 import "package:flutter/material.dart";
 
+import "../../../core/design/design.dart";
+
 /// Submit confirmation dialog (spec §17): shows Answered/Unanswered/Flagged counts and the time
 /// remaining before letting the user commit. If time has already expired, the caller submits
 /// directly without ever showing this dialog.
@@ -17,6 +19,17 @@ Future<bool?> showSubmitConfirmationDialog(
     remainingLabel = "${minutes}m ${seconds}s remaining";
   }
 
+  Widget row(BuildContext context, IconData icon, Color color, String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            Gap.xs,
+            Text(text, style: context.text.bodyLarge),
+          ],
+        ),
+      );
+
   return showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -25,15 +38,15 @@ Future<bool?> showSubmitConfirmationDialog(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Answered: $answered"),
-          Text("Unanswered: $unanswered"),
-          Text("Flagged: $flagged"),
+          row(context, Icons.check_circle_outline_rounded, AppColors.success, "Answered: $answered"),
+          row(context, Icons.radio_button_unchecked_rounded, context.colors.textSecondary, "Unanswered: $unanswered"),
+          row(context, Icons.flag_rounded, AppColors.warning, "Flagged: $flagged"),
           if (remainingLabel != null) ...[
-            const SizedBox(height: 8),
-            Text(remainingLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Gap.xs,
+            Text(remainingLabel, style: context.text.titleSmall),
           ],
-          const SizedBox(height: 12),
-          const Text("Once submitted, you cannot change your answers."),
+          Gap.sm,
+          Text("Once submitted, you cannot change your answers.", style: context.text.bodyMedium),
         ],
       ),
       actions: [

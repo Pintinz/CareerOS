@@ -2,15 +2,24 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "aptitude_providers.dart";
 import "test_configuration_screen.dart";
 
+/// Results (spec §30): score hero → correct/incorrect/unanswered → section performance → strongest
+/// and weakest areas → Review Answers (primary). No ads on this screen.
 class TestResultsScreen extends ConsumerWidget {
   const TestResultsScreen({super.key, required this.sessionId});
 
   final String sessionId;
+
+  static AppTone _scoreTone(double percentage) => percentage >= 70
+      ? AppTone.success
+      : percentage >= 50
+          ? AppTone.warning
+          : AppTone.danger;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,89 +28,136 @@ class TestResultsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text("Results"), automaticallyImplyLeading: false),
+      bottomNavigationBar: result == null
+          ? null
+          : BottomActionBar(
+              secondary: AppOutlineButton(
+                expand: false,
+                label: "Practice Again",
+                onPressed: () => context.push("/prepare/aptitude/configure", extra: const AptitudeConfigureArgs()),
+              ),
+              primary: PrimaryButton(
+                label: "Review Answers",
+                onPressed: () => context.pushReplacement("/prepare/aptitude/sessions/$sessionId/review"),
+              ),
+            ),
       body: result == null
           ? examState.error != null
-              ? Center(child: Text(examState.error!.userMessage))
+              ? ErrorState(title: "We couldn't load your results", message: examState.error!.userMessage)
               : const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(20),
+              padding: AppSpacing.page,
               children: [
-                Center(
+                CareerCard(
+                  variant: CareerCardVariant.feature,
                   child: Column(
                     children: [
-                      Text(
-                        "${result.percentage.round()}%",
-                        style: Theme.of(context).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.bold, color: AppColors.blue),
+                      CareerProgressRing(
+                        value: result.percentage / 100,
+                        size: 148,
+                        strokeWidth: 14,
+                        tone: _scoreTone(result.percentage),
+                        semanticLabel: "Score",
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text("${result.percentage.round()}%", style: context.text.displaySmall),
+                            Text("score", style: context.text.bodySmall),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(result.performanceLabel, style: Theme.of(context).textTheme.titleMedium),
+                      Gap.md,
+                      Text(result.performanceLabel, style: context.text.titleLarge),
                       if (result.autoSubmitted) ...[
-                        const SizedBox(height: 4),
-                        const Text("Auto-submitted when time expired", style: TextStyle(color: AppColors.warning, fontSize: 12)),
+                        Gap.xs,
+                        const StatusChip(label: "Auto-submitted when time expired", tone: AppTone.warning, icon: AppIcons.timer),
+                      ],
+                      Gap.lg,
+                      Divider(color: context.colors.border),
+                      Gap.md,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: MetricTile(
+                              label: "Correct",
+                              value: "${result.correctCount}",
+                              tone: AppTone.success,
+                              alignment: CrossAxisAlignment.center,
+                            ),
+                          ),
+                          Expanded(
+                            child: MetricTile(
+                              label: "Incorrect",
+                              value: "${result.incorrectCount}",
+                              tone: AppTone.danger,
+                              alignment: CrossAxisAlignment.center,
+                            ),
+                          ),
+                          Expanded(
+                            child: MetricTile(
+                              label: "Unanswered",
+                              value: "${result.unansweredCount}",
+                              tone: AppTone.neutral,
+                              alignment: CrossAxisAlignment.center,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (result.timeUsedSeconds != null) ...[
+                        Gap.md,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(AppIcons.time, size: 16, color: context.colors.textSecondary),
+                            Gap.xxs,
+                            Text("Time used: ${_formatDuration(result.timeUsedSeconds!)}", style: context.text.bodySmall),
+                          ],
+                        ),
                       ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(child: _StatTile(label: "Correct", value: "${result.correctCount}", color: AppColors.success)),
-                    Expanded(child: _StatTile(label: "Incorrect", value: "${result.incorrectCount}", color: AppColors.danger)),
-                    Expanded(child: _StatTile(label: "Unanswered", value: "${result.unansweredCount}", color: AppColors.muted)),
-                  ],
-                ),
-                if (result.timeUsedSeconds != null) ...[
-                  const SizedBox(height: 12),
-                  Text("Time used: ${_formatDuration(result.timeUsedSeconds!)}", style: const TextStyle(color: AppColors.muted)),
-                ],
-                const SizedBox(height: 24),
                 if (result.sectionBreakdown.isNotEmpty) ...[
-                  Text("Section Breakdown", style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 12),
-                  for (final entry in result.sectionsSortedByPercentage)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(entry.key),
-                              Text("${entry.value.percentage.round()}%", style: const TextStyle(fontWeight: FontWeight.w600)),
-                            ],
+                  Gap.section,
+                  const SectionHeader(title: "Section Performance"),
+                  CareerCard(
+                    variant: CareerCardVariant.outlined,
+                    child: Column(
+                      children: [
+                        for (final entry in result.sectionsSortedByPercentage)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(child: Text(entry.key, style: context.text.titleSmall)),
+                                    Text(
+                                      "${entry.value.correct}/${entry.value.total} · ${entry.value.percentage.round()}%",
+                                      style: context.text.labelMedium,
+                                    ),
+                                  ],
+                                ),
+                                Gap.xs,
+                                CareerProgressBar(
+                                  value: entry.value.percentage / 100,
+                                  tone: _scoreTone(entry.value.percentage),
+                                  semanticLabel: entry.key,
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 4),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(value: entry.value.percentage / 100, minHeight: 6),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  const SizedBox(height: 12),
+                  ),
                   if (result.sectionsSortedByPercentage.isNotEmpty) ...[
+                    Gap.md,
                     _StrongestWeakest(sections: result.sectionsSortedByPercentage),
-                    const SizedBox(height: 24),
                   ],
                 ],
-                ElevatedButton(
-                  onPressed: () => context.pushReplacement("/prepare/aptitude/sessions/$sessionId/review"),
-                  child: const Text("Review Answers"),
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton(
-                  onPressed: () => context.push(
-                    "/prepare/aptitude/configure",
-                    extra: const AptitudeConfigureArgs(),
-                  ),
-                  child: const Text("Retake / Practice Similar"),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () => context.go("/home"),
-                  child: const Text("Done"),
-                ),
+                Gap.lg,
+                Center(child: TextButton(onPressed: () => context.go("/home?tab=prepare"), child: const Text("Done"))),
               ],
             ),
     );
@@ -111,24 +167,6 @@ class TestResultsScreen extends ConsumerWidget {
     final minutes = seconds ~/ 60;
     final secs = seconds % 60;
     return "${minutes}m ${secs}s";
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({required this.label, required this.value, required this.color});
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-      ],
-    );
   }
 }
 
@@ -142,38 +180,44 @@ class _StrongestWeakest extends StatelessWidget {
     if (sections.isEmpty) return const SizedBox.shrink();
     final strongest = sections.first;
     final weakest = sections.last;
-    return Row(
-      children: [
-        Expanded(
-          child: _AreaCard(label: "Strongest Area", name: strongest.key, color: AppColors.success),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _AreaCard(label: "Weakest Area", name: weakest.key, color: AppColors.warning),
-        ),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _AreaCard(label: "Strongest Area", name: strongest.key, tone: AppTone.success, icon: Icons.trending_up_rounded)),
+          Gap.sm,
+          Expanded(child: _AreaCard(label: "Weakest Area", name: weakest.key, tone: AppTone.warning, icon: Icons.track_changes_rounded)),
+        ],
+      ),
     );
   }
 }
 
 class _AreaCard extends StatelessWidget {
-  const _AreaCard({required this.label, required this.name, required this.color});
+  const _AreaCard({required this.label, required this.name, required this.tone, required this.icon});
 
   final String label;
   final String name;
-  final Color color;
+  final AppTone tone;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+    return CareerCard(
+      color: tone.tint(context),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
-          const SizedBox(height: 4),
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Icon(icon, size: 16, color: tone.onTint(context)),
+              Gap.xxs,
+              Flexible(child: Text(label, style: context.text.labelSmall?.copyWith(color: tone.onTint(context)))),
+            ],
+          ),
+          Gap.xs,
+          Text(name, style: context.text.titleSmall),
         ],
       ),
     );

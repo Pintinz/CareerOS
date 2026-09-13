@@ -1,25 +1,24 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
-import "package:intl/intl.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../interview/presentation/interview_providers.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";
 import "test_configuration_screen.dart";
 
-/// The Prepare tab body (spec §2/§6): "What are you preparing for?" with both a real Aptitude
-/// Test path and a real Interview Preparation path (Phase 7).
+/// Prepare hub — "How do I become more competitive?". Aptitude testing, interview preparation and
+/// CV tools as the three primary areas; resume, progress and history below. Every figure is real.
 class PreparationHubScreen extends ConsumerWidget {
   const PreparationHubScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final analyticsAsync = ref.watch(aptitudeAnalyticsProvider);
     final historyAsync = ref.watch(aptitudeSessionHistoryProvider);
-    final interviewAnalyticsAsync = ref.watch(interviewAnalyticsProvider);
-    final readinessAsync = ref.watch(interviewReadinessProvider(null));
+    final inProgress = historyAsync.valueOrNull?.where((s) => !s.status.isSubmitted).firstOrNull;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -29,116 +28,284 @@ class PreparationHubScreen extends ConsumerWidget {
         ref.invalidate(interviewReadinessProvider);
       },
       child: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.md, AppSpacing.pageH, AppSpacing.xxl),
         children: [
-          Text("What are you preparing for?", style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 20),
-          _PrepCard(
-            icon: Icons.fact_check_rounded,
+          const HubHeader(title: "Prepare", subtitle: "Become more competitive for every application"),
+          Gap.lg,
+          const _PrepareHero(),
+          if (inProgress != null) ...[
+            Gap.md,
+            InsightCard(
+              icon: Icons.play_circle_outline_rounded,
+              tone: AppTone.warning,
+              title: "Resume your practice test",
+              message: "${inProgress.mode.label} · ${inProgress.questionCount} questions · started ${DateLabels.published(inProgress.createdAt).toLowerCase()}",
+              actionLabel: "Resume",
+              onAction: () => context.push("/prepare/aptitude/sessions/${inProgress.id}"),
+            ),
+          ],
+          Gap.section,
+          const SectionHeader(title: "What are you preparing for?"),
+          _AreaCard(
+            icon: AppIcons.aptitude,
+            tone: AppTone.primary,
             title: "Aptitude Test",
             description: "Numerical, verbal, abstract, logical, situational judgement, and technical practice.",
-            color: AppColors.blue,
-            action: ElevatedButton(
+            action: PrimaryButton(
+              label: "Start Preparing",
               onPressed: () => context.push("/prepare/aptitude/configure", extra: const AptitudeConfigureArgs()),
-              child: const Text("Start Preparing"),
             ),
           ),
-          const SizedBox(height: 16),
-          _PrepCard(
-            icon: Icons.groups_2_outlined,
+          Gap.sm,
+          _AreaCard(
+            icon: AppIcons.interview,
+            tone: AppTone.warning,
             title: "Interview Preparation",
             description: "Company, job, technical, behavioral, and STAR interview practice.",
-            color: AppColors.purple,
-            action: ElevatedButton(
-              onPressed: () => context.push("/prepare/interview"),
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple),
-              child: const Text("Start Preparing"),
-            ),
+            action: PrimaryButton(label: "Start Preparing", onPressed: () => context.push("/prepare/interview")),
           ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Interview Progress", style: Theme.of(context).textTheme.titleLarge),
-              TextButton(onPressed: () => context.push("/prepare/interview/analytics"), child: const Text("View All")),
-            ],
+          Gap.sm,
+          _AreaCard(
+            icon: AppIcons.cv,
+            tone: AppTone.purple,
+            title: "CV & Career Tools",
+            description: "Check how your CV reads to applicant tracking systems and how well it matches a role.",
+            action: SecondaryButton(label: "Analyze CV", onPressed: () => context.push("/ats/analyze")),
           ),
-          const SizedBox(height: 8),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.6,
+          const _AptitudeProgress(),
+          const _InterviewProgress(),
+          _RecentTests(historyAsync: historyAsync),
+          Gap.section,
+          CareerListGroup(
+            title: "More preparation",
             children: [
-              interviewAnalyticsAsync.when(
-                loading: () => const _StatCard(label: "Interview Sessions", value: "—"),
-                error: (_, __) => const _StatCard(label: "Interview Sessions", value: "—"),
-                data: (a) => _StatCard(label: "Interview Sessions", value: "${a.sessionsCompleted}"),
+              CareerListRow(
+                icon: AppIcons.starStory,
+                tone: AppTone.success,
+                title: "STAR Stories",
+                subtitle: "Build answers that show real impact",
+                onTap: () => context.push("/prepare/interview/star-stories"),
               ),
-              interviewAnalyticsAsync.when(
-                loading: () => const _StatCard(label: "Questions Practiced", value: "—"),
-                error: (_, __) => const _StatCard(label: "Questions Practiced", value: "—"),
-                data: (a) => _StatCard(label: "Questions Practiced", value: "${a.questionsPracticed}"),
+              CareerListRow(
+                icon: AppIcons.analytics,
+                title: "Aptitude Analytics",
+                subtitle: "Section and topic performance",
+                onTap: () => context.push("/prepare/aptitude/analytics"),
               ),
-              interviewAnalyticsAsync.when(
-                loading: () => const _StatCard(label: "STAR Stories Ready", value: "—"),
-                error: (_, __) => const _StatCard(label: "STAR Stories Ready", value: "—"),
-                data: (a) => _StatCard(label: "STAR Stories Ready", value: "${a.starStoriesReady}"),
-              ),
-              readinessAsync.when(
-                loading: () => const _StatCard(label: "Interview Readiness", value: "—"),
-                error: (_, __) => const _StatCard(label: "Interview Readiness", value: "—"),
-                data: (r) => _StatCard(label: "Interview Readiness", value: r.insufficientData || r.overall == null ? "N/A" : "${r.overall!.round()}%"),
+              CareerListRow(
+                icon: AppIcons.history,
+                tone: AppTone.warning,
+                title: "Interview Analytics",
+                subtitle: "Practice history and readiness by area",
+                onTap: () => context.push("/prepare/interview/analytics"),
               ),
             ],
           ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text("Your Progress", style: Theme.of(context).textTheme.titleLarge),
-              TextButton(
-                onPressed: () => context.push("/prepare/aptitude/analytics"),
-                child: const Text("View All"),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          analyticsAsync.when(
-            loading: () => const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: LinearProgressIndicator()),
-            error: (_, __) => const Text("Unable to load your progress right now.", style: TextStyle(color: AppColors.muted)),
-            data: (analytics) => GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 1.6,
+        ],
+      ),
+    );
+  }
+}
+
+class _PrepareHero extends StatelessWidget {
+  const _PrepareHero();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.heroAll,
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors.heroGradient),
+        border: colors.isDark ? Border.all(color: colors.border) : null,
+        boxShadow: AppShadows.hero(context),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _StatCard(label: "Tests Completed", value: "${analytics.testsCompleted}"),
-                _StatCard(label: "Average Score", value: analytics.averageScore != null ? "${analytics.averageScore!.round()}%" : "—"),
-                _StatCard(label: "Questions Practiced", value: "${analytics.questionsAnswered}"),
-                _StatCard(label: "Best Score", value: analytics.bestScore != null ? "${analytics.bestScore!.round()}%" : "—"),
+                Text("Prepare with confidence", style: context.text.titleLarge?.copyWith(color: Colors.white)),
+                Gap.xs,
+                Text(
+                  "Practice tests, rehearse interviews and sharpen your CV — with progress tracked from real sessions.",
+                  style: context.text.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.8)),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 28),
-          Text("Recent Tests", style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
+          Gap.md,
+          ExcludeSemantics(
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: AppRadius.featureAll),
+              alignment: Alignment.center,
+              child: const Icon(AppIcons.prepareSelected, color: Colors.white, size: 34),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AreaCard extends StatelessWidget {
+  const _AreaCard({required this.icon, required this.tone, required this.title, required this.description, required this.action});
+
+  final IconData icon;
+  final AppTone tone;
+  final String title;
+  final String description;
+  final Widget action;
+
+  @override
+  Widget build(BuildContext context) {
+    return CareerCard(
+      variant: CareerCardVariant.feature,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconTile(icon: icon, tone: tone, size: 48),
+              Gap.md,
+              Expanded(child: Text(title, style: context.text.titleLarge)),
+            ],
+          ),
+          Gap.sm,
+          Text(description, style: context.text.bodyMedium),
+          Gap.md,
+          action,
+        ],
+      ),
+    );
+  }
+}
+
+Widget _statPair(Widget a, Widget b) => IntrinsicHeight(
+      child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [Expanded(child: a), Gap.sm, Expanded(child: b)]),
+    );
+
+class _AptitudeProgress extends ConsumerWidget {
+  const _AptitudeProgress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final analyticsAsync = ref.watch(aptitudeAnalyticsProvider);
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.section),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionHeader(title: "Aptitude progress", actionLabel: "View All", onAction: () => context.push("/prepare/aptitude/analytics")),
+          analyticsAsync.when(
+            loading: () => const Column(children: [LoadingSkeleton(height: 72, radius: AppRadius.card), Gap.sm, LoadingSkeleton(height: 72, radius: AppRadius.card)]),
+            error: (_, __) => const ErrorState(compact: true, message: "We couldn't load your aptitude progress right now."),
+            data: (analytics) => Column(
+              children: [
+                _statPair(
+                  StatCard(label: "Tests Completed", value: "${analytics.testsCompleted}", icon: Icons.task_alt_rounded),
+                  StatCard(
+                    label: "Average Score",
+                    value: analytics.averageScore != null ? "${analytics.averageScore!.round()}%" : "—",
+                    icon: Icons.insights_rounded,
+                    tone: AppTone.success,
+                  ),
+                ),
+                Gap.sm,
+                _statPair(
+                  StatCard(label: "Questions Practiced", value: "${analytics.questionsAnswered}", icon: AppIcons.aptitude, tone: AppTone.purple),
+                  StatCard(
+                    label: "Best Score",
+                    value: analytics.bestScore != null ? "${analytics.bestScore!.round()}%" : "—",
+                    icon: Icons.emoji_events_outlined,
+                    tone: AppTone.warning,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InterviewProgress extends ConsumerWidget {
+  const _InterviewProgress();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final analytics = ref.watch(interviewAnalyticsProvider);
+    final readiness = ref.watch(interviewReadinessProvider(null));
+    final a = analytics.valueOrNull;
+    final r = readiness.valueOrNull;
+    final readinessLabel = r == null ? null : (r.insufficientData || r.overall == null ? "N/A" : "${r.overall!.round()}%");
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.section),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SectionHeader(title: "Interview progress", actionLabel: "View All", onAction: () => context.push("/prepare/interview/analytics")),
+          _statPair(
+            StatCard(label: "Interview Sessions", value: a?.sessionsCompleted.toString(), icon: AppIcons.interview, tone: AppTone.warning),
+            StatCard(label: "Interview Readiness", value: readinessLabel, icon: Icons.speed_rounded, tone: AppTone.success),
+          ),
+          Gap.sm,
+          _statPair(
+            StatCard(label: "Interview Questions Practiced", value: a?.questionsPracticed.toString(), icon: Icons.forum_outlined),
+            StatCard(label: "STAR Stories Ready", value: a?.starStoriesReady.toString(), icon: AppIcons.starStory, tone: AppTone.purple),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentTests extends StatelessWidget {
+  const _RecentTests({required this.historyAsync});
+
+  final AsyncValue<List<TestSessionSummary>> historyAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.section),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SectionHeader(title: "Recent tests"),
           historyAsync.when(
-            loading: () => const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: LinearProgressIndicator()),
-            error: (_, __) => const Text("Unable to load recent tests.", style: TextStyle(color: AppColors.muted)),
+            loading: () => const SkeletonCard(),
+            error: (_, __) => const ErrorState(compact: true, message: "We couldn't load your recent tests."),
             data: (sessions) {
               if (sessions.isEmpty) {
-                return const Text("No tests yet — start one above.", style: TextStyle(color: AppColors.muted));
+                return CareerCard(
+                  variant: CareerCardVariant.muted,
+                  child: Row(
+                    children: [
+                      const IconTile(icon: AppIcons.history, size: 40),
+                      Gap.sm,
+                      Expanded(child: Text("No practice tests yet. Your completed tests will appear here.", style: context.text.bodyMedium)),
+                    ],
+                  ),
+                );
               }
-              return Column(
+              return CareerListGroup(
                 children: [
                   for (final session in sessions.take(5))
-                    _RecentSessionTile(
-                      session: session,
+                    CareerListRow(
+                      icon: session.status.isSubmitted ? Icons.check_circle_outline_rounded : Icons.hourglass_top_rounded,
+                      tone: session.status.isSubmitted ? AppTone.success : AppTone.warning,
+                      title: "${session.mode.label} · ${session.questionCount} questions",
+                      subtitle: DateLabels.published(session.createdAt),
+                      trailing: session.status.isSubmitted && session.percentage != null
+                          ? StatusChip(label: "${session.percentage!.round()}%", tone: AppTone.primary)
+                          : const StatusChip(label: "In progress", tone: AppTone.warning),
                       onTap: () => session.status.isSubmitted
                           ? context.push("/prepare/aptitude/sessions/${session.id}/results")
                           : context.push("/prepare/aptitude/sessions/${session.id}"),
@@ -148,111 +315,6 @@ class PreparationHubScreen extends ConsumerWidget {
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _PrepCard extends StatelessWidget {
-  const _PrepCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.color,
-    required this.action,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final Color color;
-  final Widget action;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-                  alignment: Alignment.center,
-                  child: Icon(icon, color: color),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(child: Text(title, style: Theme.of(context).textTheme.titleLarge)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(description, style: const TextStyle(color: AppColors.muted)),
-            const SizedBox(height: 16),
-            SizedBox(width: double.infinity, child: action),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RecentSessionTile extends StatelessWidget {
-  const _RecentSessionTile({required this.session, required this.onTap});
-
-  final TestSessionSummary session;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isSubmitted = session.status.isSubmitted;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        onTap: onTap,
-        leading: Icon(
-          isSubmitted ? Icons.check_circle_outline : Icons.hourglass_top_rounded,
-          color: isSubmitted ? AppColors.success : AppColors.warning,
-        ),
-        title: Text("${session.mode.label} · ${session.questionCount} questions"),
-        subtitle: Text(DateFormat.yMMMd().add_jm().format(session.createdAt)),
-        trailing: isSubmitted && session.percentage != null
-            ? Text("${session.percentage!.round()}%", style: const TextStyle(fontWeight: FontWeight.w600))
-            : const Text("In progress", style: TextStyle(color: AppColors.warning, fontSize: 12)),
       ),
     );
   }

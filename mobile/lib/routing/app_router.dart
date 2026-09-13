@@ -100,7 +100,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: "/onboarding", builder: (context, state) => const OnboardingScreen()),
       GoRoute(path: "/login", builder: (context, state) => const LoginScreen()),
       GoRoute(path: "/register", builder: (context, state) => const RegisterScreen()),
-      GoRoute(path: "/home", builder: (context, state) => const HomeShell()),
+      // `/home?tab=opportunities` opens a specific hub — lets pushed screens (e.g. an empty tracker)
+      // send the user into the right hub rather than a dead end.
+      GoRoute(
+        path: "/home",
+        builder: (context, state) => HomeShell(key: ValueKey(state.uri.queryParameters["tab"]), initialTab: state.uri.queryParameters["tab"]),
+      ),
       GoRoute(
         path: "/jobs/:idOrSlug",
         builder: (context, state) => JobDetailScreen(idOrSlug: state.pathParameters["idOrSlug"]!),

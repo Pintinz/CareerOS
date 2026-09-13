@@ -2,15 +2,17 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/aptitude_models.dart";
 import "aptitude_providers.dart";
 import "question_navigator_sheet.dart";
 import "submit_confirmation_dialog.dart";
 
-/// The exam screen (spec §17-19): header with section/progress/timer, the current question,
-/// Previous/Next/Flag/Navigator/Submit controls. Deliberately carries no ad placement.
+/// The exam screen (spec §17-19): distraction-free — section, "Question X of Y", timer, progress,
+/// the question and its answers, then Previous/Next/Submit. Deliberately carries no ad placement
+/// and no bottom navigation.
 class ActiveTestScreen extends ConsumerStatefulWidget {
   const ActiveTestScreen({super.key, required this.sessionId});
 
@@ -43,11 +45,9 @@ class _ActiveTestScreenState extends ConsumerState<ActiveTestScreen> {
     if (examState.session == null) {
       return Scaffold(
         appBar: AppBar(title: const Text("Test")),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(examState.error?.userMessage ?? "Unable to load this test.", textAlign: TextAlign.center),
-          ),
+        body: ErrorState(
+          title: "We couldn't open this test",
+          message: examState.error?.userMessage ?? "Unable to load this test.",
         ),
       );
     }
@@ -56,68 +56,79 @@ class _ActiveTestScreenState extends ConsumerState<ActiveTestScreen> {
     final question = examState.currentQuestion;
     final total = session.questions.length;
     final index = examState.currentIndex;
+    final colors = context.colors;
+    final isFlagged = question?.isFlagged ?? false;
 
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final leave = await showDialog<bool>(
+        final leave = await showCareerDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text("Leave this test?"),
-            content: const Text("Your progress is saved. You can resume this test later from the Prepare tab."),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Stay")),
-              TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text("Leave")),
-            ],
-          ),
+          title: "Leave this test?",
+          message: "Your progress is saved. You can resume this test later from the Prepare tab.",
+          confirmLabel: "Leave",
+          cancelLabel: "Stay",
         );
-        if (leave == true && context.mounted) context.pop();
+        if (leave && context.mounted) context.pop();
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(question?.categoryName ?? "Test"),
+          titleSpacing: 0,
+          title: Text(question?.categoryName ?? "Test", maxLines: 1, overflow: TextOverflow.ellipsis),
           actions: [
             if (examState.hasUnsyncedChanges)
               const Padding(
-                padding: EdgeInsets.only(right: 8),
+                padding: EdgeInsets.only(right: 4),
                 child: Tooltip(
                   message: "Some answers haven't synced yet — they'll upload once you're back online.",
-                  child: Icon(Icons.cloud_off, color: AppColors.warning),
+                  child: Icon(AppIcons.offline, color: AppColors.warning),
                 ),
               ),
             if (session.expiresAt != null) _TimerBadge(remainingSeconds: examState.remainingSeconds),
-            const SizedBox(width: 8),
             IconButton(
-              icon: Icon(question?.isFlagged ?? false ? Icons.flag : Icons.flag_outlined,
-                  color: (question?.isFlagged ?? false) ? AppColors.warning : null),
+              tooltip: isFlagged ? "Remove flag" : "Flag for review",
+              icon: Icon(isFlagged ? Icons.flag : Icons.flag_outlined, color: isFlagged ? AppColors.warning : null),
               onPressed: question == null ? null : () => controller.toggleFlag(question.id),
             ),
             IconButton(
+              tooltip: "Question navigator",
               icon: const Icon(Icons.grid_view_rounded),
               onPressed: () => showQuestionNavigatorSheet(context, sessionId: widget.sessionId),
             ),
           ],
         ),
         body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            LinearProgressIndicator(value: total == 0 ? 0 : (index + 1) / total),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xxs, AppSpacing.pageH, AppSpacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text("Question ${index + 1} of $total", style: const TextStyle(color: AppColors.muted)),
-                  if (question?.topicName != null)
-                    Text(question!.topicName!, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                  Row(
+                    children: [
+                      Text("Question ${index + 1} of $total", style: context.text.titleSmall),
+                      const Spacer(),
+                      if (question?.topicName != null)
+                        Flexible(child: StatusChip(label: question!.topicName!, tone: AppTone.primary, dense: true)),
+                    ],
+                  ),
+                  Gap.xs,
+                  CareerProgressBar(
+                    value: total == 0 ? 0 : (index + 1) / total,
+                    height: 6,
+                    semanticLabel: "Test progress",
+                    semanticValue: "Question ${index + 1} of $total",
+                  ),
                 ],
               ),
             ),
             Expanded(
               child: question == null
-                  ? const Center(child: Text("No questions in this session."))
+                  ? const EmptyState(icon: AppIcons.aptitude, title: "No questions in this session.", message: "Go back and start a new test.")
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, AppSpacing.xl),
                       child: _QuestionBody(
                         key: ValueKey(question.id),
                         question: question,
@@ -130,9 +141,11 @@ class _ActiveTestScreenState extends ConsumerState<ActiveTestScreen> {
             _BottomControls(
               canGoPrevious: index > 0,
               canGoNext: index < total - 1,
+              isLast: index >= total - 1,
               onPrevious: controller.previous,
               onNext: controller.next,
               onSubmit: () => _confirmAndSubmit(context, controller, session),
+              background: colors.surface,
             ),
           ],
         ),
@@ -167,23 +180,29 @@ class _TimerBadge extends StatelessWidget {
     if (seconds == null) return const SizedBox.shrink();
     final minutes = seconds ~/ 60;
     final secs = seconds % 60;
-    final isLow = seconds <= 60;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: (isLow ? AppColors.danger : AppColors.blue).withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined, size: 16, color: isLow ? AppColors.danger : AppColors.blue),
-          const SizedBox(width: 4),
-          Text(
-            "${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}",
-            style: TextStyle(color: isLow ? AppColors.danger : AppColors.blue, fontWeight: FontWeight.w600),
-          ),
-        ],
+    final tone = seconds <= 60 ? AppTone.danger : (seconds <= 300 ? AppTone.warning : AppTone.primary);
+    final label = "${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}";
+    return Semantics(
+      label: "Time remaining $minutes minutes $secs seconds",
+      excludeSemantics: true,
+      child: Container(
+        margin: const EdgeInsets.only(right: AppSpacing.xxs),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(color: tone.tint(context), borderRadius: AppRadius.pillAll),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.timer_outlined, size: 16, color: tone.onTint(context)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: context.text.labelLarge?.copyWith(
+                color: tone.onTint(context),
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -228,42 +247,53 @@ class _QuestionBodyState extends State<_QuestionBody> {
   Widget build(BuildContext context) {
     final question = widget.question;
     final selected = question.answerState?.selectedOptionIds ?? const [];
+    final colors = context.colors;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
         if (question.passageText != null) ...[
           Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
-            child: Text(question.passageText!, style: const TextStyle(height: 1.4)),
+            width: double.infinity,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            decoration: BoxDecoration(color: colors.surfaceMuted, borderRadius: AppRadius.cardAll),
+            child: Text(question.passageText!, style: context.text.bodyLarge?.copyWith(height: 1.55)),
           ),
-          const SizedBox(height: 16),
+          Gap.lg,
         ],
-        Text(question.questionText, style: Theme.of(context).textTheme.titleLarge),
+        Text(question.questionText, style: context.text.titleLarge?.copyWith(height: 1.4)),
         if (question.questionImageUrl != null) ...[
-          const SizedBox(height: 12),
+          Gap.md,
           ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(question.questionImageUrl!, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+            borderRadius: AppRadius.cardAll,
+            child: Image.network(
+              question.questionImageUrl!,
+              semanticLabel: "Question image",
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
           ),
         ],
-        const SizedBox(height: 20),
+        Gap.lg,
+        if (question.questionType.isMultiSelect) ...[
+          Text("Select all that apply", style: context.text.labelMedium),
+          Gap.xs,
+        ],
         if (question.questionType.isNumericEntry)
           TextField(
             controller: _numericController,
             enabled: !widget.readOnly,
             keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-            decoration: const InputDecoration(labelText: "Your answer", border: OutlineInputBorder()),
+            style: context.text.titleLarge,
+            decoration: const InputDecoration(labelText: "Your answer"),
             onChanged: (text) {
               final value = double.tryParse(text);
               if (value != null) widget.onNumericChanged(value);
             },
           )
         else
-          for (final option in question.options)
+          for (final (i, option) in question.options.indexed)
             _OptionTile(
+              letter: String.fromCharCode(65 + i),
               option: option,
               isSelected: selected.contains(option.id),
               isMultiSelect: question.questionType.isMultiSelect,
@@ -289,6 +319,7 @@ class _QuestionBodyState extends State<_QuestionBody> {
 
 class _OptionTile extends StatelessWidget {
   const _OptionTile({
+    required this.letter,
     required this.option,
     required this.isSelected,
     required this.isMultiSelect,
@@ -296,6 +327,7 @@ class _OptionTile extends StatelessWidget {
     required this.onTap,
   });
 
+  final String letter;
   final TestOption option;
   final bool isSelected;
   final bool isMultiSelect;
@@ -304,39 +336,68 @@ class _OptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: readOnly ? null : onTap,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            border: Border.all(color: isSelected ? AppColors.blue : AppColors.muted.withValues(alpha: 0.3)),
-            borderRadius: BorderRadius.circular(12),
-            color: isSelected ? AppColors.blue.withValues(alpha: 0.06) : null,
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Semantics(
+        selected: isSelected,
+        button: true,
+        label: "Option $letter",
+        child: Material(
+          color: isSelected ? colors.tint(colors.primary) : colors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.cardAll,
+            side: BorderSide(color: isSelected ? colors.primary : colors.border, width: isSelected ? 1.6 : 1),
           ),
-          child: Row(
-            children: [
-              Icon(
-                isMultiSelect
-                    ? (isSelected ? Icons.check_box : Icons.check_box_outline_blank)
-                    : (isSelected ? Icons.radio_button_checked : Icons.radio_button_off),
-                color: isSelected ? AppColors.blue : AppColors.muted,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              if (option.optionImageUrl != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(option.optionImageUrl!, width: 48, height: 48, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-                  ),
+          child: InkWell(
+            borderRadius: AppRadius.cardAll,
+            onTap: readOnly ? null : onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                child: Row(
+                  children: [
+                    AnimatedContainer(
+                      duration: AppMotion.of(context, AppMotion.fast),
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: isSelected ? colors.primary : colors.surfaceMuted,
+                        borderRadius: BorderRadius.circular(isMultiSelect ? 8 : 15),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(letter, style: context.text.labelLarge?.copyWith(color: isSelected ? Colors.white : colors.textSecondary)),
+                    ),
+                    Gap.sm,
+                    if (option.optionImageUrl != null)
+                      Padding(
+                        padding: const EdgeInsets.only(right: AppSpacing.xs),
+                        child: ClipRRect(
+                          borderRadius: AppRadius.smAll,
+                          child: Image.network(
+                            option.optionImageUrl!,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            semanticLabel: "Option $letter image",
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ),
+                    Expanded(child: Text(option.optionText ?? "", style: context.text.bodyLarge)),
+                    Gap.xs,
+                    Icon(
+                      isMultiSelect
+                          ? (isSelected ? Icons.check_box : Icons.check_box_outline_blank)
+                          : (isSelected ? Icons.radio_button_checked : Icons.radio_button_off),
+                      color: isSelected ? colors.primary : colors.border,
+                      size: 22,
+                    ),
+                  ],
                 ),
-              Expanded(child: Text(option.optionText ?? "")),
-            ],
+              ),
+            ),
           ),
         ),
       ),
@@ -348,42 +409,44 @@ class _BottomControls extends StatelessWidget {
   const _BottomControls({
     required this.canGoPrevious,
     required this.canGoNext,
+    required this.isLast,
     required this.onPrevious,
     required this.onNext,
     required this.onSubmit,
+    required this.background,
   });
 
   final bool canGoPrevious;
   final bool canGoNext;
+  final bool isLast;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
   final VoidCallback onSubmit;
+  final Color background;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(color: AppColors.card, border: Border(top: BorderSide(color: Color(0x1A000000)))),
+    return DecoratedBox(
+      decoration: BoxDecoration(color: background, border: Border(top: BorderSide(color: context.colors.border))),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(onPressed: canGoPrevious ? onPrevious : null, child: const Text("Previous")),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton(onPressed: canGoNext ? onNext : null, child: const Text("Next")),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: onSubmit,
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-                child: const Text("Submit"),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+          child: Row(
+            children: [
+              Expanded(child: OutlinedButton(onPressed: canGoPrevious ? onPrevious : null, child: const Text("Previous"))),
+              Gap.xs,
+              Expanded(child: OutlinedButton(onPressed: canGoNext ? onNext : null, child: const Text("Next"))),
+              Gap.xs,
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: onSubmit,
+                  style: isLast ? null : ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                  child: const Text("Submit"),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

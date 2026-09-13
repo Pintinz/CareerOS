@@ -74,6 +74,7 @@ class ScholarshipDetail {
     this.officialUrl,
     this.applicationDeadline,
     required this.isVerified,
+    this.isDemo = false,
     required this.isFeatured,
     required this.isSaved,
   });
@@ -103,6 +104,7 @@ class ScholarshipDetail {
   final String? officialUrl;
   final DateTime? applicationDeadline;
   final bool isVerified;
+  final bool isDemo;
   final bool isFeatured;
   final bool isSaved;
 
@@ -136,6 +138,7 @@ class ScholarshipDetail {
         applicationDeadline:
             json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,
         isVerified: json["is_verified"] as bool? ?? false,
+        isDemo: json["is_demo"] as bool? ?? false,
         isFeatured: json["is_featured"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
       );

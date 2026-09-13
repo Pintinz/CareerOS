@@ -1,7 +1,9 @@
 import "package:flutter/material.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/application_models.dart";
+import "stage_badge.dart";
 
 /// Bottom sheet returning the (stage, note) the user picked, or null if cancelled. The caller
 /// is responsible for actually calling the API — this widget has no side effects of its own.
@@ -9,7 +11,7 @@ Future<(ApplicationStage, String?)?> showUpdateStageSheet(BuildContext context, 
   return showModalBottomSheet<(ApplicationStage, String?)>(
     context: context,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    useSafeArea: true,
     builder: (context) => _UpdateStageSheet(current: current),
   );
 }
@@ -35,19 +37,22 @@ class _UpdateStageSheetState extends State<_UpdateStageSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
+        initialChildSize: 0.75,
+        maxChildSize: 0.92,
         expand: false,
         builder: (context, scrollController) => Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, 0, AppSpacing.pageH, AppSpacing.md),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text("Update Stage", style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 12),
+              Text("Update Stage", style: context.text.titleLarge),
+              const SizedBox(height: 2),
+              Text("Record where this application stands now. Your history is kept.", style: context.text.bodySmall),
+              Gap.sm,
               Expanded(
                 child: RadioGroup<ApplicationStage>(
                   groupValue: _selected,
@@ -58,12 +63,19 @@ class _UpdateStageSheetState extends State<_UpdateStageSheet> {
                       for (final stage in ApplicationStage.values)
                         RadioListTile<ApplicationStage>(
                           value: stage,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                          controlAffinity: ListTileControlAffinity.trailing,
+                          selected: stage == _selected,
+                          selectedTileColor: colors.tint(colors.primary),
+                          shape: const RoundedRectangleBorder(borderRadius: AppRadius.mdAll),
+                          secondary: IconTile(icon: stageIcon(stage), tone: stageTone(stage), size: 36),
                           title: Row(
                             children: [
-                              Text(stage.label),
-                              const SizedBox(width: 8),
-                              if (stage == widget.current)
-                                const Text("(current)", style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                              Flexible(child: Text(stage.label, style: context.text.titleSmall)),
+                              if (stage == widget.current) ...[
+                                Gap.xs,
+                                const StatusChip(label: "Current", dense: true),
+                              ],
                             ],
                           ),
                         ),
@@ -71,18 +83,13 @@ class _UpdateStageSheetState extends State<_UpdateStageSheet> {
                   ),
                 ),
               ),
+              Gap.sm,
               TextField(
                 controller: _noteController,
-                decoration: const InputDecoration(labelText: "Note (optional)"),
+                decoration: const InputDecoration(labelText: "Note (optional)", prefixIcon: Icon(Icons.sticky_note_2_outlined)),
               ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop((_selected, _noteController.text.trim())),
-                  child: const Text("Save"),
-                ),
-              ),
+              Gap.sm,
+              PrimaryButton(label: "Save", onPressed: () => Navigator.of(context).pop((_selected, _noteController.text.trim()))),
             ],
           ),
         ),

@@ -2,8 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "application_providers.dart";
 
 class CreateApplicationScreen extends ConsumerStatefulWidget {
@@ -57,47 +58,57 @@ class _CreateApplicationScreenState extends ConsumerState<CreateApplicationScree
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Track an Application")),
+      bottomNavigationBar: BottomActionBar(primary: PrimaryButton(label: "Start Tracking", isLoading: _saving, onPressed: _submit)),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: AppSpacing.page,
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                "For a role you applied to that isn't listed in CareerOS yet.",
-                style: Theme.of(context).textTheme.bodyMedium,
+              const InsightCard(
+                icon: AppIcons.application,
+                title: "Applied somewhere else?",
+                message: "Track roles that aren't listed in CareerOS. For listed jobs, use Track Application on the job page.",
               ),
-              const SizedBox(height: 20),
+              Gap.xl,
+              Text("Role", style: context.text.titleMedium),
+              Gap.sm,
               TextFormField(
                 controller: _companyController,
-                decoration: const InputDecoration(labelText: "Company"),
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: "Company", prefixIcon: Icon(AppIcons.company)),
                 validator: (v) => (v == null || v.trim().isEmpty) ? "Required" : null,
               ),
-              const SizedBox(height: 16),
+              Gap.md,
               TextFormField(
                 controller: _roleController,
-                decoration: const InputDecoration(labelText: "Role title"),
+                textInputAction: TextInputAction.next,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: "Role title", prefixIcon: Icon(AppIcons.job)),
                 validator: (v) => (v == null || v.trim().isEmpty) ? "Required" : null,
               ),
-              const SizedBox(height: 16),
-              TextFormField(controller: _locationController, decoration: const InputDecoration(labelText: "Location (optional)")),
-              const SizedBox(height: 16),
-              TextFormField(controller: _jobUrlController, decoration: const InputDecoration(labelText: "Job posting URL (optional)")),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: AppColors.danger)),
-              ],
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _submit,
-                  child: _saving
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text("Start Tracking"),
-                ),
+              Gap.xl,
+              Text("Optional details", style: context.text.titleMedium),
+              Gap.sm,
+              TextFormField(
+                controller: _locationController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: "Location", prefixIcon: Icon(AppIcons.location)),
               ),
+              Gap.md,
+              TextFormField(
+                controller: _jobUrlController,
+                keyboardType: TextInputType.url,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _saving ? null : _submit(),
+                decoration: const InputDecoration(labelText: "Job posting URL", prefixIcon: Icon(Icons.link_rounded)),
+              ),
+              if (_error != null) ...[
+                Gap.md,
+                Text(_error!, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
+              ],
             ],
           ),
         ),

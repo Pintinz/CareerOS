@@ -11,14 +11,19 @@ import "home_tab.dart";
 /// Home · Opportunities · Prepare · Intelligence · Profile (see mobile-navigation.md).
 /// Jobs, scholarships, ATS and tests live inside those hubs, never as extra tabs.
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key});
+  const HomeShell({super.key, this.initialTab});
+
+  /// Hub name from `/home?tab=` — home, opportunities, prepare, intelligence or profile.
+  final String? initialTab;
+
+  static const tabNames = ["home", "opportunities", "prepare", "intelligence", "profile"];
 
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
 
 class _HomeShellState extends State<HomeShell> {
-  int _index = 0;
+  late int _index = HomeShell.tabNames.indexOf(widget.initialTab ?? "home").clamp(0, HomeShell.tabNames.length - 1);
 
   void _selectTab(int index) => setState(() => _index = index);
 

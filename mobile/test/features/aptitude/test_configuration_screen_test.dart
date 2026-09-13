@@ -67,7 +67,7 @@ void main() {
     await tester.pumpWidget(_wrap(const AptitudeConfigureArgs(), overrides));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Start Test'));
+    await tester.tap(find.text('Start Assessment'));
     await tester.pumpAndSettle();
 
     expect(find.text('Active test: new-session-42'), findsOneWidget);

@@ -30,7 +30,7 @@ final aptitudeSessionHistoryProvider = FutureProvider.autoDispose<List<TestSessi
 });
 
 /// Drives session creation from the configuration screen — kept separate from [ExamController]
-/// so the "Start Test" button has its own loading/error state independent of the exam screen.
+/// so the "Start Assessment" button has its own loading/error state independent of the exam screen.
 class SessionCreationController extends AsyncNotifier<TestSessionDetail?> {
   @override
   TestSessionDetail? build() => null;

@@ -8,6 +8,7 @@ Future<void> showQuestionNavigatorSheet(BuildContext context, {required String s
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     builder: (context) => _QuestionNavigatorSheet(sessionId: sessionId),
   );
 }
@@ -31,31 +32,30 @@ class _QuestionNavigatorSheet extends ConsumerWidget {
       maxChildSize: 0.9,
       expand: false,
       builder: (context, scrollController) => Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, 0, AppSpacing.pageH, AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Question Navigator", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
+            Text("Question Navigator", style: context.text.titleLarge),
+            Gap.sm,
             const _Legend(),
-            const SizedBox(height: 16),
+            Gap.md,
             Expanded(
               child: session == null
                   ? const SizedBox.shrink()
                   : GridView.builder(
                       controller: scrollController,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 5,
-                        mainAxisSpacing: 10,
-                        crossAxisSpacing: 10,
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 64,
+                        mainAxisSpacing: AppSpacing.xs,
+                        crossAxisSpacing: AppSpacing.xs,
                       ),
                       itemCount: session.questions.length,
                       itemBuilder: (context, index) {
                         final question = session.questions[index];
-                        final isCurrent = index == examState.currentIndex;
                         return _NavigatorCell(
                           index: index,
-                          isCurrent: isCurrent,
+                          isCurrent: index == examState.currentIndex,
                           isAnswered: question.isAnswered,
                           isFlagged: question.isFlagged,
                           onTap: () {
@@ -78,14 +78,14 @@ class _Legend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Wrap(
-      spacing: 16,
-      runSpacing: 8,
+    return Wrap(
+      spacing: AppSpacing.md,
+      runSpacing: AppSpacing.xs,
       children: [
-        _LegendItem(color: AppColors.blue, label: "Current"),
-        _LegendItem(color: AppColors.success, label: "Answered", icon: Icons.check),
-        _LegendItem(color: AppColors.muted, label: "Unanswered"),
-        _LegendItem(color: AppColors.warning, label: "Flagged", icon: Icons.flag),
+        _LegendItem(color: context.colors.primary, label: "Current"),
+        const _LegendItem(color: AppColors.success, label: "Answered", icon: Icons.check),
+        _LegendItem(color: context.colors.border, label: "Unanswered"),
+        const _LegendItem(color: AppColors.warning, label: "Flagged", icon: Icons.outlined_flag),
       ],
     );
   }
@@ -104,13 +104,13 @@ class _LegendItem extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 14,
-          height: 14,
+          width: 16,
+          height: 16,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: icon != null ? Icon(icon, size: 10, color: Colors.white) : null,
+          child: icon != null ? Icon(icon, size: 11, color: Colors.white) : null,
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+        Text(label, style: context.text.bodySmall),
       ],
     );
   }
@@ -133,35 +133,49 @@ class _NavigatorCell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final Color background;
     final Color foreground;
+    Border? border;
     if (isCurrent) {
-      background = AppColors.blue;
+      background = colors.primary;
       foreground = Colors.white;
     } else if (isFlagged) {
-      background = AppColors.warning.withValues(alpha: 0.15);
-      foreground = AppColors.warning;
+      background = AppTone.warning.tint(context);
+      foreground = AppTone.warning.onTint(context);
     } else if (isAnswered) {
-      background = AppColors.success.withValues(alpha: 0.15);
-      foreground = AppColors.success;
+      background = AppTone.success.tint(context);
+      foreground = AppTone.success.onTint(context);
     } else {
-      background = AppColors.background;
-      foreground = AppColors.muted;
+      background = colors.surface;
+      foreground = colors.textSecondary;
+      border = Border.all(color: colors.border);
     }
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(10)),
-        alignment: Alignment.center,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Text("${index + 1}", style: TextStyle(color: foreground, fontWeight: FontWeight.w600)),
-            if (isFlagged && !isCurrent)
-              const Positioned(top: 2, right: 2, child: Icon(Icons.flag, size: 10, color: AppColors.warning)),
-          ],
+    final state = [
+      if (isCurrent) "current",
+      isAnswered ? "answered" : "unanswered",
+      if (isFlagged) "flagged",
+    ].join(", ");
+
+    return Semantics(
+      button: true,
+      label: "Question ${index + 1}, $state",
+      excludeSemantics: true,
+      child: Material(
+        color: background,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.mdAll, side: border?.top ?? BorderSide.none),
+        child: InkWell(
+          borderRadius: AppRadius.mdAll,
+          onTap: onTap,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Text("${index + 1}", style: context.text.labelLarge?.copyWith(color: foreground)),
+              if (isFlagged && !isCurrent)
+                const Positioned(top: 4, right: 4, child: Icon(Icons.outlined_flag, size: 12, color: AppColors.warning)),
+            ],
+          ),
         ),
       ),
     );

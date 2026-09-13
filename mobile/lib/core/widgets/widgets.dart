@@ -11,6 +11,7 @@ export "career_progress.dart";
 export "career_sheet.dart";
 export "careeros_logo.dart";
 export "chips.dart";
+export "detail_layout.dart";
 export "feed_toolbar.dart";
 export "icon_tile.dart";
 export "insight_card.dart";

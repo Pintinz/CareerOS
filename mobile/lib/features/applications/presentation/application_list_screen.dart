@@ -1,52 +1,85 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
-import "package:intl/intl.dart";
 
-import "../../../core/utils/error_message.dart";
 import "../../../core/design/design.dart";
-import "../../../widgets/phase_pending_placeholder.dart";
+import "../../../core/utils/error_message.dart";
+import "../../../core/widgets/widgets.dart";
 import "../data/application_models.dart";
+import "application_card.dart";
 import "application_providers.dart";
 import "stage_badge.dart";
 
+/// Stages offered as quick filters — the rest are one tap away in the "All stages" sheet.
+const _quickStages = [
+  ApplicationStage.applied,
+  ApplicationStage.shortlisted,
+  ApplicationStage.aptitudeTest,
+  ApplicationStage.interview,
+  ApplicationStage.offer,
+  ApplicationStage.rejected,
+];
+
+/// Application tracker — a career CRM for every role the user is pursuing.
 class ApplicationListScreen extends ConsumerWidget {
   const ApplicationListScreen({super.key});
+
+  void _openStageSheet(BuildContext context, WidgetRef ref, ApplicationStage? current) {
+    showCareerBottomSheet<void>(
+      context: context,
+      title: "Filter by stage",
+      builder: (sheetContext) => SingleChildScrollView(
+        child: Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            for (final stage in ApplicationStage.values)
+              ChoiceChip(
+                avatar: Icon(stageIcon(stage), size: 16, color: stageTone(stage).color(sheetContext)),
+                label: Text(stage.label),
+                selected: current == stage,
+                onSelected: (_) {
+                  ref.read(applicationListProvider.notifier).setStageFilter(current == stage ? null : stage);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(applicationListProvider);
+    final controller = ref.read(applicationListProvider.notifier);
+    final filter = state.stageFilter;
+    final filterIsQuick = filter == null || _quickStages.contains(filter);
 
     return Scaffold(
       appBar: AppBar(title: const Text("My Applications")),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push("/applications/new"),
-        icon: const Icon(Icons.add),
-        label: const Text("Add"),
+        icon: const Icon(AppIcons.add),
+        label: const Text("Track Application"),
       ),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 40,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              children: [
-                _FilterChip(
-                  label: "All",
-                  selected: state.stageFilter == null,
-                  onTap: () => ref.read(applicationListProvider.notifier).setStageFilter(null),
+          FeedToolbar(
+            onOpenFilters: () => _openStageSheet(context, ref, filter),
+            activeFilterCount: filterIsQuick ? 0 : 1,
+            quickFilters: [
+              AppFilterChip(label: "All", selected: filter == null, onSelected: (_) => controller.setStageFilter(null)),
+              for (final stage in _quickStages)
+                AppFilterChip(
+                  label: stage.label,
+                  selected: filter == stage,
+                  onSelected: (on) => controller.setStageFilter(on ? stage : null),
                 ),
-                for (final stage in ApplicationStage.values)
-                  _FilterChip(
-                    label: stage.label,
-                    selected: state.stageFilter == stage,
-                    onTap: () => ref.read(applicationListProvider.notifier).setStageFilter(stage),
-                  ),
-              ],
-            ),
+              if (!filterIsQuick) AppFilterChip(label: filter.label, selected: true, onSelected: (_) => controller.setStageFilter(null)),
+            ],
           ),
-          const SizedBox(height: 8),
           Expanded(child: _Body(state: state)),
         ],
       ),
@@ -61,114 +94,54 @@ class _Body extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final controller = ref.read(applicationListProvider.notifier);
+
     if (state.isLoading && state.items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList(padding: EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, AppSpacing.xl));
     }
 
     if (state.error != null && state.items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(state.error!.userMessage, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.read(applicationListProvider.notifier).refresh(),
-                child: const Text("Retry"),
-              ),
-            ],
-          ),
-        ),
-      );
+      return ErrorState(title: "We couldn't load your applications", message: state.error!.userMessage, onRetry: controller.refresh);
     }
 
     if (state.items.isEmpty) {
-      return const PhasePendingPlaceholder(
-        icon: Icons.timeline_outlined,
-        title: "No applications tracked yet",
-        message: 'Tap "Add" to track one manually, or use "Track Application" from a job\'s detail page.',
+      return RefreshIndicator(
+        onRefresh: controller.refresh,
+        child: ListView(
+          children: [
+            if (state.stageFilter != null)
+              EmptyState(
+                icon: stageIcon(state.stageFilter!),
+                title: "No applications at ${state.stageFilter!.label}",
+                message: "Applications you move to this stage will show up here.",
+                actionLabel: "Show All",
+                onAction: () => controller.setStageFilter(null),
+              )
+            else
+              EmptyState(
+                icon: AppIcons.application,
+                title: "No applications yet",
+                message: "Track a job you've applied for and CareerOS will help you follow every stage.",
+                actionLabel: "Find Opportunities",
+                onAction: () => context.go("/home?tab=opportunities"),
+              ),
+          ],
+        ),
       );
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(applicationListProvider.notifier).refresh(),
+      onRefresh: controller.refresh,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-        itemCount: state.items.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 12),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.pageH, 96),
+        itemCount: state.items.length + 1,
+        separatorBuilder: (context, index) => Gap.sm,
         itemBuilder: (context, index) {
-          final application = state.items[index];
-          return _ApplicationCard(application: application);
+          if (index == 0) {
+            return Text(state.total == 1 ? "1 application" : "${state.total} applications", style: context.text.labelMedium);
+          }
+          return ApplicationCardTile(application: state.items[index - 1]);
         },
-      ),
-    );
-  }
-}
-
-class _ApplicationCard extends StatelessWidget {
-  const _ApplicationCard({required this.application});
-
-  final Application application;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => context.push("/applications/${application.id}"),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(application.roleTitle, style: Theme.of(context).textTheme.titleLarge),
-                        Text(application.companyName, style: Theme.of(context).textTheme.bodyMedium),
-                      ],
-                    ),
-                  ),
-                  StageBadge(stage: application.currentStage),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Updated ${DateFormat.yMMMd().format(application.updatedAt)}",
-                style: const TextStyle(fontSize: 12, color: AppColors.muted),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        selectedColor: AppColors.blue.withValues(alpha: 0.15),
-        labelStyle: TextStyle(color: selected ? AppColors.blue : AppColors.text),
-        side: BorderSide(color: selected ? AppColors.blue : AppColors.muted.withValues(alpha: 0.3)),
       ),
     );
   }

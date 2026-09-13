@@ -3,9 +3,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
+import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
-import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../aptitude/data/aptitude_models.dart";
 import "../../aptitude/presentation/test_configuration_screen.dart";
 import "../../email_tracking/data/email_tracking_models.dart";
@@ -28,13 +30,7 @@ class ApplicationDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-  }
+  late final TabController _tabController = TabController(length: 4, vsync: this);
 
   @override
   void dispose() {
@@ -58,21 +54,14 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
   }
 
   Future<void> _deleteApplication(Application application) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showCareerDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Stop tracking this application?"),
-        content: const Text("This removes it and its history. This can't be undone."),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text("Delete", style: TextStyle(color: AppColors.danger)),
-          ),
-        ],
-      ),
+      title: "Stop tracking this application?",
+      message: "This removes it and its history. This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     await ref.read(applicationRepositoryProvider).delete(application.id);
     ref.read(applicationListProvider.notifier).refresh();
     if (mounted) context.pop();
@@ -82,198 +71,154 @@ class _ApplicationDetailScreenState extends ConsumerState<ApplicationDetailScree
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(applicationDetailProvider(widget.applicationId));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Application"),
+    return detailAsync.when(
+      loading: () => const DetailSkeleton(),
+      error: (error, _) => DetailError(
+        title: "We couldn't load this application",
+        message: error.userMessage,
+        onRetry: () => ref.invalidate(applicationDetailProvider(widget.applicationId)),
+      ),
+      data: (application) => DetailScaffold(
+        showBanner: false,
+        title: "Application",
+        tabController: _tabController,
         actions: [
-          detailAsync.maybeWhen(
-            data: (application) => IconButton(
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _deleteApplication(application),
-            ),
-            orElse: () => const SizedBox.shrink(),
+          IconButton(
+            tooltip: "Stop tracking",
+            icon: const Icon(AppIcons.delete),
+            onPressed: () => _deleteApplication(application),
           ),
         ],
-      ),
-      body: detailAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(error.userMessage, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(applicationDetailProvider(widget.applicationId)),
-                  child: const Text("Retry"),
-                ),
-              ],
-            ),
-          ),
-        ),
-        data: (application) => Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(application.roleTitle, style: Theme.of(context).textTheme.headlineMedium),
-                        Text(application.companyName, style: Theme.of(context).textTheme.titleLarge),
-                      ],
-                    ),
-                  ),
-                  StageBadge(stage: application.currentStage),
-                ],
-              ),
-            ),
-            if (application.currentStage == ApplicationStage.aptitudeTest)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.blue.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.fact_check_outlined, size: 18, color: AppColors.blue),
-                          SizedBox(width: 8),
-                          Text("Upcoming: Aptitude Test", style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        "Practice with questions tailored to this role. Practicing here never changes this "
-                        "application's stage — update it yourself once you've taken the employer's real assessment.",
-                        style: TextStyle(fontSize: 12, color: AppColors.muted),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () => context.push(
-                            "/prepare/aptitude/configure",
-                            extra: AptitudeConfigureArgs(
-                              initialMode: TestMode.jobSpecific,
-                              applicationId: application.id,
-                            ),
-                          ),
-                          child: const Text("Prepare for Aptitude Test"),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (_isInterviewStage(application.currentStage))
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: _InterviewPrepCard(application: application),
-              )
-            else if (_stagePrepHint(application.currentStage) != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.warning.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline, size: 18, color: AppColors.warning),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(_stagePrepHint(application.currentStage)!, style: const TextStyle(fontSize: 13))),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 12),
-            TabBar(
-              controller: _tabController,
-              labelColor: AppColors.blue,
-              unselectedLabelColor: AppColors.muted,
-              indicatorColor: AppColors.blue,
-              tabs: const [Tab(text: "Details"), Tab(text: "Timeline"), Tab(text: "Notes"), Tab(text: "Emails")],
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _DetailsTab(application: application),
-                  _TimelineTab(application: application),
-                  _NotesTab(application: application),
-                  _EmailsTab(applicationId: application.id),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(color: AppColors.card, border: Border(top: BorderSide(color: Color(0x1A000000)))),
-              child: SafeArea(
-                top: false,
-                child: Row(
-                  children: [
-                    if (application.jobUrl != null) ...[
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => openExternalUrl(context, application.jobUrl),
-                          child: const Text("View Job"),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton(
-                        onPressed: () => _updateStage(application),
-                        child: const Text("Update Stage"),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        header: _ApplicationHeader(application: application),
+        tabs: const ["Details", "Timeline", "Notes", "Emails"],
+        tabViews: [
+          _DetailsTab(application: application),
+          _TimelineTab(application: application),
+          _NotesTab(application: application),
+          _EmailsTab(applicationId: application.id),
+        ],
+        bottomBar: BottomActionBar(
+          secondary: application.jobUrl != null
+              ? AppOutlineButton(
+                  expand: false,
+                  label: "View Job",
+                  icon: AppIcons.external,
+                  onPressed: () => openExternalUrl(context, application.jobUrl),
+                )
+              : null,
+          primary: PrimaryButton(label: "Update Stage", icon: Icons.swap_vert_rounded, onPressed: () => _updateStage(application)),
         ),
       ),
     );
   }
+}
 
-  bool _isInterviewStage(ApplicationStage stage) => const {
-        ApplicationStage.interview,
-        ApplicationStage.finalInterview,
-        ApplicationStage.recruiterScreen,
-        ApplicationStage.assessmentCentre,
-      }.contains(stage);
+bool _isInterviewStage(ApplicationStage stage) => const {
+      ApplicationStage.interview,
+      ApplicationStage.finalInterview,
+      ApplicationStage.recruiterScreen,
+      ApplicationStage.assessmentCentre,
+    }.contains(stage);
 
-  /// Spec §38: stage-aware preparation hints. Aptitude (Phase 6) and Interview (Phase 7) now get
-  /// real cards above; only stages with no dedicated preparation flow fall back to plain text.
-  String? _stagePrepHint(ApplicationStage stage) {
-    switch (stage) {
-      case ApplicationStage.medical:
-        return "Keep any requested medical/documentation paperwork ready for this stage.";
-      default:
-        return null;
-    }
+/// Spec §38: stage-aware preparation hints. Aptitude (Phase 6) and Interview (Phase 7) get real
+/// cards; only stages with no dedicated preparation flow fall back to plain text.
+String? _stagePrepHint(ApplicationStage stage) => switch (stage) {
+      ApplicationStage.medical => "Keep any requested medical/documentation paperwork ready for this stage.",
+      _ => null,
+    };
+
+class _ApplicationHeader extends StatelessWidget {
+  const _ApplicationHeader({required this.application});
+
+  final Application application;
+
+  @override
+  Widget build(BuildContext context) {
+    final hint = _stagePrepHint(application.currentStage);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            NetworkImageWithFallback(url: null, fallbackText: application.companyName, size: 56, tone: stageTone(application.currentStage)),
+            Gap.md,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(application.roleTitle, style: context.text.headlineSmall),
+                  Text(application.companyName, style: context.text.bodyLarge?.copyWith(color: context.colors.textSecondary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        Gap.sm,
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            StageBadge(stage: application.currentStage),
+            Text("Updated ${DateLabels.published(application.updatedAt).toLowerCase()}", style: context.text.bodySmall),
+          ],
+        ),
+        if (application.currentStage == ApplicationStage.aptitudeTest) ...[
+          Gap.md,
+          _AptitudePrepCard(application: application),
+        ] else if (_isInterviewStage(application.currentStage)) ...[
+          Gap.md,
+          _InterviewPrepCard(application: application),
+        ] else if (hint != null) ...[
+          Gap.md,
+          InsightCard(icon: Icons.info_outline_rounded, tone: AppTone.warning, title: "Stage tip", message: hint),
+        ],
+      ],
+    );
   }
 }
 
-/// Real "Interview Preparation" card (spec §29) for interview/final-interview/recruiter-screen/
-/// assessment-centre stages: readiness, questions practiced, STAR stories ready, and a
-/// "Continue Preparation" button — preparing here never mutates the application's real stage.
+class _AptitudePrepCard extends StatelessWidget {
+  const _AptitudePrepCard({required this.application});
+
+  final Application application;
+
+  @override
+  Widget build(BuildContext context) {
+    return CareerCard(
+      variant: CareerCardVariant.outlined,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const IconTile(icon: AppIcons.aptitude, tone: AppTone.purple, size: 36),
+              Gap.sm,
+              Expanded(child: Text("Upcoming: Aptitude Test", style: context.text.titleSmall)),
+            ],
+          ),
+          Gap.xs,
+          Text(
+            "Practice with questions tailored to this role. Practicing here never changes this application's stage — "
+            "update it yourself once you've taken the employer's real assessment.",
+            style: context.text.bodySmall,
+          ),
+          Gap.sm,
+          PrimaryButton(
+            label: "Prepare for Aptitude Test",
+            onPressed: () => context.push(
+              "/prepare/aptitude/configure",
+              extra: AptitudeConfigureArgs(initialMode: TestMode.jobSpecific, applicationId: application.id),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Real "Interview Preparation" card (spec §29) for interview-related stages: readiness, questions
+/// practiced, STAR stories ready — preparing here never mutates the application's real stage.
 class _InterviewPrepCard extends ConsumerWidget {
   const _InterviewPrepCard({required this.application});
 
@@ -281,100 +226,62 @@ class _InterviewPrepCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final readinessAsync = ref.watch(interviewReadinessProvider(application.id));
-    final analyticsAsync = ref.watch(interviewAnalyticsProvider);
+    final readiness = ref.watch(interviewReadinessProvider(application.id)).valueOrNull;
+    final analytics = ref.watch(interviewAnalyticsProvider).valueOrNull;
+    final readinessLabel = readiness == null ? null : (readiness.insufficientData || readiness.overall == null ? "N/A" : "${readiness.overall!.round()}%");
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.purple.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+    return CareerCard(
+      variant: CareerCardVariant.outlined,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
-            children: [
-              Icon(Icons.groups_2_outlined, size: 18, color: AppColors.purple),
-              SizedBox(width: 8),
-              Text("Interview Preparation", style: TextStyle(fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            "Practicing here never changes this application's stage — update it yourself once you've "
-            "completed the employer's real interview.",
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: readinessAsync.when(
-                  loading: () => const _MiniPrepStat(label: "Readiness", value: "—"),
-                  error: (_, __) => const _MiniPrepStat(label: "Readiness", value: "—"),
-                  data: (r) => _MiniPrepStat(label: "Readiness", value: r.insufficientData || r.overall == null ? "N/A" : "${r.overall!.round()}%"),
-                ),
-              ),
-              Expanded(
-                child: analyticsAsync.when(
-                  loading: () => const _MiniPrepStat(label: "Questions", value: "—"),
-                  error: (_, __) => const _MiniPrepStat(label: "Questions", value: "—"),
-                  data: (a) => _MiniPrepStat(label: "Questions", value: "${a.questionsPracticed}"),
-                ),
-              ),
-              Expanded(
-                child: analyticsAsync.when(
-                  loading: () => const _MiniPrepStat(label: "STAR Ready", value: "—"),
-                  error: (_, __) => const _MiniPrepStat(label: "STAR Ready", value: "—"),
-                  data: (a) => _MiniPrepStat(label: "STAR Ready", value: "${a.starStoriesReady}"),
-                ),
-              ),
+              const IconTile(icon: AppIcons.interview, tone: AppTone.warning, size: 36),
+              Gap.sm,
+              Expanded(child: Text("Interview Preparation", style: context.text.titleSmall)),
             ],
           ),
-          const SizedBox(height: 12),
+          Gap.xs,
+          Text(
+            "Practicing here never changes this application's stage — update it yourself once you've completed the "
+            "employer's real interview.",
+            style: context.text.bodySmall,
+          ),
+          Gap.md,
+          Row(
+            children: [
+              Expanded(child: MetricTile(label: "Readiness", value: readinessLabel)),
+              Expanded(child: MetricTile(label: "Questions", value: analytics?.questionsPracticed.toString())),
+              Expanded(child: MetricTile(label: "STAR Ready", value: analytics?.starStoriesReady.toString())),
+            ],
+          ),
+          Gap.md,
           Row(
             children: [
               if (application.jobId != null) ...[
                 Expanded(
-                  child: OutlinedButton(
+                  child: AppOutlineButton(
+                    label: "Company Research",
                     onPressed: () => context.push("/prepare/interview/company-prep/${application.id}"),
-                    child: const Text("Company Research"),
                   ),
                 ),
-                const SizedBox(width: 8),
+                Gap.xs,
               ],
               Expanded(
                 flex: 2,
-                child: ElevatedButton(
+                child: PrimaryButton(
+                  label: "Continue Preparation",
                   onPressed: () => context.push(
                     "/prepare/interview/configure",
                     extra: InterviewConfigureArgs(initialMode: InterviewSessionMode.practice, applicationId: application.id),
                   ),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.purple),
-                  child: const Text("Continue Preparation"),
                 ),
               ),
             ],
           ),
         ],
       ),
-    );
-  }
-}
-
-class _MiniPrepStat extends StatelessWidget {
-  const _MiniPrepStat({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 10)),
-      ],
     );
   }
 }
@@ -386,107 +293,194 @@ class _DetailsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = <(String, String?)>[
-      ("Location", application.location),
-      ("Applied", application.appliedDate != null ? DateFormat.yMMMd().format(application.appliedDate!) : null),
-      ("Deadline", application.deadline != null ? DateFormat.yMMMd().format(application.deadline!) : null),
-      (
-        "Interview date",
-        application.interviewDate != null ? DateFormat.yMMMd().add_jm().format(application.interviewDate!) : null,
-      ),
-      (
-        "Assessment date",
-        application.assessmentDate != null ? DateFormat.yMMMd().add_jm().format(application.assessmentDate!) : null,
-      ),
-      ("Salary", application.salary),
-      ("Contact", application.contactName),
-      ("Contact email", application.contactEmail),
-    ].where((e) => e.$2 != null).toList();
+    final dateTime = DateFormat.yMMMd().add_jm();
+    final rows = <(IconData, String, String?)>[
+      (AppIcons.location, "Location", application.location),
+      (Icons.send_rounded, "Applied", application.appliedDate != null ? DateLabels.shortDate(application.appliedDate!) : null),
+      (AppIcons.deadline, "Deadline", application.deadline != null ? DateLabels.shortDate(application.deadline!) : null),
+      (AppIcons.interview, "Interview", application.interviewDate != null ? dateTime.format(application.interviewDate!) : null),
+      (AppIcons.aptitude, "Assessment", application.assessmentDate != null ? dateTime.format(application.assessmentDate!) : null),
+      (Icons.payments_outlined, "Salary", application.salary),
+      (AppIcons.profile, "Contact", application.contactName),
+      (Icons.alternate_email_rounded, "Contact email", application.contactEmail),
+    ].where((e) => e.$3 != null).toList();
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (final row in rows)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(width: 130, child: Text(row.$1, style: const TextStyle(color: AppColors.muted))),
-                  Expanded(child: Text(row.$2!)),
-                ],
-              ),
-            ),
-          if (application.coverLetterText != null) ...[
-            const SizedBox(height: 12),
-            Text("Cover Letter", style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text(application.coverLetterText!),
-          ],
-          if (rows.isEmpty && application.coverLetterText == null)
-            const Text("No additional details yet.", style: TextStyle(color: AppColors.muted)),
+    if (rows.isEmpty && application.coverLetterText == null) {
+      return const EmptyState(
+        compact: true,
+        icon: Icons.edit_note_rounded,
+        title: "No additional details yet",
+        message: "Dates, contacts and salary you record for this application will appear here.",
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (rows.isNotEmpty)
+          CareerCard(
+            variant: CareerCardVariant.outlined,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+            child: Column(children: [for (final row in rows) FactRow(icon: row.$1, label: row.$2, value: row.$3!)]),
+          ),
+        if (application.coverLetterText != null) ...[
+          Gap.xl,
+          DetailSection(title: "Cover Letter", child: Text(application.coverLetterText!, style: context.text.bodyLarge)),
         ],
-      ),
+      ],
     );
   }
 }
+
+/// Stages in the order a typical application moves through them — used only to suggest the *next
+/// expected* step, never to rewrite or reorder the recorded history.
+const _typicalProgression = [
+  ApplicationStage.saved,
+  ApplicationStage.applied,
+  ApplicationStage.applicationReceived,
+  ApplicationStage.underReview,
+  ApplicationStage.shortlisted,
+  ApplicationStage.aptitudeTest,
+  ApplicationStage.recruiterScreen,
+  ApplicationStage.interview,
+  ApplicationStage.finalInterview,
+  ApplicationStage.offer,
+  ApplicationStage.hired,
+];
 
 class _TimelineTab extends StatelessWidget {
   const _TimelineTab({required this.application});
 
   final Application application;
 
+  ApplicationStage? get _nextExpected {
+    final current = application.currentStage;
+    if (current.isTerminal) return null;
+    final index = _typicalProgression.indexOf(current);
+    if (index == -1 || index == _typicalProgression.length - 1) return null;
+    return _typicalProgression[index + 1];
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (application.timeline.isEmpty) {
-      return const Center(child: Text("No history yet.", style: TextStyle(color: AppColors.muted)));
+    final events = application.timeline; // oldest first, exactly as recorded
+    if (events.isEmpty) {
+      return const EmptyState(
+        compact: true,
+        icon: AppIcons.application,
+        title: "No history yet",
+        message: "Each stage update you make is recorded here as a timeline.",
+      );
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: application.timeline.length,
-      itemBuilder: (context, index) {
-        // Oldest first from the API — show newest first, which reads more naturally as a feed.
-        final event = application.timeline[application.timeline.length - 1 - index];
-        final isLatest = index == 0;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
+    final next = _nextExpected;
+    final dateTime = DateFormat.yMMMd().add_jm();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < events.length; i++)
+          _TimelineEntry(
+            marker: i == events.length - 1 ? _Marker.current : _Marker.done,
+            title: events[i].stage.label,
+            subtitle: dateTime.format(events[i].occurredAt),
+            note: events[i].note,
+            tone: stageTone(events[i].stage),
+            showRail: i < events.length - 1 || next != null,
+          ),
+        if (next != null)
+          _TimelineEntry(
+            marker: _Marker.future,
+            title: next.label,
+            subtitle: "Typical next step — update the stage when it happens",
+            tone: AppTone.neutral,
+            showRail: false,
+          ),
+      ],
+    );
+  }
+}
+
+enum _Marker { done, current, future }
+
+class _TimelineEntry extends StatelessWidget {
+  const _TimelineEntry({
+    required this.marker,
+    required this.title,
+    required this.subtitle,
+    required this.tone,
+    required this.showRail,
+    this.note,
+  });
+
+  final _Marker marker;
+  final String title;
+  final String subtitle;
+  final String? note;
+  final AppTone tone;
+  final bool showRail;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final markerWidget = switch (marker) {
+      _Marker.done => const Icon(Icons.check_circle_rounded, size: 22, color: AppColors.success),
+      _Marker.current => Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: tone.tint(context), border: Border.all(color: tone.color(context), width: 2)),
+          alignment: Alignment.center,
+          child: Container(width: 8, height: 8, decoration: BoxDecoration(color: tone.color(context), shape: BoxShape.circle)),
+        ),
+      _Marker.future => Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: colors.border, width: 2)),
+        ),
+    };
+
+    return Semantics(
+      label: "${switch (marker) { _Marker.done => "Completed", _Marker.current => "Current stage", _Marker.future => "Expected next" }}: $title",
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 28,
+              child: Column(
                 children: [
-                  Icon(
-                    isLatest ? Icons.radio_button_checked : Icons.check_circle,
-                    size: 18,
-                    color: isLatest ? AppColors.blue : AppColors.success,
-                  ),
-                  if (index != application.timeline.length - 1)
-                    Container(width: 2, height: 32, color: AppColors.muted.withValues(alpha: 0.2)),
+                  markerWidget,
+                  if (showRail) Expanded(child: Container(width: 2, margin: const EdgeInsets.symmetric(vertical: 4), color: colors.border)),
                 ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
+            ),
+            Gap.sm,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(event.stage.label, style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text(
-                      DateFormat.yMMMd().add_jm().format(event.occurredAt),
-                      style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                      title,
+                      style: context.text.titleSmall?.copyWith(color: marker == _Marker.future ? colors.textSecondary : null),
                     ),
-                    if (event.note != null) ...[
-                      const SizedBox(height: 4),
-                      Text(event.note!),
+                    Text(subtitle, style: context.text.bodySmall),
+                    if (note != null && note!.isNotEmpty) ...[
+                      Gap.xs,
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(color: colors.surfaceMuted, borderRadius: AppRadius.mdAll),
+                        child: Text(note!, style: context.text.bodyMedium?.copyWith(color: colors.textPrimary)),
+                      ),
                     ],
                   ],
                 ),
               ),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -527,50 +521,50 @@ class _NotesTabState extends ConsumerState<_NotesTab> {
 
   @override
   Widget build(BuildContext context) {
+    final notes = widget.application.notes;
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: widget.application.notes.isEmpty
-              ? const Center(child: Text("No notes yet.", style: TextStyle(color: AppColors.muted)))
-              : ListView.separated(
-                  padding: const EdgeInsets.all(20),
-                  itemCount: widget.application.notes.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final note = widget.application.notes[index];
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(note.text),
-                        const SizedBox(height: 4),
-                        Text(
-                          DateFormat.yMMMd().add_jm().format(note.createdAt),
-                          style: const TextStyle(fontSize: 11, color: AppColors.muted),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _noteController,
-                  decoration: const InputDecoration(hintText: "Add a note..."),
-                ),
-              ),
-              IconButton(
-                onPressed: _adding ? null : _addNote,
-                icon: _adding
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.send, color: AppColors.blue),
-              ),
-            ],
+        TextField(
+          controller: _noteController,
+          minLines: 1,
+          maxLines: 4,
+          textInputAction: TextInputAction.newline,
+          decoration: InputDecoration(
+            hintText: "Add a note — who you spoke to, what's next…",
+            suffixIcon: IconButton(
+              tooltip: "Save note",
+              onPressed: _adding ? null : _addNote,
+              icon: _adding
+                  ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(Icons.send_rounded, color: context.colors.primary),
+            ),
           ),
         ),
+        Gap.lg,
+        if (notes.isEmpty)
+          const EmptyState(
+            compact: true,
+            icon: Icons.sticky_note_2_outlined,
+            title: "No notes yet",
+            message: "Keep interview feedback, contacts and follow-ups together with this application.",
+          )
+        else
+          for (final note in notes)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: CareerCard(
+                variant: CareerCardVariant.outlined,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(note.text, style: context.text.bodyLarge),
+                    Gap.xs,
+                    Text(DateFormat.yMMMd().add_jm().format(note.createdAt), style: context.text.bodySmall),
+                  ],
+                ),
+              ),
+            ),
       ],
     );
   }
@@ -588,28 +582,36 @@ class _EmailsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final eventsAsync = ref.watch(applicationRecruitmentEventsProvider(applicationId));
     return eventsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.userMessage, style: const TextStyle(color: AppColors.danger))),
+      loading: () => const Column(children: [SkeletonCard()]),
+      error: (e, _) => ErrorState(
+        compact: true,
+        message: e.userMessage,
+        onRetry: () => ref.invalidate(applicationRecruitmentEventsProvider(applicationId)),
+      ),
       data: (events) {
         if (events.isEmpty) {
-          return const Center(child: Text("No recruitment emails matched to this application yet.", style: TextStyle(color: AppColors.muted)));
+          return const EmptyState(
+            compact: true,
+            icon: AppIcons.email,
+            title: "No recruitment emails matched",
+            message: "When Smart Application Tracking detects an email about this application, it appears here for review.",
+          );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.all(20),
-          itemCount: events.length,
-          separatorBuilder: (context, index) => const Divider(),
-          itemBuilder: (context, index) {
-            final event = events[index];
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(event.detectedStage != null ? "${event.detectedStage!.label} update" : "Recruitment email"),
-              subtitle: Text(
-                "${DateFormat.yMMMd().format(event.receivedAt)} · ${event.confidenceLabel ?? ''} ${_statusLabel(event.status)}".trim(),
-                style: const TextStyle(fontSize: 12),
+        return CareerListGroup(
+          children: [
+            for (final event in events)
+              CareerListRow(
+                icon: AppIcons.email,
+                tone: _statusTone(event.status),
+                title: event.detectedStage != null ? "${event.detectedStage!.label} update" : "Recruitment email",
+                subtitle: [
+                  DateLabels.shortDate(event.receivedAt),
+                  if (event.confidenceLabel != null) event.confidenceLabel!,
+                  _statusLabel(event.status),
+                ].join(" · "),
+                onTap: () => context.push("/settings/tracking/events/${event.id}"),
               ),
-              onTap: () => context.push("/settings/tracking/events/${event.id}"),
-            );
-          },
+          ],
         );
       },
     );
@@ -621,5 +623,12 @@ class _EmailsTab extends ConsumerWidget {
         RecruitmentEventStatus.ambiguous => "Needs your input",
         RecruitmentEventStatus.suggested => "Needs review",
         _ => "Detected",
+      };
+
+  AppTone _statusTone(RecruitmentEventStatus status) => switch (status) {
+        RecruitmentEventStatus.confirmed => AppTone.success,
+        RecruitmentEventStatus.ignored => AppTone.neutral,
+        RecruitmentEventStatus.ambiguous || RecruitmentEventStatus.suggested => AppTone.warning,
+        _ => AppTone.primary,
       };
 }

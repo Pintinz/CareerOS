@@ -3,9 +3,11 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 import "package:intl/intl.dart";
 
+import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/utils/url_launcher_helper.dart";
-import "../../../core/design/design.dart";
+import "../../../core/widgets/widgets.dart";
 import "../../applications/presentation/application_providers.dart";
 import "../../ats/presentation/ats_analyze_screen.dart";
 import "../data/job_models.dart";
@@ -21,13 +23,7 @@ class JobDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _JobDetailScreenState extends ConsumerState<JobDetailScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-  }
+  late final TabController _tabController = TabController(length: 3, vsync: this);
 
   @override
   void dispose() {
@@ -39,28 +35,14 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> with SingleTi
   Widget build(BuildContext context) {
     final detailAsync = ref.watch(jobDetailProvider(widget.idOrSlug));
 
-    return Scaffold(
-      appBar: AppBar(title: const Text("Job Details")),
-      body: detailAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(error.userMessage, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => ref.invalidate(jobDetailProvider(widget.idOrSlug)),
-                  child: const Text("Retry"),
-                ),
-              ],
-            ),
-          ),
-        ),
-        data: (job) => _JobDetailBody(job: job, tabController: _tabController),
+    return detailAsync.when(
+      loading: () => const DetailSkeleton(),
+      error: (error, _) => DetailError(
+        title: "We couldn't load this job",
+        message: error.userMessage,
+        onRetry: () => ref.invalidate(jobDetailProvider(widget.idOrSlug)),
       ),
+      data: (job) => _JobDetailView(job: job, tabController: _tabController),
     );
   }
 }
@@ -69,8 +51,8 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> with SingleTi
 /// before the first one's response invalidates [jobDetailProvider] (Phase 9.5 audit finding).
 final _jobSaveInFlightProvider = StateProvider.family<bool, String>((ref, jobId) => false);
 
-class _JobDetailBody extends ConsumerWidget {
-  const _JobDetailBody({required this.job, required this.tabController});
+class _JobDetailView extends ConsumerWidget {
+  const _JobDetailView({required this.job, required this.tabController});
 
   final JobDetail job;
   final TabController tabController;
@@ -78,90 +60,44 @@ class _JobDetailBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final saving = ref.watch(_jobSaveInFlightProvider(job.id));
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(job.title, style: Theme.of(context).textTheme.headlineMedium),
-                          const SizedBox(height: 4),
-                          Text(job.company.name, style: Theme.of(context).textTheme.titleLarge),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: saving ? null : () => _toggleSave(context, ref),
-                      icon: Icon(
-                        job.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                        color: job.isSaved ? AppColors.blue : AppColors.muted,
-                        size: 28,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (job.location != null) _InfoPill(icon: Icons.location_on_outlined, label: job.location!),
-                    _InfoPill(icon: Icons.work_outline, label: job.employmentType.replaceAll("_", "-")),
-                    _InfoPill(icon: Icons.home_work_outlined, label: job.workMode.replaceAll("_", " ")),
-                    if (job.isVerified)
-                      const _InfoPill(icon: Icons.verified, label: "Verified source", color: AppColors.success),
-                  ],
-                ),
-                if (job.applicationDeadline != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    "Deadline: ${DateFormat.yMMMd().format(job.applicationDeadline!)}",
-                    style: const TextStyle(color: AppColors.danger, fontWeight: FontWeight.w600),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _trackApplication(context, ref),
-                  icon: const Icon(Icons.playlist_add_check_outlined, size: 18),
-                  label: const Text("Track This Application"),
-                ),
-                const SizedBox(height: 20),
-                TabBar(
-                  controller: tabController,
-                  labelColor: AppColors.blue,
-                  unselectedLabelColor: AppColors.muted,
-                  indicatorColor: AppColors.blue,
-                  tabs: const [Tab(text: "Overview"), Tab(text: "Requirements"), Tab(text: "Company")],
-                ),
-                SizedBox(
-                  height: 400,
-                  child: TabBarView(
-                    controller: tabController,
-                    children: [
-                      _OverviewTab(job: job),
-                      _RequirementsTab(job: job),
-                      _CompanyTab(job: job),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+    final hasApplyLink = job.applicationUrl != null && job.applicationUrl!.isNotEmpty;
+
+    return DetailScaffold(
+      title: job.title,
+      bannerUrl: job.postImageUrl ?? job.company.bannerUrl,
+      logoUrl: job.company.logoUrl,
+      logoFallbackText: job.company.name,
+      tabController: tabController,
+      actions: [
+        IconButton(
+          tooltip: "Company profile",
+          onPressed: () => context.push("/companies/${job.company.slug}"),
+          icon: const Icon(AppIcons.company),
         ),
-        _ActionBar(job: job),
       ],
+      header: _JobHeader(job: job, onTrack: () => _trackApplication(context, ref)),
+      tabs: const ["Overview", "Requirements", "Company"],
+      tabViews: [
+        _OverviewTab(job: job),
+        _RequirementsTab(job: job),
+        _CompanyTab(job: job),
+      ],
+      bottomBar: BottomActionBar(
+        secondary: AppOutlineButton(
+          expand: false,
+          label: job.isSaved ? "Saved" : "Save",
+          icon: job.isSaved ? AppIcons.savedSelected : AppIcons.saved,
+          isLoading: saving,
+          onPressed: () => _toggleSave(ref),
+        ),
+        primary: hasApplyLink
+            ? PrimaryButton(label: "Apply", icon: AppIcons.external, onPressed: () => openExternalUrl(context, job.applicationUrl))
+            : PrimaryButton(label: "How to Apply", onPressed: () => tabController.animateTo(0)),
+      ),
     );
   }
 
-  Future<void> _toggleSave(BuildContext context, WidgetRef ref) async {
+  Future<void> _toggleSave(WidgetRef ref) async {
     // Called directly on the repository — this screen can be reached without the job ever
     // having been loaded into jobListProvider's state (e.g. from a company's Jobs tab, Saved
     // Items, or a deep link), where a list-relative toggle would silently no-op.
@@ -191,26 +127,183 @@ class _JobDetailBody extends ConsumerWidget {
   }
 }
 
+class _JobHeader extends StatelessWidget {
+  const _JobHeader({required this.job, required this.onTrack});
+
+  final JobDetail job;
+  final VoidCallback onTrack;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final deadline = job.applicationDeadline;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(job.title, style: context.text.headlineSmall),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            Flexible(child: Text(job.company.name, style: context.text.bodyLarge?.copyWith(color: colors.textSecondary))),
+            if (job.isVerified) ...[
+              Gap.xxs,
+              Semantics(label: "Verified", child: const Icon(AppIcons.verified, size: 16, color: AppColors.success)),
+            ],
+          ],
+        ),
+        Gap.sm,
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            if (job.location != null) TagChip(label: job.location!, icon: AppIcons.location),
+            TagChip(label: humanizeEnum(job.employmentType)),
+            TagChip(label: humanizeEnum(job.workMode)),
+            if (job.experienceLevel != null) TagChip(label: humanizeEnum(job.experienceLevel!)),
+            if (job.isDemo) const TagChip(label: "DEMO"),
+          ],
+        ),
+        Gap.sm,
+        Wrap(
+          spacing: AppSpacing.md,
+          runSpacing: AppSpacing.xxs,
+          children: [
+            if (job.publishedAt != null)
+              _MetaText(icon: AppIcons.time, text: "Posted ${DateLabels.published(job.publishedAt!).toLowerCase()}"),
+            if (deadline != null)
+              _MetaText(
+                icon: AppIcons.deadline,
+                text: DateLabels.deadline(deadline),
+                color: DateLabels.deadlineTone(deadline).onTint(context),
+              ),
+          ],
+        ),
+        Gap.md,
+        Row(
+          children: [
+            Expanded(
+              child: SecondaryButton(
+                label: "Analyze & Tailor CV",
+                icon: AppIcons.cv,
+                onPressed: () => context.push("/ats/analyze", extra: AtsAnalyzeArgs(jobId: job.id, jobTitle: job.title)),
+              ),
+            ),
+            Gap.xs,
+            IconButton.outlined(
+              tooltip: "Track this application",
+              onPressed: onTrack,
+              icon: const Icon(Icons.playlist_add_check_rounded),
+              style: IconButton.styleFrom(
+                side: BorderSide(color: colors.border),
+                shape: const RoundedRectangleBorder(borderRadius: AppRadius.buttonAll),
+                minimumSize: const Size(52, 48),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MetaText extends StatelessWidget {
+  const _MetaText({required this.icon, required this.text, this.color});
+
+  final IconData icon;
+  final String text;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? context.colors.textSecondary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: c),
+        const SizedBox(width: 4),
+        Text(text, style: context.text.bodySmall?.copyWith(color: c, fontWeight: color != null ? FontWeight.w600 : null)),
+      ],
+    );
+  }
+}
+
 class _OverviewTab extends StatelessWidget {
   const _OverviewTab({required this.job});
 
   final JobDetail job;
 
+  String? get _salary {
+    if (job.salaryMin == null && job.salaryMax == null) return null;
+    final format = NumberFormat.decimalPattern();
+    final currency = job.salaryCurrency ?? "";
+    final range = job.salaryMin != null && job.salaryMax != null
+        ? "${format.format(job.salaryMin)} – ${format.format(job.salaryMax)}"
+        : format.format(job.salaryMin ?? job.salaryMax);
+    final period = job.salaryPeriod != null ? " / ${humanizeEnum(job.salaryPeriod!).toLowerCase()}" : "";
+    return "$currency $range$period".trim();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (job.shortSummary != null) ...[
-            Text(job.shortSummary!, style: Theme.of(context).textTheme.bodyLarge),
-            const SizedBox(height: 16),
-          ],
-          if (job.description != null) Text(job.description!, style: Theme.of(context).textTheme.bodyLarge),
-          if (job.shortSummary == null && job.description == null)
-            const Text("No description provided.", style: TextStyle(color: AppColors.muted)),
-        ],
-      ),
+    final hasHowToApply = job.applicationInstructions != null || job.applicationEmail != null;
+    final salary = _salary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (salary != null || job.industry != null || job.country != null)
+          DetailSection(
+            title: "Key details",
+            child: Column(
+              children: [
+                if (salary != null) FactRow(icon: Icons.payments_outlined, label: "Salary", value: salary),
+                if (job.industry != null) FactRow(icon: AppIcons.company, label: "Industry", value: job.industry!),
+                if (job.country != null) FactRow(icon: Icons.public_rounded, label: "Country", value: job.country!),
+              ],
+            ),
+          ),
+        if (job.shortSummary != null || job.description != null)
+          DetailSection(
+            title: "About the role",
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (job.shortSummary != null) Text(job.shortSummary!, style: context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w500)),
+                if (job.shortSummary != null && job.description != null) Gap.sm,
+                if (job.description != null) Text(job.description!, style: context.text.bodyLarge),
+              ],
+            ),
+          ),
+        if (job.responsibilities?.isNotEmpty ?? false)
+          DetailSection(title: "Responsibilities", child: BulletList(items: job.responsibilities!)),
+        if (hasHowToApply)
+          DetailSection(
+            title: "How to apply",
+            icon: Icons.assignment_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (job.applicationInstructions != null) Text(job.applicationInstructions!, style: context.text.bodyLarge),
+                if (job.applicationEmail != null) ...[
+                  Gap.xs,
+                  SelectableText(job.applicationEmail!, style: context.text.titleSmall?.copyWith(color: context.colors.primary)),
+                ],
+              ],
+            ),
+          ),
+        if (job.shortSummary == null && job.description == null && !hasHowToApply)
+          const EmptyState(
+            compact: true,
+            icon: AppIcons.job,
+            title: "No description provided",
+            message: "The employer hasn't shared more detail yet. Check the official listing when you apply.",
+          ),
+        if (job.sourceUrl != null)
+          TextButton.icon(
+            onPressed: () => openExternalUrl(context, job.sourceUrl),
+            icon: const Icon(AppIcons.external, size: 18),
+            label: const Text("View original listing"),
+          ),
+      ],
     );
   }
 }
@@ -222,24 +315,33 @@ class _RequirementsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasContent = (job.requirements?.isNotEmpty ?? false) ||
-        (job.preferredSkills?.isNotEmpty ?? false) ||
-        (job.benefits?.isNotEmpty ?? false);
+    final hasContent =
+        (job.requirements?.isNotEmpty ?? false) || (job.preferredSkills?.isNotEmpty ?? false) || (job.benefits?.isNotEmpty ?? false);
 
     if (!hasContent) {
-      return const Center(child: Text("No requirements listed.", style: TextStyle(color: AppColors.muted)));
+      return const EmptyState(
+        compact: true,
+        icon: Icons.checklist_rounded,
+        title: "No requirements listed",
+        message: "This listing doesn't specify requirements. Review the official posting before applying.",
+      );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (job.requirements?.isNotEmpty ?? false) _BulletSection(title: "Requirements", items: job.requirements!),
-          if (job.preferredSkills?.isNotEmpty ?? false)
-            _BulletSection(title: "Preferred Skills", items: job.preferredSkills!),
-          if (job.benefits?.isNotEmpty ?? false) _BulletSection(title: "Benefits", items: job.benefits!),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (job.requirements?.isNotEmpty ?? false) DetailSection(title: "Requirements", child: BulletList(items: job.requirements!)),
+        if (job.preferredSkills?.isNotEmpty ?? false)
+          DetailSection(
+            title: "Preferred skills",
+            child: Wrap(
+              spacing: AppSpacing.xs,
+              runSpacing: AppSpacing.xs,
+              children: [for (final skill in job.preferredSkills!) TagChip(label: skill, tone: AppTone.primary)],
+            ),
+          ),
+        if (job.benefits?.isNotEmpty ?? false) DetailSection(title: "Benefits", child: BulletList(items: job.benefits!, checked: true)),
+      ],
     );
   }
 }
@@ -251,132 +353,42 @@ class _CompanyTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(job.company.name, style: Theme.of(context).textTheme.titleLarge),
-          if (job.company.industry != null) ...[
-            const SizedBox(height: 4),
-            Text(job.company.industry!, style: const TextStyle(color: AppColors.muted)),
-          ],
-          if (job.company.description != null) ...[
-            const SizedBox(height: 12),
-            Text(job.company.description!),
-          ],
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: () => context.push("/companies/${job.company.slug}"),
-            icon: const Icon(Icons.business_outlined),
-            label: const Text("View Company Profile"),
-          ),
-          if (job.company.websiteUrl != null) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () => openExternalUrl(context, job.company.websiteUrl),
-              icon: const Icon(Icons.language),
-              label: const Text("Visit website"),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _BulletSection extends StatelessWidget {
-  const _BulletSection({required this.title, required this.items});
-
-  final String title;
-  final List<String> items;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("•  "),
-                  Expanded(child: Text(item)),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InfoPill extends StatelessWidget {
-  const _InfoPill({required this.icon, required this.label, this.color = AppColors.muted});
-
-  final IconData icon;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionBar extends StatelessWidget {
-  const _ActionBar({required this.job});
-
-  final JobDetail job;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: AppColors.card,
-        border: Border(top: BorderSide(color: Color(0x1A000000))),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => context.push(
-                  "/ats/analyze",
-                  extra: AtsAnalyzeArgs(jobId: job.id, jobTitle: job.title),
+    final company = job.company;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CareerCard(
+          onTap: () => context.push("/companies/${company.slug}"),
+          child: Row(
+            children: [
+              NetworkImageWithFallback(url: company.logoUrl, fallbackText: company.name, size: 48),
+              Gap.sm,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(company.name, style: context.text.titleMedium),
+                    if (company.industry != null || company.headquarters != null)
+                      Text(
+                        [if (company.industry != null) company.industry!, if (company.headquarters != null) company.headquarters!].join(" · "),
+                        style: context.text.bodySmall,
+                      ),
+                  ],
                 ),
-                child: const Text("Analyze CV"),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              flex: 2,
-              child: ElevatedButton(
-                onPressed: job.applicationUrl != null ? () => openExternalUrl(context, job.applicationUrl) : null,
-                child: Text(job.applicationUrl != null ? "Apply" : "No application link"),
-              ),
-            ),
-          ],
+              Icon(AppIcons.chevron, color: context.colors.textSecondary),
+            ],
+          ),
         ),
-      ),
+        Gap.lg,
+        if (company.description != null) DetailSection(title: "About", child: Text(company.description!, style: context.text.bodyLarge)),
+        if (company.websiteUrl != null)
+          AppOutlineButton(
+            label: "Visit website",
+            icon: Icons.language_rounded,
+            onPressed: () => openExternalUrl(context, company.websiteUrl),
+          ),
+      ],
     );
   }
 }

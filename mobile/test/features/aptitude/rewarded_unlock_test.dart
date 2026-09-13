@@ -55,7 +55,7 @@ void main() {
       ]));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Start Test'));
+      await tester.tap(find.text('Start Assessment'));
       await tester.pumpAndSettle();
 
       // The rewarded-unlock dialog appeared (spec §15's exact copy) rather than silently
@@ -87,7 +87,7 @@ void main() {
       ]));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Start Test'));
+      await tester.tap(find.text('Start Assessment'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Watch Ad & Unlock'));
       await tester.pumpAndSettle();
@@ -115,7 +115,7 @@ void main() {
       ]));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Start Test'));
+      await tester.tap(find.text('Start Assessment'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Come Back Tomorrow'));
       await tester.pumpAndSettle();

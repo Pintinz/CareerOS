@@ -53,6 +53,7 @@ class IntelligenceDetail {
     this.sourceUrl,
     this.publishedAt,
     required this.isVerified,
+    this.isDemo = false,
   });
 
   final String id;
@@ -70,6 +71,7 @@ class IntelligenceDetail {
   final String? sourceUrl;
   final DateTime? publishedAt;
   final bool isVerified;
+  final bool isDemo;
 
   factory IntelligenceDetail.fromJson(Map<String, dynamic> json) => IntelligenceDetail(
         id: json["id"] as String,
@@ -87,5 +89,6 @@ class IntelligenceDetail {
         sourceUrl: json["source_url"] as String?,
         publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
         isVerified: json["is_verified"] as bool? ?? false,
+        isDemo: json["is_demo"] as bool? ?? false,
       );
 }
