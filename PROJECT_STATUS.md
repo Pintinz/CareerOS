@@ -19,7 +19,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `2b46386` — Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
 - `4fc6639` — Phase 9 (Admin CMS, Content Operations & Operational Monitoring) backend + admin web (tagged `phase-9-admin-cms`).
 - `9485ed6` — docs: record Phase 9 commit hash.
-- Phase 9.5 (Full-System Audit, Integration Hardening & Product Coherence Review) — see below and **SYSTEM_AUDIT.md** (tagged `phase-9.5-system-audit`).
+- `291ccb4` — Phase 9.5 (Full-System Audit, Integration Hardening & Product Coherence Review) — see below and **SYSTEM_AUDIT.md** (tagged `phase-9.5-system-audit`).
 
 ## Environment notes (read before assuming anything is verified)
 
