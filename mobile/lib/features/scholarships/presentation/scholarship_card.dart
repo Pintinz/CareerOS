@@ -55,6 +55,7 @@ class ScholarshipCardTile extends StatelessWidget {
                   ),
                   if (scholarship.country != null) _Chip(label: scholarship.country!),
                   for (final level in scholarship.degreeLevels ?? []) _Chip(label: level),
+                  if (scholarship.isDemo) const _Chip(label: "DEMO", color: AppColors.muted),
                 ],
               ),
               if (scholarship.applicationDeadline != null) ...[

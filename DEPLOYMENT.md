@@ -78,7 +78,20 @@ Backend (`backend/.env.example`): `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORIT
 (optional), plus the Phase 8 email-tracking variables documented below (all optional — the feature
 runs on a mock provider with none of them set).
 
-Admin (`admin/.env.example`): `NEXT_PUBLIC_API_BASE_URL`, `ADMIN_SESSION_SECRET`.
+Admin (`admin/.env.example`): `NEXT_PUBLIC_API_BASE_URL`, `ADMIN_SESSION_SECRET`. Note:
+`ADMIN_SESSION_SECRET` is not currently read anywhere in the admin app's code (it stores its JWT
+in `localStorage`, not a server-side session) — it's a leftover placeholder from an earlier design,
+not an active secret. Harmless but worth removing or actually wiring up before relying on it.
+
+**Phase 9.5 audit hardening**: the backend now refuses to start with `ENVIRONMENT=production` if
+`JWT_SECRET_KEY` or `TOKEN_ENCRYPTION_KEYS` are still set to their publicly-committed dev-only
+default values (or an obvious `change-me`-style placeholder) — see `app/core/config.py`'s
+`uses_insecure_defaults` and `app/main.py`'s `lifespan`. This was a real gap before this phase:
+nothing previously stopped a misconfigured production deployment from silently running with a
+secret anyone with access to this repository already knows. **This guard has only been exercised
+by unit tests of `Settings.uses_insecure_defaults`** — it has never been tested against an actual
+production-configured deployment, since none exists in this environment. Verify it behaves as
+expected the first time a real production environment is stood up.
 
 Mobile: `mobile/lib/config/env.dart` reads compile-time `--dart-define` values (API base URL, AdMob
 unit IDs) — no `.env` file is bundled into the app binary.

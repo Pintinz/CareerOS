@@ -12,6 +12,11 @@ Base URL (local dev): `http://localhost:8000/api/v1`
   "total": 123}`.
 - All list endpoints support `?search=` where full-text search is meaningful (jobs, scholarships,
   companies, news) via Postgres full-text search — no Elasticsearch dependency.
+- Every response carries an `X-Request-ID` header (Phase 9.5) — a UUID logged on every line the
+  backend writes while handling that request, so a client-reported error can be matched to the
+  exact server-side log trail. Any truly unhandled server exception is logged in full server-side
+  but the client only ever receives `{"detail": "Something went wrong. Please try again."}` with a
+  500 status — never a raw stack trace.
 
 ## Implemented endpoints (Phases 0-1)
 
@@ -193,7 +198,7 @@ and PRIVACY.md for what is/isn't retained from a message.
 | POST / GET | `/api/v1/email-tracking/outlook/connect` / `/outlook/callback` | Same shape as the Gmail pair, for Microsoft/Outlook. |
 | DELETE | `/api/v1/email-tracking/connections/{id}` | Disconnect: best-effort provider-side revoke, clears the stored (encrypted) tokens, marks the connection `DISCONNECTED`. Confirmed application timeline history is never touched. |
 | DELETE | `/api/v1/email-tracking/data` | Spec §35 — deletes the caller's `recruitment_email_events` rows only (`{"deleted_events": <count>}`). Confirmed `ApplicationStageEvent` rows are untouched — they live on `applications`, not here. |
-| GET | `/api/v1/email-tracking/events` | Optional `?application_id=` to scope to one application (backs the application detail "Emails" tab, spec §32). |
+| GET | `/api/v1/email-tracking/events` | Optional `?application_id=` to scope to one application (backs the application detail "Emails" tab, spec §32). Not paginated, but capped at the 500 most recent events server-side (Phase 9.5 audit fix — was previously fully unbounded). |
 | GET | `/api/v1/email-tracking/events/{id}` | Full detail including `classification_reason_json`'s evidence list (spec §29's "Detected because..." explainability). |
 | POST | `/api/v1/email-tracking/events/{id}/confirm` | **The only endpoint in this codebase that may change `current_stage` on behalf of a recruitment email.** 404 if the event or its matched application isn't the caller's; 409 if already confirmed/ignored; 422 if no application is matched yet or no stage was detected. Calls `ApplicationService.update_stage(..., source="EMAIL_CONFIRMED", commit=False)` and marks the event `CONFIRMED` in one transaction, committing once — either both happen or neither does. |
 | POST | `/api/v1/email-tracking/events/{id}/ignore` | Marks `IGNORED`. 409 if already confirmed/ignored. |

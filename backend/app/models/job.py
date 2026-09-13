@@ -52,8 +52,13 @@ class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # RESTRICT, not CASCADE (Phase 9.5 audit finding): Jobs are the primary public content type and
+    # a Company with live/historical Jobs (and the Applications/TestSessions/AtsAnalyses that
+    # reference them) should never be silently wiped out by deleting its Company row. An admin must
+    # archive/reassign a company's jobs first — the database now enforces that instead of only
+    # documenting it.
     company_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+        String(36), ForeignKey("companies.id", ondelete="RESTRICT"), nullable=False, index=True
     )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -94,17 +99,19 @@ class Job(TimestampMixin, Base):
     source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    application_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    application_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_urgent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    status: Mapped[ContentStatus] = mapped_column(Enum(ContentStatus), nullable=False, default=ContentStatus.DRAFT)
+    status: Mapped[ContentStatus] = mapped_column(
+        Enum(ContentStatus), nullable=False, default=ContentStatus.DRAFT, index=True
+    )
     # Phase 9 editorial workflow (spec §13/§14) — set only when a background job or an explicit
     # publish action actually transitions status to PUBLISHED at/after this time, never before.
     scheduled_publish_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

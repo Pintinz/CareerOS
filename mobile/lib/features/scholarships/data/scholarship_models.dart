@@ -12,6 +12,7 @@ class ScholarshipCard {
     required this.isVerified,
     required this.isFeatured,
     required this.isSaved,
+    this.isDemo = false,
   });
 
   final String id;
@@ -26,6 +27,7 @@ class ScholarshipCard {
   final bool isVerified;
   final bool isFeatured;
   final bool isSaved;
+  final bool isDemo;
 
   factory ScholarshipCard.fromJson(Map<String, dynamic> json) => ScholarshipCard(
         id: json["id"] as String,
@@ -41,6 +43,7 @@ class ScholarshipCard {
         isVerified: json["is_verified"] as bool? ?? false,
         isFeatured: json["is_featured"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
+        isDemo: json["is_demo"] as bool? ?? false,
       );
 }
 

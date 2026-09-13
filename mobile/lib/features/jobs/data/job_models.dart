@@ -16,6 +16,7 @@ class JobCard {
     required this.isUrgent,
     required this.isVerified,
     required this.isSaved,
+    this.isDemo = false,
     this.publishedAt,
     this.applicationDeadline,
   });
@@ -34,6 +35,7 @@ class JobCard {
   final bool isUrgent;
   final bool isVerified;
   final bool isSaved;
+  final bool isDemo;
   final DateTime? publishedAt;
   final DateTime? applicationDeadline;
 
@@ -52,6 +54,7 @@ class JobCard {
         isUrgent: json["is_urgent"] as bool? ?? false,
         isVerified: json["is_verified"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
+        isDemo: json["is_demo"] as bool? ?? false,
         publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
         applicationDeadline:
             json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,

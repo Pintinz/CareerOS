@@ -11,7 +11,18 @@ import "storage/secure_storage.dart";
 final secureStorageProvider = Provider<SecureStorage>((ref) => SecureStorage());
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  return ApiClient(secureStorage: ref.watch(secureStorageProvider));
+  final secureStorage = ref.watch(secureStorageProvider);
+  return ApiClient(
+    secureStorage: secureStorage,
+    // Force a real re-login on session expiry (Phase 9.5 audit fix) — without this, an expired
+    // or invalid access token just produced a per-screen error message with no path back to
+    // /login. Clearing the session flips authStateProvider to unauthenticated, which the router's
+    // existing redirect guard (app_router.dart) already sends to /login on its own.
+    onUnauthorized: () {
+      secureStorage.clear();
+      ref.invalidate(authStateProvider);
+    },
+  );
 });
 
 /// Overridden in main.dart once SharedPreferences has loaded (see bootstrap in main.dart) —

@@ -261,6 +261,32 @@ block triggered a spurious `CircularDependencyError` from SQLAlchemy's column-re
 during batch-table-recreate. See the migration file
 (`backend/migrations/versions/2146a3e4995f_*.py`) for the working pattern.
 
+### Phase 9.5 additions (migration `b2ff7f49cf7d`)
+
+A full-system audit (see SYSTEM_AUDIT.md) found and fixed two categories of database issue —
+neither adds a table, both harden the existing schema:
+
+- **`jobs.company_id` changed from `ondelete="CASCADE"` to `ondelete="RESTRICT"`.** A company with
+  live/historical jobs can no longer be deleted at all (the API returns 409) rather than silently
+  deleting every one of its jobs and orphaning the applications/test-sessions/ATS-analyses that
+  reference them. Because the original FK (defined inline in migration `342b98f54b7e`) was never
+  given an explicit name, this migration uses `batch_alter_table`'s `naming_convention` parameter
+  to give it a deterministic name (`fk_jobs_company_id`) so it can actually be dropped and
+  replaced — without this, a naive `recreate="always"` batch rebuild ends up with **both** the old
+  and new FK definitions coexisting on the rebuilt table (verified and fixed during this phase; see
+  the migration file's comments for the exact failure mode).
+- **New indexes**: `jobs.status`/`is_active`/`expires_at`/`published_at`/`application_deadline`
+  (all filtered or sorted on by the public feed), `applications.current_stage`,
+  `discovered_items.status`, `recruitment_email_events.status`.
+
+**Separately (not a migration — an engine-configuration fix, see ARCHITECTURE.md)**: SQLite
+foreign-key enforcement (`PRAGMA foreign_keys=ON`) was never enabled anywhere in this codebase
+before this phase, meaning every `ondelete` behavior declared anywhere in this file — CASCADE, 
+RESTRICT, and SET NULL alike — had been silently unenforced in every dev/test run to date. Both
+`app/db/session.py` (production engine) and `tests/conftest.py` (test engine) now register a
+connect-event listener that issues this pragma on every new connection. This has no effect on
+Postgres, which enforces FKs natively and always has.
+
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
 

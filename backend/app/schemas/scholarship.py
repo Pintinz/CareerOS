@@ -22,6 +22,7 @@ class ScholarshipCardOut(BaseModel):
     is_verified: bool
     is_featured: bool
     is_saved: bool = False
+    is_demo: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -70,7 +70,11 @@ class RecruitmentEmailEventRepository:
             query = query.where(
                 RecruitmentEmailEvent.status.in_([RecruitmentEventStatus.SUGGESTED, RecruitmentEventStatus.AMBIGUOUS])
             )
-        query = query.order_by(RecruitmentEmailEvent.received_at.desc())
+        # Bounded even though this endpoint isn't paginated (Phase 9.5 audit finding: it was
+        # previously unbounded) — a heavy Gmail/Outlook sync history could otherwise return
+        # thousands of rows in one response. 500 comfortably covers real usage; a true paginated
+        # endpoint would be a breaking API change for a P4 finding, not worth it here.
+        query = query.order_by(RecruitmentEmailEvent.received_at.desc()).limit(500)
         result = await self.db.execute(query)
         return list(result.scalars().all())
 

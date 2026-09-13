@@ -147,6 +147,19 @@ things honestly:
   per job (in-memory, process-local; resets on backend restart, since it describes "since this
   process started," not a durable record — that's what the Audit Log is for).
 
+## Phase 9.5 audit hardening
+
+A full-system audit (see **SYSTEM_AUDIT.md**) exercised the admin surface described above and made
+two changes relevant here: `admin/types/models.ts`'s `JobAdmin`/`ScholarshipAdmin`/
+`IntelligencePostAdmin` TypeScript interfaces were missing the `scheduled_publish_at`/
+`reviewed_by_admin_id`/`published_by_admin_id` fields the backend actually returns (fixed —
+production build re-verified clean); and deleting a Company that still has Jobs now returns a
+clean 409 ("This company still has jobs...") instead of either silently cascading the delete or
+raising a raw database error — see DATABASE.md for why (`jobs.company_id` changed from `CASCADE`
+to `RESTRICT`, and SQLite foreign-key enforcement itself had never been turned on before this
+phase). No admin UI behavior changed as a result — only correctness of an edge case and type
+completeness.
+
 ## What is explicitly not built (see PROJECT_STATUS.md for the full list)
 
 Live RSS/Lever/Ashby ingestion, real push notification delivery, apply-click tracking and per-content

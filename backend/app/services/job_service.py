@@ -41,11 +41,20 @@ class JobService:
             )
         return company
 
-    async def to_card(self, job: Job) -> JobCardOut:
-        company = await self._require_company(job.company_id)
+    def _card_from_job(self, job: Job, company) -> JobCardOut:
         data = self._job_fields(job, exclude={"company_id", "created_by_admin_id"})
         data["company"] = JobCompanySummary.model_validate(company)
         return JobCardOut.model_validate(data)
+
+    def _admin_from_job(self, job: Job, company) -> JobAdminOut:
+        data = self._job_fields(job, exclude={"company_id"})
+        data["company"] = CompanyOut.model_validate(company)
+        data["is_saved"] = False
+        return JobAdminOut.model_validate(data)
+
+    async def to_card(self, job: Job) -> JobCardOut:
+        company = await self._require_company(job.company_id)
+        return self._card_from_job(job, company)
 
     async def to_detail(self, job: Job, *, saved_job_ids: set[str] | None = None) -> JobDetailOut:
         company = await self._require_company(job.company_id)
@@ -56,15 +65,20 @@ class JobService:
 
     async def to_admin(self, job: Job) -> JobAdminOut:
         company = await self._require_company(job.company_id)
-        data = self._job_fields(job, exclude={"company_id"})
-        data["company"] = CompanyOut.model_validate(company)
-        data["is_saved"] = False
-        return JobAdminOut.model_validate(data)
+        return self._admin_from_job(job, company)
+
+    async def _batch_companies(self, jobs: list[Job]) -> dict[str, object]:
+        companies = await self.companies.get_by_ids({job.company_id for job in jobs})
+        missing = {job.company_id for job in jobs} - companies.keys()
+        if missing:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Job has no valid company")
+        return companies
 
     async def list_public(self, *, viewer_user_id: str | None = None, **filters):
         items, total = await self.jobs.list_public(**filters)
         saved_ids = await self.jobs.list_saved_job_ids(viewer_user_id) if viewer_user_id else set()
-        cards = [await self.to_card(job) for job in items]
+        companies = await self._batch_companies(items)
+        cards = [self._card_from_job(job, companies[job.company_id]) for job in items]
         for card in cards:
             card.is_saved = card.id in saved_ids
         return cards, total
@@ -73,7 +87,8 @@ class JobService:
         items, total = await self.jobs.list_admin(
             page=page, page_size=page_size, search=search, status=job_status
         )
-        return [await self.to_admin(job) for job in items], total
+        companies = await self._batch_companies(items)
+        return [self._admin_from_job(job, companies[job.company_id]) for job in items], total
 
     @staticmethod
     def _is_publicly_visible(job: Job) -> bool:

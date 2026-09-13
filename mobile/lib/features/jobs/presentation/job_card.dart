@@ -67,6 +67,7 @@ class JobCardTile extends StatelessWidget {
                         _Chip(label: _employmentTypeLabel),
                         _Chip(label: _workModeLabel),
                         if (job.isUrgent) const _Chip(label: "Urgent", color: AppColors.danger),
+                        if (job.isDemo) const _Chip(label: "DEMO", color: AppColors.muted),
                       ],
                     ),
                     const SizedBox(height: 8),

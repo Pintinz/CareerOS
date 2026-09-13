@@ -13,6 +13,14 @@ class CompanyRepository:
         result = await self.db.execute(select(Company).where(Company.id == company_id))
         return result.scalar_one_or_none()
 
+    async def get_by_ids(self, company_ids: set[str]) -> dict[str, Company]:
+        """Batch lookup keyed by id — avoids a separate SELECT per row when rendering a list of
+        Jobs (Job has no ORM relationship to Company; see JobService._job_fields)."""
+        if not company_ids:
+            return {}
+        result = await self.db.execute(select(Company).where(Company.id.in_(company_ids)))
+        return {c.id: c for c in result.scalars().all()}
+
     async def get_by_slug(self, slug: str) -> Company | None:
         result = await self.db.execute(select(Company).where(Company.slug == slug))
         return result.scalar_one_or_none()

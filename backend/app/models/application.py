@@ -64,7 +64,7 @@ class Application(TimestampMixin, Base):
     job_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     current_stage: Mapped[ApplicationStage] = mapped_column(
-        Enum(ApplicationStage), nullable=False, default=ApplicationStage.SAVED
+        Enum(ApplicationStage), nullable=False, default=ApplicationStage.SAVED, index=True
     )
     applied_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

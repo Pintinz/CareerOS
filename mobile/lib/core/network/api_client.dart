@@ -7,7 +7,12 @@ import "../storage/secure_storage.dart";
 /// into [ApiException] so presentation code has one error shape to render (loading / empty /
 /// error / offline states per spec §79).
 class ApiClient {
-  ApiClient({SecureStorage? secureStorage, Dio? dio})
+  /// [onUnauthorized] is called (once) the first time any request comes back 401 — the caller
+  /// wires this to clear the stored session and flip the app's auth state, so an expired/invalid
+  /// token forces a real re-login instead of leaving the user stuck on a "session expired" error
+  /// message with no way back to `/login` short of manually finding Log Out (Phase 9.5 audit
+  /// finding: a 401 was previously not force-logging the user out anywhere in the app).
+  ApiClient({SecureStorage? secureStorage, Dio? dio, this.onUnauthorized})
       : _secureStorage = secureStorage ?? SecureStorage(),
         _dio = dio ??
             Dio(BaseOptions(
@@ -24,13 +29,19 @@ class ApiClient {
           }
           handler.next(options);
         },
-        onError: (error, handler) => handler.next(error),
+        onError: (error, handler) {
+          if (error.response?.statusCode == 401) {
+            onUnauthorized?.call();
+          }
+          handler.next(error);
+        },
       ),
     );
   }
 
   final Dio _dio;
   final SecureStorage _secureStorage;
+  final void Function()? onUnauthorized;
 
   Future<Response<T>> get<T>(String path, {Map<String, dynamic>? queryParameters}) =>
       _wrap(() => _dio.get<T>(path, queryParameters: queryParameters));

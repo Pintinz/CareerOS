@@ -24,6 +24,20 @@ Three deployable applications share one PostgreSQL database (accessed only by th
   implemented behind an interface with a mock/dev provider, selected via environment configuration, so
   the product runs fully in dev without any of those credentials (spec Rule 3).
 
+## Database engine notes (Phase 9.5)
+
+This diagram's "PostgreSQL database" is the **target** production database; in practice this
+project has only ever run against local SQLite (`app/db/session.py` falls back to
+`sqlite+aiosqlite:///./careeros_dev.db` when `DATABASE_URL` isn't set to a Postgres URL — Docker
+was never installed in this environment, see PROJECT_STATUS.md). This matters architecturally
+because **SQLite does not enforce `FOREIGN KEY` constraints by default** — a Phase 9.5 audit found
+this had never been turned on anywhere, meaning every `ondelete=CASCADE/RESTRICT/SET NULL` in
+`app/models/*.py` was silently decorative until fixed. Both the production engine and the test
+engine (`tests/conftest.py`) now register a `PRAGMA foreign_keys=ON` connect-event listener. This
+has no effect on a real Postgres deployment (which enforces FKs natively and always has) — it only
+matters because SQLite is what has actually been exercised. See DATABASE.md and SYSTEM_AUDIT.md §22
+for the full finding.
+
 ## Backend layering (`backend/app/`)
 
 ```

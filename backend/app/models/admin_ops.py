@@ -133,7 +133,7 @@ class DiscoveredItem(TimestampMixin, Base):
     # (spec §27) without needing a fuzzy-match library.
     normalized_title: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     status: Mapped[DiscoveredItemStatus] = mapped_column(
-        Enum(DiscoveredItemStatus), nullable=False, default=DiscoveredItemStatus.PENDING
+        Enum(DiscoveredItemStatus), nullable=False, default=DiscoveredItemStatus.PENDING, index=True
     )
     created_draft_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     reviewed_by_admin_id: Mapped[str | None] = mapped_column(

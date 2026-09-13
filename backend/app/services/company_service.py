@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.company import Company
@@ -83,4 +84,14 @@ class CompanyService:
     async def delete(self, company_id: str) -> None:
         company = await self.get_for_admin(company_id)
         await self.repo.delete(company)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError as exc:
+            # jobs.company_id is ondelete="RESTRICT" (Phase 9.5 audit hardening) — deleting a
+            # company that still has Jobs must surface as a clean, actionable error, never a raw
+            # database exception/stack trace.
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This company still has jobs. Archive or reassign them before deleting the company.",
+            ) from exc

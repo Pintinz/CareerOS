@@ -73,6 +73,19 @@ class Settings(BaseSettings):
         return self.environment.lower() == "production"
 
     @property
+    def uses_insecure_defaults(self) -> list[str]:
+        """Which known dev-only default secrets are still active. Checked at startup — see
+        `app/main.py`'s `lifespan` — to refuse to boot in production with a publicly-committed
+        secret (Phase 9.5 security audit finding: nothing previously stopped this)."""
+        insecure = []
+        jwt_lower = self.jwt_secret_key.lower()
+        if self.jwt_secret_key == "dev-only-insecure-secret-change-me" or "change-me" in jwt_lower or "changeme" in jwt_lower:
+            insecure.append("JWT_SECRET_KEY")
+        if "UuQmhsXcogUgfZv-VKXGPr1jS2C5Y0EIytlAc77syfg=" in self.token_encryption_key_list:
+            insecure.append("TOKEN_ENCRYPTION_KEYS")
+        return insecure
+
+    @property
     def gmail_credentials_configured(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret and self.google_redirect_uri)
 

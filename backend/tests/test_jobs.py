@@ -260,3 +260,24 @@ async def test_create_job_rejects_unknown_company(client: AsyncClient, db_sessio
         "/api/v1/admin/jobs", headers=admin_headers, json=_job_payload("not-a-real-company-id")
     )
     assert response.status_code == 422
+
+
+async def test_deleting_a_company_with_jobs_is_blocked_not_cascaded(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Phase 9.5 audit hardening: jobs.company_id is ondelete=RESTRICT, not CASCADE — deleting a
+    company that still has jobs must fail cleanly (409) rather than silently wiping the jobs and
+    orphaning any application history that references them."""
+    await _create_admin(db_session)
+    admin_headers = await _admin_headers(client)
+    company_id = await _create_company(client, admin_headers)
+    await client.post("/api/v1/admin/jobs", headers=admin_headers, json=_job_payload(company_id))
+
+    delete_response = await client.delete(f"/api/v1/admin/companies/{company_id}", headers=admin_headers)
+    assert delete_response.status_code == 409
+
+    # The company and its job must still be there — nothing was silently removed.
+    company_response = await client.get(f"/api/v1/admin/companies/{company_id}", headers=admin_headers)
+    assert company_response.status_code == 200
+    jobs_response = await client.get("/api/v1/admin/jobs", headers=admin_headers)
+    assert jobs_response.json()["total"] == 1

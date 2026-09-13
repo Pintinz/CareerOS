@@ -130,7 +130,7 @@ class RecruitmentEmailEvent(TimestampMixin, Base):
     classification_reason_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     status: Mapped[RecruitmentEventStatus] = mapped_column(
-        Enum(RecruitmentEventStatus), nullable=False, default=RecruitmentEventStatus.DETECTED
+        Enum(RecruitmentEventStatus), nullable=False, default=RecruitmentEventStatus.DETECTED, index=True
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

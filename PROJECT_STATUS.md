@@ -18,6 +18,8 @@ This file is the single source of truth for build progress. Update it after ever
 - `0ece72a` — Phase 7.5 follow-up: Mock Interview Automatic/Custom Mix builder UI.
 - `2b46386` — Phase 8 (Smart Recruitment Email Tracking) backend + mobile (tagged `phase-8-email-tracking`).
 - `4fc6639` — Phase 9 (Admin CMS, Content Operations & Operational Monitoring) backend + admin web (tagged `phase-9-admin-cms`).
+- `9485ed6` — docs: record Phase 9 commit hash.
+- Phase 9.5 (Full-System Audit, Integration Hardening & Product Coherence Review) — see below and **SYSTEM_AUDIT.md** (tagged `phase-9.5-system-audit`).
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -68,6 +70,7 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 | 7.5 — Media, Assessment & Interview Hardening | IN PROGRESS | Backend: shared image-upload pipeline hardened with real Pillow decode validation + `MediaAsset` audit rows, `question_image_alt_text`/`option_image_alt_text` (immutably snapshotted like every other question field), 30 real procedurally-generated (non-AI, non-copyrighted) abstract-reasoning images seeded, `StarStory.version`/`InterviewPreparationProgress.version` for offline conflict detection (409 on stale `expected_version`), `InterviewRecording` metadata model + CRUD, centralized role-specific Mock Interview mix config (`app/interview/role_mix.py`) + preview endpoint. Mobile: real microphone recording/playback wired into the interview session screen (record/stop/play/delete, consent dialog, every failure mode mapped to a message, never a crash), `version`-aware STAR/PreparationProgress models ready for offline sync, and (follow-up) a real Automatic Mix / Custom Mix builder in the Mock Interview configuration screen. Missing (see Known limitations): abstract-image rendering/caching/zoom in the aptitude UI, offline STAR/checklist CRUD with conflict resolution, cache-management screen, Recordings Manager screen, retention settings, resume-active-activity, unified preparation history. |
 | 8 — Smart Recruitment Email Tracking | IN PROGRESS | Backend: full provider abstraction (`EmailTrackingProvider`/`GmailTrackingProvider`/`OutlookTrackingProvider`/`MockEmailTrackingProvider`), OAuth authorization/callback/state, Fernet token encryption, `email_connections`/`recruitment_email_events`/`oauth_states`/`email_forwarding_aliases` tables, a deterministic phrase-based classifier + weighted application matcher (both config-driven), webhook endpoints (Gmail Pub/Sub, Microsoft Graph notifications + lifecycle) with validate→dedupe→acknowledge→process, watch/subscription renewal, and the atomic confirm-flow that is the *only* code path allowed to call the Phase 5 stage-transition service. Mobile: Smart Application Tracking settings screen, privacy-first Gmail/Outlook consent screens, provider cards (connected/reauthorization/in-development), Recruitment Update Detected confirm/ignore/ambiguous-application-picker screen, Home "Application Updates" card, application detail "Emails" tab. **Verified only against the mock provider and mocked webhook payloads — no real Google/Microsoft OAuth credentials exist in this environment**, see the Phase 8 completion report for the full implemented/mock-verified/blocked-by-credentials breakdown. |
 | 9 — Admin | IN PROGRESS (focused subset, verified) | Real backend + admin web UI for all 15 spec areas: content CMS (jobs/scholarships/intelligence/companies), question banks (CRUD + CSV bulk import w/ dedup), media library (usage-guarded delete), source registry + discovery queue (never auto-publishes), user admin, notifications (architecture-only, no real push), audit log, system settings, a real single-scheduler background job system (email watch renewal / scheduled publish / content expiration) with retry/backoff, and an honest operations dashboard. See the Phase 9 section below for what's real vs. explicitly deferred. |
+| 9.5 — System Audit & Hardening | DONE (see SYSTEM_AUDIT.md) | Full cross-feature audit against Phases 0-9. Found and fixed 13 real issues including a critical systemic one (SQLite foreign-key enforcement was never enabled anywhere, making every `ondelete` behavior in the schema decorative in dev/test), a CASCADE-delete data-loss risk on Company→Jobs, a public-jobs-feed N+1 query, an insecure-production-default gap, a mobile 401-doesn't-force-logout bug, a demo-content mislabeling spec violation, and an external-URL-scheme-safety gap. No major new features added. See SYSTEM_AUDIT.md for the full 48-section audit and the pre-monetization checkpoint verdict. |
 | 10 — Monetization | NOT STARTED | `google_mobile_ads` dependency present (bumped to 9.1.0 for Gradle compat) but no ad integration code exists yet. |
 | 11 — Production Hardening | NOT STARTED | |
 
@@ -639,6 +642,89 @@ mobile-approximating preview before publish (spec §6); a rich-text/sanitized ed
 tests only this phase — the admin UI was instead verified live in a browser, see above); a full
 media usage-reference join table (the raw-SQL approximation above stands in for it).
 
+### Phase 9.5 — Full-System Audit, Integration Hardening & Product Coherence Review (complete)
+
+A cross-feature audit of Phases 0-9 as one coherent system — not a new-feature phase. Full detail,
+including every finding's severity and status, lives in the new **SYSTEM_AUDIT.md**; this section
+summarizes what changed in the code.
+
+**The most significant finding**: SQLite foreign-key enforcement (`PRAGMA foreign_keys=ON`) was
+never enabled anywhere in this codebase — neither the production engine (`app/db/session.py`) nor
+the test engine (`tests/conftest.py`). Since SQLite is the only database this project has ever
+actually run against (Docker/Postgres has never been installed), **every `ondelete=CASCADE/
+RESTRICT/SET NULL` declared in `app/models/*.py` has been silently decorative** in every dev/test
+run to date. Fixed by registering a connect-event listener on both engines. The entire backend
+suite (165 tests) was re-run afterward with real enforcement active and passed unchanged, meaning
+the schema's relationships were already internally consistent — this had simply never been
+verified.
+
+**Other real fixes made this phase** (see SYSTEM_AUDIT.md §45 for the full table with file paths):
+- `jobs.company_id` changed from `CASCADE` to `RESTRICT` (a company with jobs can no longer be
+  silently deleted along with its job/application history) — migration `b2ff7f49cf7d`, with a
+  clean 409 response instead of a raw database error.
+- Fixed an N+1 query on the public jobs feed (was 1+1+page_size queries per request; now a single
+  batched company lookup).
+- Added missing indexes: `jobs.status`/`is_active`/`expires_at`/`published_at`/
+  `application_deadline`, `applications.current_stage`, `discovered_items.status`,
+  `recruitment_email_events.status`.
+- Added a production startup guard: the backend now refuses to boot with `ENVIRONMENT=production`
+  if `JWT_SECRET_KEY`/`TOKEN_ENCRYPTION_KEYS` are still the publicly-committed dev-only defaults
+  (or an obvious `change-me`-style placeholder) — previously nothing stopped this.
+- Fixed a real mobile bug: a 401 response never forced a re-login anywhere in the app — a user
+  just saw a dead-end "Session expired" message. `ApiClient` now clears the session and flips
+  `authStateProvider` on any 401, letting the existing router redirect do the rest.
+- Fixed a real spec violation: `is_demo` existed on the Job/Scholarship/Company models and was
+  even parsed into the mobile `JobCard` Dart model, but was never rendered anywhere — a demo job
+  was completely indistinguishable from a real one on screen. Worse, the public list API schemas
+  didn't even include `is_demo` in their response. Both list-card schemas and the corresponding
+  Dart models/card widgets now carry and display a "DEMO" badge (jobs and scholarships; companies/
+  intelligence deferred as a smaller follow-up — see Known limitations).
+- Fixed a real security gap: `openExternalUrl` (the one shared helper every Apply/Official Source/
+  Company Website/Scholarship link in the app goes through) had no URL-scheme validation — a
+  `javascript:`/`data:`/`file:` value in an admin-entered URL field would have been passed
+  straight to `launchUrl`. Now restricted to http/https only.
+- Added a router error page for bad/stale deep links (previously fell through to go_router's
+  unbranded default), and a double-tap guard on the job-detail screen's Save button (the list
+  screen already had one; the detail screen didn't).
+- Added minimal, dependency-free observability: a request-correlation id (logged on every line,
+  echoed as an `X-Request-ID` response header) and a global unhandled-exception handler that logs
+  the full error server-side while never leaking a raw stack trace to the client — no paid
+  monitoring service required, and a natural attachment point for one later.
+- Bounded the previously-unbounded `GET /email-tracking/events` list endpoint (500-row cap).
+- Added one new end-to-end backend test
+  (`tests/test_e2e_journeys.py::test_journey_a_admin_publish_to_mobile_save_to_application_stage_update`)
+  chaining admin-publish → mobile-fetch → save → create-application → stage-update in one test —
+  the one cross-feature journey that wasn't already covered end-to-end by an existing test (the
+  other three named journeys were already covered and are cited, not duplicated).
+
+**Confirmed clean by direct code tracing** (not just re-running existing tests) — see
+SYSTEM_AUDIT.md for the full list: application-stage-mutation integrity (exactly one legitimate
+write path, verified atomic), authorization/ownership isolation across every resource type named
+in the audit brief, admin RBAC enforcement on every admin route, no SQL injection/XSS/open-redirect/
+CSRF/JWT-algorithm-confusion vulnerability found, no secrets in git history, no probability/
+guarantee language anywhere in product copy, no fabricated analytics (apply-click/view-count
+genuinely don't exist and correspondingly aren't displayed), and the question-bank snapshot
+immutability guarantee (editing a master question can never alter a completed session).
+
+**Deferred, not silently dropped** (documented with reasoning in SYSTEM_AUDIT.md §45): admin
+question-bank N+1 on options (low-traffic); two admin routes missing audit-log calls; recruitment-
+email confirm doesn't navigate to the matched application; Gmail/Outlook consent double-tap guard;
+analytics empty-states missing a call-to-action button; several mobile model field gaps
+(`JobDetail.is_urgent`, `ApplicationStageEvent.source`, aptitude image alt-text); silent
+access-token refresh (a feature addition, not a hardening fix); company/intelligence DEMO badges;
+true row-level locking for double-submit races (no evidence of occurring at current scale).
+
+**Pre-monetization verdict** (SYSTEM_AUDIT.md §47): **YES, WITH BLOCKERS** — the core product is
+structurally ready for AdMob integration, but real Gmail/Outlook credentials, a production
+deployment test of the new insecure-secrets guard, a multi-instance scheduler leader-election
+story, and an iOS build-and-run pass all remain open before a real production release with real
+users.
+
+**No backend tests regressed**: 165 passing (160 baseline + 5 new — 3 config-security tests, 1
+CASCADE-delete regression test, 1 new E2E journey test). **No Flutter tests regressed**: 57
+passing, `flutter analyze` clean, debug APK still builds. **Admin production build**: clean, zero
+TypeScript errors, re-verified after the type additions.
+
 ## Partially Complete
 
 - **Mobile app**: Phase 0-8 core loops written and verified. Not yet built: internships/graduate-
@@ -686,7 +772,18 @@ media usage-reference join table (the raw-SQL approximation above stands in for 
 
 ## Known Bugs
 
-None currently open. Phase 9 caught and fixed one real bug via live browser smoke-testing (not
+None currently open. Phase 9.5 (see SYSTEM_AUDIT.md for full detail) found and fixed the most
+significant bug of this entire project: **SQLite foreign-key enforcement (`PRAGMA
+foreign_keys=ON`) was never enabled anywhere**, in either the production engine or the test
+engine — since SQLite is the only database ever run in this environment, every `ondelete`
+behavior declared in `app/models/*.py` had been silently decorative in every dev/test run to date.
+Also found and fixed: `jobs.company_id` was `CASCADE` (risking silent job/application data loss on
+company deletion, now `RESTRICT` with a clean 409), an N+1 query on the public jobs feed, no
+production guard against the publicly-committed default JWT/token-encryption secrets, a mobile 401
+that never forced re-login, `is_demo` existing in the database and mobile models but never
+rendered anywhere in the UI (a direct spec violation once real and demo content would coexist),
+and no URL-scheme validation before opening external Apply/Company/Source links. Phase 9 caught
+and fixed one real bug via live browser smoke-testing (not
 caught by `tsc`/`next build`, which only verify internal TypeScript consistency, not that the
 frontend's assumed request shapes match the backend's actual validation): the Discovery review
 modal's and the Intelligence form's company-selector dropdowns both requested
@@ -734,14 +831,18 @@ unrelated sender scores 0 and correctly stays unmatched) and documented why in
 
 ## Tests
 
-- Backend: `pytest -q` → **160 passed** across 13 test files (health, auth, admin/companies, jobs,
+- Backend: `pytest -q` → **165 passed** across 15 test files (health, auth, admin/companies, jobs,
   scholarships, uploads, ATS, intelligence, applications, aptitude, interview, media & hardening,
-  email tracking, **admin ops — 19 tests, new this phase**, in `test_admin_ops.py`, plus 2 new
-  media-library tests added to `test_uploads.py`).
+  email tracking, admin ops, **`test_config_security.py` — 3 tests, new in Phase 9.5** verifying
+  the insecure-production-default guard, plus 2 new Phase 9.5 regression tests added to
+  `test_jobs.py` (the Company→Jobs CASCADE-to-RESTRICT fix) and a new
+  `test_e2e_journeys.py` (the Journey A cross-feature end-to-end test).
 - Admin: no automated tests — verified by hand via live browser interaction against the running
   backend (Phase 9: logged in as a seeded admin and exercised Dashboard/Operations/Intelligence/
   Discovery/Sources/Notifications/Settings/Audit/Users/Companies, including a full company +
   intelligence-post create→audit-log→delete round trip). This caught one real bug — see Known Bugs.
+  Phase 9.5 re-verified the production build (clean) after adding TypeScript fields but did not
+  re-run a full live-browser pass since no admin UI behavior changed, only types.
 - Mobile: `flutter analyze` clean, `flutter build apk --debug` succeeds, `flutter test` →
   **57 passed** (1 pre-existing splash-boot smoke test + 21 Phase 6 widget
   tests + 16 Phase 7 widget tests + 6 Phase 7.5 tests covering the recording state machine via a
@@ -885,10 +986,22 @@ the question, deterministic content, never AI-generated or claimed to be employe
 
 ## Next Tasks
 
-Per the user's explicit instruction, Phase 9 is the last phase for now — **do not start Phase 10
-(Monetization) or Phase 11 (Production Hardening) until the whole product is reviewed.** Remaining
-work, roughly in priority order:
+Per the user's explicit instruction, Phase 9.5 is the last phase for now — **do not start Phase 10
+(Monetization) or Phase 11 (Production Hardening) automatically.** See SYSTEM_AUDIT.md §47 for the
+full pre-monetization checkpoint (verdict: **YES, WITH BLOCKERS**). Remaining work, roughly in
+priority order:
 
+0. (Phase 9.5 deferred items, see SYSTEM_AUDIT.md §45 for the complete list with reasoning):
+   admin question-bank N+1 on options; two admin routes missing audit-log calls (category/topic
+   creation); recruitment-email confirm doesn't navigate to the matched application; Gmail/Outlook
+   consent screen double-tap guard; aptitude/interview analytics empty-states missing a
+   call-to-action button; mobile model field gaps (`JobDetail.is_urgent`/`image_alt_text`,
+   `ApplicationStageEvent.source`, aptitude question image alt-text); silent access-token refresh
+   (mobile currently forces a real re-login on 401 rather than refreshing silently — correct
+   behavior, but a nicer UX would refresh transparently); company/intelligence DEMO badges (jobs
+   and scholarships now have them, per Phase 9.5); true row-level locking for the two documented
+   check-then-act race windows (double stage-confirm, double test-submit) if real concurrent load
+   is ever observed.
 1. Obtain real Google Cloud (OAuth client + Pub/Sub topic) and Microsoft Entra app-registration
    credentials and run the Phase 8 acceptance flows against an actual Gmail/Outlook account — the
    single highest-value remaining gap, since email tracking today is mock-verified only. See

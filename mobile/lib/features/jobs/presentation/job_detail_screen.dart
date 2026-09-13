@@ -65,6 +65,10 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> with SingleTi
   }
 }
 
+/// Guards the Save/Unsave button against a rapid double-tap firing two conflicting requests
+/// before the first one's response invalidates [jobDetailProvider] (Phase 9.5 audit finding).
+final _jobSaveInFlightProvider = StateProvider.family<bool, String>((ref, jobId) => false);
+
 class _JobDetailBody extends ConsumerWidget {
   const _JobDetailBody({required this.job, required this.tabController});
 
@@ -73,6 +77,7 @@ class _JobDetailBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final saving = ref.watch(_jobSaveInFlightProvider(job.id));
     return Column(
       children: [
         Expanded(
@@ -94,7 +99,7 @@ class _JobDetailBody extends ConsumerWidget {
                       ),
                     ),
                     IconButton(
-                      onPressed: () => _toggleSave(context, ref),
+                      onPressed: saving ? null : () => _toggleSave(context, ref),
                       icon: Icon(
                         job.isSaved ? Icons.bookmark : Icons.bookmark_border,
                         color: job.isSaved ? AppColors.blue : AppColors.muted,
@@ -160,13 +165,18 @@ class _JobDetailBody extends ConsumerWidget {
     // Called directly on the repository — this screen can be reached without the job ever
     // having been loaded into jobListProvider's state (e.g. from a company's Jobs tab, Saved
     // Items, or a deep link), where a list-relative toggle would silently no-op.
-    final repo = ref.read(jobRepositoryProvider);
-    if (job.isSaved) {
-      await repo.unsave(job.id);
-    } else {
-      await repo.save(job.id);
+    ref.read(_jobSaveInFlightProvider(job.id).notifier).state = true;
+    try {
+      final repo = ref.read(jobRepositoryProvider);
+      if (job.isSaved) {
+        await repo.unsave(job.id);
+      } else {
+        await repo.save(job.id);
+      }
+      ref.invalidate(jobDetailProvider(job.slug));
+    } finally {
+      ref.read(_jobSaveInFlightProvider(job.id).notifier).state = false;
     }
-    ref.invalidate(jobDetailProvider(job.slug));
   }
 
   Future<void> _trackApplication(BuildContext context, WidgetRef ref) async {

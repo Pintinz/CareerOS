@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -19,6 +20,16 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    # Mirrors app/db/session.py's production engine setup — SQLite doesn't enforce foreign keys
+    # by default, so tests would otherwise silently pass with orphaned/CASCADE-violating rows that
+    # a real Postgres deployment would reject (Phase 9.5 audit finding).
+    @event.listens_for(engine.sync_engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

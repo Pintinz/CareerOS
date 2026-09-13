@@ -80,6 +80,9 @@ export interface JobAdmin {
   is_demo: boolean;
   status: ContentStatus;
   created_by_admin_id: string | null;
+  scheduled_publish_at: string | null;
+  reviewed_by_admin_id: string | null;
+  published_by_admin_id: string | null;
 }
 
 export interface JobCompanySummary {
@@ -119,6 +122,9 @@ export interface IntelligencePostAdmin {
   is_demo: boolean;
   status: ContentStatus;
   created_by_admin_id: string | null;
+  scheduled_publish_at: string | null;
+  reviewed_by_admin_id: string | null;
+  published_by_admin_id: string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -168,4 +174,7 @@ export interface ScholarshipAdmin {
   is_demo: boolean;
   status: ContentStatus;
   created_by_admin_id: string | null;
+  scheduled_publish_at: string | null;
+  reviewed_by_admin_id: string | null;
+  published_by_admin_id: string | null;
 }

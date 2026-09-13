@@ -33,6 +33,7 @@ class JobCardOut(BaseModel):
     is_urgent: bool
     is_verified: bool
     is_saved: bool = False
+    is_demo: bool = False
     published_at: datetime | None = None
     application_deadline: datetime | None = None
 

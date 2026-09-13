@@ -198,6 +198,13 @@ Deleting an account removes profile data, documents, and application history; it
 path (see `DATABASE.md` soft-delete conventions — account deletion is one of the explicit hard-delete
 exceptions), not a soft "deactivate" that leaves data recoverable indefinitely.
 
+**Phase 9.5 audit note**: this behavior was re-verified against the actual code (not just this
+document) as part of a full-system audit — see SYSTEM_AUDIT.md §31. No discrepancy was found
+between what's documented here and what the code actually does. The audit also confirmed
+`AuditLog` rows (an administrative record of *staff* actions, not user content) are correctly
+untouched by user account deletion, and added the "Admin visibility limits" section above, which
+documents an existing, already-enforced code behavior rather than introducing a new one.
+
 ## Language discipline (spec §9/§20/§18/§9)
 
 - Scholarship eligibility is always shown as a partial match with ✓/△/✕ per criterion — never as an

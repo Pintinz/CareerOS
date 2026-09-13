@@ -1,4 +1,4 @@
-import "package:flutter/foundation.dart";
+import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
 
@@ -75,6 +75,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       return null;
     },
+    // A bad/stale deep link or an unmatched route otherwise fell through to go_router's default
+    // unbranded "page not found" screen with no way back into the app (Phase 9.5 audit finding).
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(title: const Text("Page not found")),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("That link doesn't lead anywhere in CareerOS.", textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(onPressed: () => context.go("/home"), child: const Text("Go to Home")),
+            ],
+          ),
+        ),
+      ),
+    ),
     routes: [
       GoRoute(path: "/splash", builder: (context, state) => const SplashScreen()),
       GoRoute(path: "/onboarding", builder: (context, state) => const OnboardingScreen()),
