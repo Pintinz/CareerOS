@@ -13,7 +13,7 @@ This file is the single source of truth for build progress. Update it after ever
 - `1a58ef3` — Phase 5 (Applications) backend + mobile.
 - `6775869` — Phase 6 (Aptitude Testing) backend + mobile (tagged `phase-6-aptitude`).
 - `d9fe06f` — Phase 7 (Interview Preparation & STAR) backend + mobile (tagged `phase-7-interview`).
-- Phase 7.5 (Media, Assessment & Interview Hardening) backend + mobile (tagged `phase-7.5-media-hardening`).
+- `5d221b3` — Phase 7.5 (Media, Assessment & Interview Hardening) backend + mobile (tagged `phase-7.5-media-hardening`).
 
 ## Environment notes (read before assuming anything is verified)
 
