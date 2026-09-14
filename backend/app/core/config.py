@@ -71,6 +71,42 @@ class Settings(BaseSettings):
     # (newest first) to support rotation — old ciphertexts still decrypt with a retired key.
     token_encryption_keys: str = "UuQmhsXcogUgfZv-VKXGPr1jS2C5Y0EIytlAc77syfg="  # dev-only, publicly committed on purpose — override in production.
 
+    # Live discovery engine (DISCOVERY_ENGINE.md). Kill switches first: turning any of these off
+    # stops automatic fetching/research without affecting manual admin content management.
+    web_discovery_enabled: bool = True
+    lever_discovery_enabled: bool = True
+    greenhouse_discovery_enabled: bool = True
+    ashby_discovery_enabled: bool = True
+    smartrecruiters_discovery_enabled: bool = True
+    # Workday's public career-site JSON is undocumented and varies by tenant — opt in per deployment.
+    workday_discovery_enabled: bool = False
+    rss_discovery_enabled: bool = True
+    structured_page_discovery_enabled: bool = True
+    # Publishing stays an editorial decision unless this AND the source's auto_publish_allowed
+    # AND every verification gate pass. Never on by default.
+    auto_publish_discovery: bool = False
+
+    ai_research_enabled: bool = False
+    anthropic_research_enabled: bool = False
+    anthropic_api_key: str | None = None  # server-side only; never sent to clients or logged.
+    # Configurable per deployment; pick a smaller model here to trade quality for cost.
+    anthropic_research_model: str = "claude-opus-5"
+    ai_research_max_items_per_run: int = 5
+    ai_research_max_tokens_per_batch: int = 60_000
+    ai_research_min_trust_level: int = 3
+    ai_research_content_types: str = "JOB,INTERNSHIP,GRADUATE_PROGRAM,SCHOLARSHIP,FELLOWSHIP,INTELLIGENCE"
+
+    discovery_user_agent: str = "CareerOSDiscoveryBot/1.0 (+https://careeros.app/bot)"
+    discovery_request_timeout_seconds: float = 20.0
+    discovery_min_request_interval_seconds: float = 2.0  # per host, within a process
+    discovery_max_requests_per_run: int = 60
+    discovery_max_response_bytes: int = 3_000_000
+    discovery_max_items_per_run: int = 500
+    discovery_dispatch_interval_minutes: int = 5
+    discovery_runs_per_dispatch: int = 3
+    verification_interval_hours: int = 12
+    verification_max_items_per_run: int = 100
+
     # First-run bootstrap only: if set and no admin_users row exists yet, one SUPER_ADMIN is
     # created with these credentials at startup. Leave unset after the first admin exists.
     admin_seed_email: str | None = None
@@ -129,6 +165,16 @@ class Settings(BaseSettings):
         # app/services/email_tracking_providers.py's ForwardEmailProvider docstring. No such
         # provider is wired up in this environment (spec §36: "do not block Phase 8").
         return self.email_tracking_enabled and self.forward_email_enabled
+
+    @property
+    def anthropic_research_available(self) -> bool:
+        """AI research needs both flags and a key; without them discovery continues through the
+        structured adapters, RSS and manual ingestion (spec §77)."""
+        return self.web_discovery_enabled and self.ai_research_enabled and self.anthropic_research_enabled and bool(self.anthropic_api_key)
+
+    @property
+    def ai_research_content_type_list(self) -> list[str]:
+        return [t.strip().upper() for t in self.ai_research_content_types.split(",") if t.strip()]
 
     @property
     def token_encryption_key_list(self) -> list[str]:
