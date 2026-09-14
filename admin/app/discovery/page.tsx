@@ -1,192 +1,379 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
 
+import { OverviewCard } from "@/components/OverviewCard";
+import { FilterPill, PageHeader, StatusBadge } from "@/components/ui";
 import { useAdminGuard } from "@/components/useAdminGuard";
 import { ApiError, api } from "@/lib/apiClient";
+import {
+  CONTENT_TYPE_LABELS,
+  ContentChange,
+  ContentType,
+  DiscoveredItem,
+  DiscoveryMetrics,
+  ItemStatus,
+  SourceHealth,
+  formatDate,
+  humanize,
+} from "@/types/discovery";
 import { Company, PaginatedResponse } from "@/types/models";
 
-type ItemType = "JOB" | "SCHOLARSHIP" | "INTELLIGENCE" | "ALL";
+const TABS: { key: ContentType | "ALL"; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "JOB", label: "Jobs" },
+  { key: "SCHOLARSHIP", label: "Scholarships" },
+  { key: "INTERNSHIP", label: "Internships" },
+  { key: "GRADUATE_PROGRAM", label: "Graduate Programs" },
+  { key: "FELLOWSHIP", label: "Fellowships" },
+  { key: "INTELLIGENCE", label: "Intelligence" },
+];
 
-interface DiscoveredItem {
-  id: string;
-  source_id: string;
-  item_type: "JOB" | "SCHOLARSHIP" | "INTELLIGENCE";
-  detected_title: string;
-  detected_company_name: string | null;
-  original_url: string;
-  status: "PENDING" | "REVIEWED" | "IGNORED" | "REJECTED";
-  created_draft_id: string | null;
-  created_at: string;
-}
+const STATUS_OPTIONS: ItemStatus[] = ["NEEDS_REVIEW", "VERIFIED", "NEW", "DUPLICATE", "DRAFT_CREATED", "PUBLISHED", "SOURCE_REMOVED", "IGNORED", "REJECTED"];
+const PAGE_SIZE = 25;
 
 export default function DiscoveryPage() {
-  const { checked } = useAdminGuard();
-  const [tab, setTab] = useState<ItemType>("ALL");
-  const [items, setItems] = useState<DiscoveredItem[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [reviewing, setReviewing] = useState<DiscoveredItem | null>(null);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftCompanyId, setDraftCompanyId] = useState("");
-  const [draftSummary, setDraftSummary] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  return (
+    <Suspense fallback={null}>
+      <DiscoveryQueue />
+    </Suspense>
+  );
+}
 
-  async function load() {
+function DiscoveryQueue() {
+  const { checked } = useAdminGuard();
+  const params = useSearchParams();
+  const [tab, setTab] = useState<ContentType | "ALL">("ALL");
+  const [status, setStatus] = useState("");
+  const [sourceId, setSourceId] = useState(params.get("source_id") ?? "");
+  const [companyId, setCompanyId] = useState("");
+  const [country, setCountry] = useState("");
+  const [minTrust, setMinTrust] = useState("");
+  const [duplicates, setDuplicates] = useState("");
+  const [since, setSince] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<PaginatedResponse<DiscoveredItem> | null>(null);
+  const [metrics, setMetrics] = useState<DiscoveryMetrics | null>(null);
+  const [sources, setSources] = useState<SourceHealth[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const query = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
+    if (tab !== "ALL") query.set("item_type", tab);
+    if (status) query.set("status", status);
+    if (sourceId) query.set("source_id", sourceId);
+    if (companyId) query.set("company_id", companyId);
+    if (country.trim()) query.set("country", country.trim());
+    if (minTrust) query.set("min_trust", minTrust);
+    if (duplicates) query.set("duplicates", duplicates);
+    if (since) query.set("discovered_after", new Date(since).toISOString());
+    if (search.trim()) query.set("search", search.trim());
     try {
-      const query = tab === "ALL" ? "" : `&item_type=${tab}`;
-      const res = await api.get<PaginatedResponse<DiscoveredItem>>(`/admin/discovery?page=1&page_size=100${query}`);
-      setItems(res.items);
+      const [items, metricData] = await Promise.all([
+        api.get<PaginatedResponse<DiscoveredItem>>(`/admin/discovery?${query.toString()}`),
+        api.get<DiscoveryMetrics>("/admin/discovery/metrics"),
+      ]);
+      setData(items);
+      setMetrics(metricData);
+      setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load discovery queue.");
+      setError(err instanceof ApiError ? err.message : "Failed to load the discovery queue.");
     }
-  }
+  }, [page, tab, status, sourceId, companyId, country, minTrust, duplicates, since, search]);
 
   useEffect(() => {
-    if (checked) {
-      load();
-      api.get<PaginatedResponse<Company>>("/admin/companies?page=1&page_size=100").then((res) => setCompanies(res.items));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checked, tab]);
+    if (!checked) return;
+    const timer = setTimeout(load, 250);
+    return () => clearTimeout(timer);
+  }, [checked, load]);
 
-  function openReview(item: DiscoveredItem) {
-    setReviewing(item);
-    setDraftTitle(item.detected_title);
-    setDraftCompanyId("");
-    setDraftSummary("");
-  }
+  useEffect(() => {
+    if (!checked) return;
+    api.get<SourceHealth[]>("/admin/sources").then(setSources).catch(() => undefined);
+    api.get<PaginatedResponse<Company>>("/admin/companies?page=1&page_size=100").then((res) => setCompanies(res.items)).catch(() => undefined);
+  }, [checked]);
 
-  async function handleIgnore(item: DiscoveredItem) {
-    await api.post(`/admin/discovery/${item.id}/ignore`);
-    await load();
-  }
+  useEffect(() => setPage(1), [tab, status, sourceId, companyId, country, minTrust, duplicates, since, search]);
 
-  async function handleReject(item: DiscoveredItem) {
-    await api.post(`/admin/discovery/${item.id}/reject`);
-    await load();
-  }
-
-  async function handleCreateDraft(e: React.FormEvent) {
-    e.preventDefault();
-    if (!reviewing) return;
+  async function decide(item: DiscoveredItem, action: "ignore" | "reject") {
     try {
-      const result = await api.post<{ item_type: string; draft_id: string }>(`/admin/discovery/${reviewing.id}/create-draft`, {
-        company_id: draftCompanyId || null,
-        title: draftTitle,
-        summary: draftSummary || null,
-      });
-      setReviewing(null);
+      await api.post(`/admin/discovery/${item.id}/${action}`);
       await load();
-      const dest = result.item_type === "JOB" ? "jobs" : result.item_type === "SCHOLARSHIP" ? "scholarships" : "intelligence";
-      window.location.href = `/${dest}/${result.draft_id}`;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create draft.");
+      setError(err instanceof ApiError ? err.message : "Action failed.");
+    }
+  }
+
+  async function runDue() {
+    try {
+      const result = await api.post<{ queued: number }>("/admin/discovery/run-due");
+      setNotice(result.queued ? `${result.queued} due source(s) queued for discovery.` : "No sources are due yet — use Run discovery on a source to check it now.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to queue discovery.");
+    }
+  }
+
+  async function verify() {
+    try {
+      await api.post("/admin/discovery/verify");
+      setNotice("Re-verification of published listings has started. Removed or closed listings will appear as pending changes.");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to start verification.");
     }
   }
 
   if (!checked) return null;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const sourceName = Object.fromEntries(sources.map((s) => [s.id, s.name]));
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-2xl font-bold text-navy">Discovery Queue</h1>
-      <p className="mt-2 text-sm text-muted">
-        Nothing here is ever auto-published — creating a draft always starts it as DRAFT, requiring a normal
-        publish action afterward.
-      </p>
+    <main className="mx-auto max-w-7xl px-6 py-10">
+      <PageHeader
+        eyebrow="Research operations"
+        title="Discovery Queue"
+        subtitle="Candidates found at registered sources, with the evidence behind each. Review, create a draft or publish — nothing is published by default."
+        actions={
+          <>
+            <button className="btn-secondary" onClick={verify}>Verify active listings</button>
+            <button className="btn-primary" onClick={runDue}>Run due sources</button>
+          </>
+        }
+      />
 
-      <div className="mt-6 flex gap-2">
-        {(["ALL", "JOB", "SCHOLARSHIP", "INTELLIGENCE"] as ItemType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${tab === t ? "bg-navy text-white" : "bg-card text-muted"}`}
-          >
-            {t}
-          </button>
+      {metrics && (
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <OverviewCard label="Awaiting review" value={metrics.awaiting_review} tone="warning" />
+          <OverviewCard label="Source-verified in queue" value={metrics.items_verified} tone="success" />
+          <OverviewCard label="Pending source changes" value={metrics.pending_changes + metrics.source_removed_pending} tone="info" />
+          <OverviewCard label="Found in the last 24h" value={`${metrics.items_found_24h} · ${metrics.duplicates_24h} dup.`} tone="primary" />
+        </section>
+      )}
+
+      <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Content type">
+        {TABS.map((t) => (
+          <FilterPill key={t.key} active={tab === t.key} onClick={() => setTab(t.key)}>
+            {t.label}
+          </FilterPill>
         ))}
       </div>
 
-      {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+      <div className="mb-4 grid gap-3 rounded-2xl bg-card p-4 shadow-sm md:grid-cols-4 lg:grid-cols-8">
+        <input aria-label="Search titles" placeholder="Search titles" value={search} onChange={(e) => setSearch(e.target.value)} className="lg:col-span-2" />
+        <select aria-label="Source" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+          <option value="">All sources</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <select aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <option value="">All companies</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <input aria-label="Country" placeholder="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
+        <select aria-label="Minimum trust" value={minTrust} onChange={(e) => setMinTrust(e.target.value)}>
+          <option value="">Any trust</option>
+          {[5, 4, 3, 2].map((level) => (
+            <option key={level} value={level}>Trust ≥ {level}</option>
+          ))}
+        </select>
+        <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="">Needs a decision</option>
+          {STATUS_OPTIONS.map((s) => (
+            <option key={s} value={s}>{humanize(s)}</option>
+          ))}
+        </select>
+        <select aria-label="Duplicates" value={duplicates} onChange={(e) => setDuplicates(e.target.value)}>
+          <option value="">Duplicates: any</option>
+          <option value="exclude">Hide duplicates</option>
+          <option value="only">Duplicates only</option>
+        </select>
+        <label className="flex items-center gap-2 text-xs text-muted lg:col-span-2">
+          Found since
+          <input type="date" value={since} onChange={(e) => setSince(e.target.value)} className="flex-1" />
+        </label>
+      </div>
 
-      <div className="mt-6 space-y-3">
-        {items.length === 0 && <p className="text-sm text-muted">No discovered items in this view.</p>}
-        {items.map((item) => (
-          <div key={item.id} className="flex items-center justify-between rounded-2xl bg-card p-4 shadow-sm">
-            <div>
-              <p className="font-medium">{item.detected_title}</p>
-              <p className="text-xs text-muted">
-                {item.item_type} · {item.detected_company_name ?? "Unknown company"} ·{" "}
-                <a href={item.original_url} target="_blank" rel="noreferrer" className="text-brand">
-                  Original source
-                </a>{" "}
-                · {item.status}
-              </p>
-            </div>
-            {item.status === "PENDING" && (
-              <div className="flex gap-3 text-sm">
-                <button onClick={() => openReview(item)} className="text-brand">Review</button>
-                <button onClick={() => handleIgnore(item)} className="text-muted">Ignore</button>
-                <button onClick={() => handleReject(item)} className="text-danger">Reject</button>
-              </div>
+      {notice && <p className="mb-4 rounded-xl bg-brand/10 px-4 py-3 text-sm text-brand">{notice}</p>}
+      {error && <p className="mb-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{error}</p>}
+
+      <PendingChanges onChanged={load} onError={setError} />
+
+      <div className="overflow-x-auto rounded-2xl bg-card shadow-sm">
+        <table className="w-full min-w-[1080px] text-left text-sm">
+          <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+            <tr>
+              <th className="px-4 py-3">Item</th>
+              <th className="px-4 py-3">Source</th>
+              <th className="px-4 py-3">Published</th>
+              <th className="px-4 py-3">Deadline</th>
+              <th className="px-4 py-3">Trust · confidence</th>
+              <th className="px-4 py-3">Verification</th>
+              <th className="px-4 py-3">Duplicate / update</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data && data.items.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-10 text-center text-muted">
+                  Nothing in this view. New candidates appear here after a source is checked.
+                </td>
+              </tr>
             )}
+            {data?.items.map((item) => (
+              <tr key={item.id} className="border-b border-line align-top last:border-0">
+                <td className="max-w-sm px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand">{CONTENT_TYPE_LABELS[item.item_type]}</p>
+                  <Link href={`/discovery/${item.id}`} className="font-semibold text-ink hover:text-brand">
+                    {item.detected_title}
+                  </Link>
+                  <p className="text-xs text-muted">
+                    {item.detected_company_name ?? "Organization not matched"}
+                    {item.location ? ` · ${item.location}` : ""}
+                  </p>
+                  {item.canonical_url && (
+                    <a href={item.canonical_url} target="_blank" rel="noreferrer noopener" className="block truncate text-xs text-brand">
+                      {item.canonical_url}
+                    </a>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-muted">{item.source_name ?? sourceName[item.source_id] ?? "—"}</td>
+                <td className="px-4 py-3 text-muted">{formatDate(item.published_at)}</td>
+                <td className="px-4 py-3 text-muted">{formatDate(item.deadline)}</td>
+                <td className="px-4 py-3">
+                  <p className="font-semibold text-navy">{item.trust_level ?? "—"}/5</p>
+                  <p className="text-xs text-muted">{item.confidence !== null ? `${Math.round(item.confidence * 100)}% extraction confidence` : "—"}</p>
+                </td>
+                <td className="space-y-1 px-4 py-3">
+                  <StatusBadge status={item.status} />
+                  <div>
+                    <StatusBadge status={item.verification_status} />
+                  </div>
+                  {item.flags.length > 0 && <p className="text-xs text-danger">{item.flags.map(humanize).join(", ")}</p>}
+                </td>
+                <td className="px-4 py-3 text-xs text-muted">
+                  {item.duplicate_of_id && <p>Duplicate of another source&rsquo;s item</p>}
+                  {item.matched_entity_id && <p>Matches an existing {humanize(item.matched_entity_type)} record</p>}
+                  {item.pending_changes > 0 && <p className="font-semibold text-[#b9770e]">{item.pending_changes} detected change(s)</p>}
+                  {!item.duplicate_of_id && !item.matched_entity_id && <p>New</p>}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col items-end gap-2">
+                    <Link href={`/discovery/${item.id}`} className="btn-primary px-3 py-1.5 text-xs">Review</Link>
+                    {["NEW", "NEEDS_REVIEW", "VERIFIED", "DUPLICATE"].includes(item.status) && (
+                      <div className="flex gap-3 text-xs">
+                        <button onClick={() => decide(item, "ignore")} className="text-muted hover:text-ink">Ignore</button>
+                        <button onClick={() => decide(item, "reject")} className="text-danger">Reject</button>
+                      </div>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {data && data.total > PAGE_SIZE && (
+        <div className="mt-4 flex items-center justify-between text-sm text-muted">
+          <span>
+            Page {page} of {totalPages} · {data.total} items
+          </span>
+          <div className="flex gap-2">
+            <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
+            <button className="btn-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</button>
           </div>
-        ))}
-      </div>
-
-      {reviewing && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 px-6">
-          <form onSubmit={handleCreateDraft} className="w-full max-w-lg space-y-4 rounded-2xl bg-card p-6 shadow-lg">
-            <h2 className="text-lg font-semibold text-navy">Review discovered item</h2>
-            <p className="text-xs text-muted">
-              Original: {reviewing.detected_title} —{" "}
-              <a href={reviewing.original_url} target="_blank" rel="noreferrer" className="text-brand">
-                source
-              </a>
-            </p>
-            <div>
-              <label className="mb-1 block text-xs text-muted">Title</label>
-              <input
-                required
-                value={draftTitle}
-                onChange={(e) => setDraftTitle(e.target.value)}
-                className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-              />
-            </div>
-            {reviewing.item_type !== "SCHOLARSHIP" && (
-              <div>
-                <label className="mb-1 block text-xs text-muted">Company {reviewing.item_type === "JOB" && "(required)"}</label>
-                <select
-                  value={draftCompanyId}
-                  onChange={(e) => setDraftCompanyId(e.target.value)}
-                  className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-                >
-                  <option value="">— select —</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div>
-              <label className="mb-1 block text-xs text-muted">Summary</label>
-              <textarea
-                value={draftSummary}
-                onChange={(e) => setDraftSummary(e.target.value)}
-                rows={3}
-                className="w-full rounded-xl border border-line px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setReviewing(null)} className="rounded-xl px-4 py-2 text-sm text-muted">
-                Cancel
-              </button>
-              <button type="submit" className="btn-primary">
-                Create Draft
-              </button>
-            </div>
-          </form>
         </div>
       )}
     </main>
+  );
+}
+
+const RECORD_ROUTES: Record<string, string> = { JOB: "jobs", SCHOLARSHIP: "scholarships", INTELLIGENCE: "intelligence" };
+
+function valueText(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) return formatDate(value);
+  return Array.isArray(value) ? value.join(" · ") : String(value);
+}
+
+/** Changes detected at the source for already-published records (deadline moved, listing removed or
+ * closed). Detected, never silently applied: an editor applies or dismisses each one. */
+function PendingChanges({ onChanged, onError }: { onChanged: () => void; onError: (message: string) => void }) {
+  const [changes, setChanges] = useState<ContentChange[]>([]);
+  const [open, setOpen] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setChanges(await api.get<ContentChange[]>("/admin/discovery/changes?status=PENDING&limit=100"));
+    } catch {
+      setChanges([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function decide(change: ContentChange, apply: boolean) {
+    try {
+      if (change.field === "source_state") {
+        await api.post(`/admin/discovery/records/${change.entity_type}/${change.entity_id}/source-state`, { confirm: apply });
+      } else {
+        await api.post(`/admin/discovery/changes/${change.id}/${apply ? "apply" : "dismiss"}`);
+      }
+      await load();
+      onChanged();
+    } catch (err) {
+      onError(err instanceof ApiError ? err.message : "Failed to resolve the change.");
+    }
+  }
+
+  if (changes.length === 0) return null;
+  return (
+    <section className="mb-6 rounded-2xl bg-card shadow-sm">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="flex w-full items-center justify-between px-5 py-4 text-left">
+        <span>
+          <span className="font-semibold text-navy">Changes detected on published records</span>
+          <span className="ml-2 badge bg-warning/15 text-[#b9770e]">{changes.length}</span>
+        </span>
+        <span className="text-sm text-brand">{open ? "Hide" : "Review"}</span>
+      </button>
+      {open && (
+        <ul className="divide-y divide-line border-t border-line">
+          {changes.map((change) => (
+            <li key={change.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
+              <div>
+                <p className="font-semibold text-ink">
+                  {humanize(change.entity_type)} · {humanize(change.field)}{" "}
+                  <Link href={`/${RECORD_ROUTES[change.entity_type] ?? "jobs"}/${change.entity_id}`} className="text-xs font-normal text-brand">
+                    Open record
+                  </Link>
+                </p>
+                <p className="text-muted">
+                  <span className="line-through">{valueText(change.old_value)}</span> → <span className="font-semibold text-ink">{valueText(change.new_value)}</span>
+                  <span className="ml-2 text-xs">detected {formatDate(change.detected_at, true)}</span>
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button className="btn-primary px-3 py-1 text-xs" onClick={() => decide(change, true)}>
+                  {change.field === "source_state" ? "Confirm & expire" : "Apply"}
+                </button>
+                <button className="btn-secondary px-3 py-1 text-xs" onClick={() => decide(change, false)}>
+                  {change.field === "source_state" ? "Still active" : "Dismiss"}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
