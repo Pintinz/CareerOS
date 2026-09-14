@@ -25,7 +25,10 @@ class AuditLog(Base):
     )
     action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # 255, not 36: most entity ids are UUIDs, but system settings are audited by key (e.g.
+    # "email_classifier_confidence_thresholds", 38 chars). PostgreSQL enforces VARCHAR lengths, so
+    # at 36 a settings change would commit and then fail its audit write (Phase 11 Postgres run).
+    entity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 

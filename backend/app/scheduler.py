@@ -16,13 +16,15 @@ job with nothing behind it would be dead weight, not architecture.
 
 import logging
 import zlib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import text
 
-from app.core.config import get_settings
-from app.db.session import AsyncSessionLocal
+from app.core.error_reporting import report_exception
+from app.db.session import AsyncSessionLocal, engine
 from app.services import content_lifecycle_service
 from app.services.email_tracking_service import EmailTrackingService
 
@@ -30,33 +32,39 @@ logger = logging.getLogger("careeros.scheduler")
 
 _scheduler: AsyncIOScheduler | None = None
 
-_is_postgres = get_settings().database_url.startswith("postgresql")
+
+def _lock_key(job_name: str) -> int:
+    return zlib.crc32(job_name.encode("utf-8"))
 
 
-async def _acquire_leader_lock(db, job_name: str) -> bool:
-    """Phase 11 (spec §22) — scheduler leader election. If multiple backend instances each run
-    their own in-process `AsyncIOScheduler` (this codebase's simplest deployment option, spec
-    §22: "prefer simplicity... a dedicated scheduler service is acceptable" — but nothing stops
-    an operator from running more than one API instance too), every instance's timer fires at
-    roughly the same moment, and without this, Gmail/Outlook watch renewal, scheduled publishing,
-    and content expiration would each run once **per instance** — redundant at best (wasted
-    provider API calls, risking rate limits) and duplicate-side-effect-risking at worst.
+@asynccontextmanager
+async def leader_lock(job_name: str, *, bind=None) -> AsyncIterator[bool]:
+    """Phase 11 (spec §22) — scheduler leader election. Every backend process (each gunicorn worker
+    in every replica) runs its own in-process `AsyncIOScheduler`, so every timer fires in every
+    process at roughly the same moment. Without this, email watch renewal, scheduled publishing,
+    and content expiration would run once per process.
 
-    Uses a Postgres session-level advisory lock (`pg_try_advisory_lock`) keyed by a stable hash of
-    the job name — the simplest correct primitive for "at most one instance proceeds," with no
-    extra infrastructure (no Redis/ZooKeeper) beyond the database every instance already needs.
-    The lock is scoped to this one `AsyncSession`'s underlying connection and is automatically
-    released the moment that connection closes (this function's caller always closes it
-    immediately after the job body runs) — never needs an explicit unlock or a lease-expiry timer.
+    Yields True only in the one process that obtains a Postgres session-level advisory lock for
+    this job. The lock lives on a *dedicated* connection held for the whole job and is explicitly
+    released in `finally`. It must not be taken through the job's ORM session: the jobs commit
+    internally, after which the session may continue on a different pooled connection, and a
+    pooled connection is never closed on release — so a session-level lock taken there would
+    never be released and its hold count would grow on every tick.
 
-    On SQLite (this codebase's only actually-exercised database — see DATABASE.md), there is no
-    advisory-lock primitive and no realistic multi-instance deployment story, so this always
-    returns True (single-instance assumption, documented, not silently pretended away)."""
-    if not _is_postgres:
-        return True
-    lock_key = zlib.crc32(job_name.encode("utf-8"))
-    result = await db.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": lock_key})
-    return bool(result.scalar_one())
+    On SQLite there is no advisory-lock primitive and no multi-process deployment story, so this
+    always yields True (a documented single-instance assumption)."""
+    bind = bind if bind is not None else engine
+    if not bind.dialect.name.startswith("postgresql"):
+        yield True
+        return
+
+    async with bind.connect() as conn:
+        acquired = bool((await conn.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": _lock_key(job_name)})).scalar_one())
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                await conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _lock_key(job_name)})
 
 #: Last-run bookkeeping surfaced on the Operations dashboard (spec §42's "Background Jobs: Last
 #: Run / Success / Failure / Duration") — process-local, intentionally not persisted: it describes
@@ -67,11 +75,12 @@ JOB_RUN_HISTORY: dict[str, dict] = {}
 async def _run_tracked(job_name: str, coro_factory) -> None:
     started_at = datetime.now(timezone.utc)
     try:
-        async with AsyncSessionLocal() as db:
-            if not await _acquire_leader_lock(db, job_name):
-                logger.debug("Scheduler job %s skipped — another instance holds the leader lock", job_name)
+        async with leader_lock(job_name) as is_leader:
+            if not is_leader:
+                logger.debug("Scheduler job %s skipped — another process holds the leader lock", job_name)
                 return
-            result = await coro_factory(db)
+            async with AsyncSessionLocal() as db:
+                result = await coro_factory(db)
         JOB_RUN_HISTORY[job_name] = {
             "last_run_at": started_at,
             "duration_seconds": (datetime.now(timezone.utc) - started_at).total_seconds(),
@@ -80,7 +89,7 @@ async def _run_tracked(job_name: str, coro_factory) -> None:
             "error": None,
         }
     except Exception as exc:  # noqa: BLE001 — a scheduled job must never crash the scheduler thread.
-        logger.exception("Scheduled job %s failed", job_name)
+        report_exception(exc, source="scheduler", job=job_name)
         JOB_RUN_HISTORY[job_name] = {
             "last_run_at": started_at,
             "duration_seconds": (datetime.now(timezone.utc) - started_at).total_seconds(),

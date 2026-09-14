@@ -413,7 +413,7 @@ async def test_analytics_and_weak_topic_recommendation_require_minimum_attempts(
     recommendations = await client.get("/api/v1/aptitude/recommendations", headers=headers)
     assert recommendations.status_code == 200
     weak_names = {t["topic_name"] for t in recommendations.json()["weak_topics"]}
-    assert "Borderline Topic" not in weak_names
+    assert "Borderline Topic" not in weak_names, (analytics.json()["by_topic"], recommendations.json())
 
 
 # ---------------------------------------------------------------------------

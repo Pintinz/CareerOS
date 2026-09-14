@@ -169,16 +169,23 @@ async def test_content_expiration_marks_expired_and_is_idempotent(client: AsyncC
     assert await content_lifecycle_service.expire_content(db_session) == 0
 
 
-async def test_scheduler_leader_lock_always_passes_on_sqlite(db_session: AsyncSession) -> None:
-    """Phase 11 §22: this codebase's only exercised database (SQLite, see DATABASE.md) has no
-    advisory-lock primitive and no realistic multi-instance story, so the leader-election check
-    must be a documented no-op pass-through here — never accidentally block every scheduled job
-    from ever running in the one environment this project actually tests against."""
-    from app.scheduler import _acquire_leader_lock
+async def test_scheduler_leader_lock_is_acquired_and_fully_released(db_session: AsyncSession) -> None:
+    """Phase 11 §22: SQLite has no advisory locks, so the check is a pass-through there. On
+    PostgreSQL the lock must be held only for the job's duration and released afterwards — a lock
+    left behind on a pooled connection would make one process the leader forever."""
+    from sqlalchemy import text as sql_text
 
-    assert await _acquire_leader_lock(db_session, "some_job") is True
-    # Calling it twice (simulating two instances both checking) must not deadlock or flip-flop.
-    assert await _acquire_leader_lock(db_session, "some_job") is True
+    from app.scheduler import leader_lock
+
+    bind = db_session.bind
+    for _ in range(2):  # a second tick must behave identically, not accumulate state
+        async with leader_lock("some_job", bind=bind) as is_leader:
+            assert is_leader is True
+
+    if bind.dialect.name.startswith("postgresql"):
+        async with bind.connect() as conn:
+            held = (await conn.execute(sql_text("SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'"))).scalar_one()
+        assert held == 0
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +240,12 @@ async def test_settings_super_admin_can_read_and_update(client: AsyncClient, db_
     assert update.status_code == 200
     assert update.json()["value"]["high"] == 0.9
     assert update.json()["is_default"] is False
+
+    # The change must be audited under its full key (38 chars) — on PostgreSQL this failed while
+    # entity_id was VARCHAR(36), leaving an unaudited settings change.
+    audit = await client.get("/api/v1/admin/audit", headers=headers)
+    entries = [e for e in audit.json()["items"] if e["action"] == "update_setting"]
+    assert [e["entity_id"] for e in entries] == ["email_classifier_confidence_thresholds"]
 
 
 async def test_updated_confidence_threshold_is_actually_consumed(client: AsyncClient, db_session: AsyncSession) -> None:

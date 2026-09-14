@@ -101,6 +101,10 @@ class Settings(BaseSettings):
         # against it.
         if self.database_url.startswith("sqlite"):
             insecure.append("DATABASE_URL (SQLite is not a supported production database)")
+        # Phase 11 (spec §18/§88): the first-admin bootstrap creates a SUPER_ADMIN, so it must never
+        # run with a missing or guessable password.
+        if self.admin_seed_email and (not self.admin_seed_password or len(self.admin_seed_password) < 12):
+            insecure.append("ADMIN_SEED_PASSWORD (required, at least 12 characters, when ADMIN_SEED_EMAIL is set)")
         return insecure
 
     @property

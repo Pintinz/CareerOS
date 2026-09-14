@@ -32,6 +32,13 @@ services:
       TOKEN_ENCRYPTION_KEYS: ${TOKEN_ENCRYPTION_KEYS}
       CORS_ORIGINS: ${CORS_ORIGINS}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      # Release kill switches (Phase 11 §33/§37/§38/§121-122). Gmail and Outlook tracking are
+      # mock-verified only, and Gmail's restricted-scope verification is not done — they ship OFF.
+      # Turning one on is a deliberate decision recorded in DEPLOYMENT.md, not a side effect of
+      # adding OAuth credentials. Manual application tracking is unaffected.
+      GMAIL_TRACKING_ENABLED: ${GMAIL_TRACKING_ENABLED:-false}
+      OUTLOOK_TRACKING_ENABLED: ${OUTLOOK_TRACKING_ENABLED:-false}
+      FORWARD_EMAIL_ENABLED: "false"
     ports:
       - "8000:8000"
     healthcheck:

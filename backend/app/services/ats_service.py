@@ -1,4 +1,5 @@
 from fastapi import HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.matching import ats_engine
@@ -28,7 +29,11 @@ class AtsService:
                 detail=f"CV file exceeds the {MAX_CV_BYTES // (1024 * 1024)}MB limit",
             )
 
-        text = extract_text(filename=file.filename, content=content, content_type=file.content_type)
+        # CPU-bound parsing runs in a worker thread (Phase 11 §98) — inline, a slow PDF would block
+        # this worker's event loop and stall every other request it's serving.
+        text = await run_in_threadpool(
+            extract_text, filename=file.filename, content=content, content_type=file.content_type
+        )
 
         cv = CvDocument(
             user_id=user_id,
