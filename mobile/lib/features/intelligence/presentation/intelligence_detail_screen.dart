@@ -94,6 +94,10 @@ class _IntelligenceArticle extends StatelessWidget {
                     ],
                   ],
                 ),
+                if (post.sourceName != null) ...[
+                  Gap.xxs,
+                  Text("Source: ${post.sourceName}", style: context.text.bodySmall),
+                ],
                 Gap.lg,
                 if (post.summary != null && post.fullContent != null) ...[
                   Text(post.summary!, style: context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),

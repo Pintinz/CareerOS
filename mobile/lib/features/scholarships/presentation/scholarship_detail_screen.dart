@@ -74,6 +74,8 @@ class _ScholarshipDetailView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final saving = ref.watch(_scholarshipSaveInFlightProvider(scholarship.id));
     final hasLink = scholarship.officialUrl != null && scholarship.officialUrl!.isNotEmpty;
+    final availability = OpportunityAvailability.fromApi(scholarship.availability);
+    final sourceLink = scholarship.officialUrl ?? scholarship.sourceUrl;
 
     return DetailScaffold(
       title: scholarship.name,
@@ -98,11 +100,16 @@ class _ScholarshipDetailView extends ConsumerWidget {
           isLoading: saving,
           onPressed: () => _toggleSave(ref),
         ),
-        primary: PrimaryButton(
-          label: hasLink ? "Apply Now" : "No application link",
-          icon: hasLink ? AppIcons.external : null,
-          onPressed: hasLink ? () => openExternalUrl(context, scholarship.officialUrl) : null,
-        ),
+        // Never "Apply Now" for an award that has closed, expired or left its source.
+        primary: !availability.isActive
+            ? (availability.sourceStillMeaningful && sourceLink != null
+                ? AppOutlineButton(label: "View source", icon: AppIcons.external, onPressed: () => openExternalUrl(context, sourceLink))
+                : const PrimaryButton(label: "No longer accepting applications", onPressed: null))
+            : PrimaryButton(
+                label: hasLink ? "Apply Now" : "No application link",
+                icon: hasLink ? AppIcons.external : null,
+                onPressed: hasLink ? () => openExternalUrl(context, scholarship.officialUrl) : null,
+              ),
       ),
     );
   }
@@ -116,9 +123,11 @@ class _ScholarshipHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final deadline = scholarship.applicationDeadline;
+    final availability = OpportunityAvailability.fromApi(scholarship.availability);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (!availability.isActive) ...[AvailabilityNotice(availability: availability), Gap.sm],
         if (scholarship.organization != null) Text(scholarship.organization!, style: context.text.labelMedium),
         const SizedBox(height: 2),
         Text(scholarship.name, style: context.text.headlineSmall),
@@ -129,15 +138,21 @@ class _ScholarshipHeader extends StatelessWidget {
           children: [
             if (scholarship.country != null) TagChip(label: scholarship.country!, icon: AppIcons.location),
             for (final level in scholarship.degreeLevels ?? const <String>[]) TagChip(label: humanizeEnum(level)),
-            TagChip(
-              label: humanizeEnum(scholarship.fundingType),
-              tone: scholarship.fundingType == "FULLY_FUNDED" ? AppTone.success : null,
-            ),
+            if (scholarship.awardType == "FELLOWSHIP") const TagChip(label: "Fellowship", tone: AppTone.purple),
+            if (isStatedValue(scholarship.fundingType))
+              TagChip(
+                label: humanizeEnum(scholarship.fundingType),
+                tone: scholarship.fundingType == "FULLY_FUNDED" ? AppTone.success : null,
+              ),
             if (scholarship.isVerified) const TagChip(label: "Verified", icon: AppIcons.verified, tone: AppTone.success),
             if (scholarship.isDemo) const TagChip(label: "DEMO"),
           ],
         ),
-        if (deadline != null) ...[
+        if (scholarship.isOfficialSource) ...[
+          Gap.xs,
+          SourceProvenance(isOfficialSource: scholarship.isOfficialSource, lastVerifiedAt: scholarship.lastVerifiedAt),
+        ],
+        if (deadline != null && availability.isActive) ...[
           Gap.sm,
           Row(
             children: [

@@ -8,6 +8,8 @@ class JobFilters {
     this.employmentType,
     this.workMode,
     this.experienceLevel,
+    this.opportunityType,
+    this.postedWithinDays,
     this.sort = "newest",
   });
 
@@ -16,14 +18,22 @@ class JobFilters {
   final String? employmentType;
   final String? workMode;
   final String? experienceLevel;
+
+  /// Feed base filter (INTERNSHIP / GRADUATE_PROGRAM) — not counted as a user refinement.
+  final String? opportunityType;
+
+  /// "1", "7" or "30" — date posted.
+  final String? postedWithinDays;
   final String sort;
 
   static bool _set(String? value) => value != null && value.isNotEmpty;
 
-  bool get isEmpty => !_set(search) && !_set(country) && !_set(employmentType) && !_set(workMode) && !_set(experienceLevel);
+  bool get isEmpty =>
+      !_set(search) && !_set(country) && !_set(employmentType) && !_set(workMode) && !_set(experienceLevel) && !_set(postedWithinDays);
 
   /// Number of refinements beyond the search box (drives the "Filters" badge).
-  int get activeRefinementCount => [country, employmentType, workMode, experienceLevel].where(_set).length + (sort != "newest" ? 1 : 0);
+  int get activeRefinementCount =>
+      [country, employmentType, workMode, experienceLevel, postedWithinDays].where(_set).length + (sort != "newest" ? 1 : 0);
 
   // Callers clear a filter by setting it to "" (copyWith can't express null) — empty values must
   // never reach the API, where an empty enum value fails validation with a 422.
@@ -33,6 +43,8 @@ class JobFilters {
         if (_set(employmentType)) "employment_type": employmentType,
         if (_set(workMode)) "work_mode": workMode,
         if (_set(experienceLevel)) "experience_level": experienceLevel,
+        if (_set(opportunityType)) "opportunity_type": opportunityType,
+        if (_set(postedWithinDays)) "posted_within_days": postedWithinDays,
         "sort": sort,
       };
 
@@ -42,6 +54,8 @@ class JobFilters {
     String? employmentType,
     String? workMode,
     String? experienceLevel,
+    String? opportunityType,
+    String? postedWithinDays,
     String? sort,
   }) =>
       JobFilters(
@@ -50,6 +64,8 @@ class JobFilters {
         employmentType: employmentType ?? this.employmentType,
         workMode: workMode ?? this.workMode,
         experienceLevel: experienceLevel ?? this.experienceLevel,
+        opportunityType: opportunityType ?? this.opportunityType,
+        postedWithinDays: postedWithinDays ?? this.postedWithinDays,
         sort: sort ?? this.sort,
       );
 }

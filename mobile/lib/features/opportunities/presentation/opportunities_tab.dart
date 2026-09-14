@@ -7,9 +7,9 @@ import "../../jobs/presentation/job_list_tab.dart";
 import "../../jobs/presentation/job_providers.dart";
 import "../../scholarships/presentation/scholarship_list_tab.dart";
 
-/// Opportunities hub — "What opportunities can I pursue?". Jobs, Internships and Entry Level are
-/// job-backed feeds (see [JobFeed]); Scholarships has its own model. There is no distinct
-/// graduate-programme type in the backend yet, so none is presented.
+/// Opportunities hub — "What opportunities can I pursue?". Jobs, Internships and Graduate Programs
+/// are job-backed feeds (see [JobFeed]); Scholarships (and fellowships) have their own model. Every
+/// feed shows verified, published CareerOS records only — no live web search from the app.
 class OpportunitiesTab extends StatefulWidget {
   const OpportunitiesTab({super.key});
 
@@ -35,7 +35,7 @@ class _OpportunitiesTabState extends State<OpportunitiesTab> with SingleTickerPr
           padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.md, AppSpacing.xs, 0),
           child: HubHeader(
             title: "Opportunities",
-            subtitle: "Jobs, internships and scholarships",
+            subtitle: "Jobs, scholarships, internships and graduate programmes",
             trailing: IconButton(
               tooltip: "Saved opportunities",
               onPressed: () => context.push("/saved"),
@@ -49,7 +49,7 @@ class _OpportunitiesTabState extends State<OpportunitiesTab> with SingleTickerPr
           child: CareerPillTabBar(
             controller: _tabController,
             scrollable: true,
-            tabs: const ["Jobs", "Internships", "Entry Level", "Scholarships"],
+            tabs: const ["Jobs", "Scholarships", "Internships", "Graduate Programs"],
           ),
         ),
         Expanded(
@@ -57,9 +57,9 @@ class _OpportunitiesTabState extends State<OpportunitiesTab> with SingleTickerPr
             controller: _tabController,
             children: const [
               JobListTab(),
-              JobListTab(feed: JobFeed.internships),
-              JobListTab(feed: JobFeed.entryLevel),
               ScholarshipListTab(),
+              JobListTab(feed: JobFeed.internships),
+              JobListTab(feed: JobFeed.graduatePrograms),
             ],
           ),
         ),

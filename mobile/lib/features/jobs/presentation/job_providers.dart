@@ -51,17 +51,17 @@ class JobListState {
 }
 
 /// The job-backed Opportunities feeds. Each has its own list state, and its base filter is always
-/// applied on top of whatever the user refines. "Entry Level" is the honest stand-in for graduate
-/// programmes until the backend has a distinct opportunity type for them.
+/// applied on top of whatever the user refines. Graduate programmes are a real opportunity type,
+/// classified at the source (never inferred from an experienced-hire title).
 enum JobFeed {
   all,
   internships,
-  entryLevel;
+  graduatePrograms;
 
   JobFilters apply(JobFilters filters) => switch (this) {
         JobFeed.all => filters,
-        JobFeed.internships => filters.copyWith(employmentType: "INTERNSHIP"),
-        JobFeed.entryLevel => filters.copyWith(experienceLevel: "ENTRY"),
+        JobFeed.internships => filters.copyWith(opportunityType: "INTERNSHIP"),
+        JobFeed.graduatePrograms => filters.copyWith(opportunityType: "GRADUATE_PROGRAM"),
       };
 }
 
@@ -105,25 +105,8 @@ class JobListController extends FamilyNotifier<JobListState, JobFeed> {
     final index = state.items.indexWhere((j) => j.id == jobId);
     if (index == -1) return;
     final job = state.items[index];
-    final updated = JobCard(
-      id: job.id,
-      slug: job.slug,
-      title: job.title,
-      company: job.company,
-      location: job.location,
-      country: job.country,
-      employmentType: job.employmentType,
-      workMode: job.workMode,
-      experienceLevel: job.experienceLevel,
-      thumbnailUrl: job.thumbnailUrl,
-      isFeatured: job.isFeatured,
-      isUrgent: job.isUrgent,
-      isVerified: job.isVerified,
-      isSaved: !job.isSaved,
-      isDemo: job.isDemo,
-      publishedAt: job.publishedAt,
-      applicationDeadline: job.applicationDeadline,
-    );
+    // copyWith keeps every field (demo flag, availability, opportunity type) — only the save state flips.
+    final updated = job.copyWith(isSaved: !job.isSaved);
     final newItems = [...state.items];
     newItems[index] = updated;
     state = state.copyWith(items: newItems);

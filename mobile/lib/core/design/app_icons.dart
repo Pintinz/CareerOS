@@ -18,6 +18,7 @@ abstract final class AppIcons {
   static const job = Icons.work_outline_rounded;
   static const internship = Icons.badge_outlined;
   static const entryLevel = Icons.rocket_launch_outlined;
+  static const graduateProgram = Icons.rocket_launch_outlined;
   static const scholarship = Icons.school_outlined;
   static const company = Icons.apartment_rounded;
   static const application = Icons.view_timeline_outlined;

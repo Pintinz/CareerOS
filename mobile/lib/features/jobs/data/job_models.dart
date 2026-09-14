@@ -19,6 +19,10 @@ class JobCard {
     this.isDemo = false,
     this.publishedAt,
     this.applicationDeadline,
+    this.opportunityType = "JOB",
+    this.availability = "ACTIVE",
+    this.isOfficialSource = false,
+    this.lastVerifiedAt,
   });
 
   final String id;
@@ -39,6 +43,14 @@ class JobCard {
   final DateTime? publishedAt;
   final DateTime? applicationDeadline;
 
+  /// JOB | INTERNSHIP | GRADUATE_PROGRAM
+  final String opportunityType;
+
+  /// ACTIVE | EXPIRED | CLOSED | UNAVAILABLE — see [OpportunityAvailability].
+  final String availability;
+  final bool isOfficialSource;
+  final DateTime? lastVerifiedAt;
+
   factory JobCard.fromJson(Map<String, dynamic> json) => JobCard(
         id: json["id"] as String,
         slug: json["slug"] as String,
@@ -58,6 +70,34 @@ class JobCard {
         publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
         applicationDeadline:
             json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,
+        opportunityType: json["opportunity_type"] as String? ?? "JOB",
+        availability: json["availability"] as String? ?? "ACTIVE",
+        isOfficialSource: json["is_official_source"] as bool? ?? false,
+        lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
+      );
+
+  JobCard copyWith({bool? isSaved}) => JobCard(
+        id: id,
+        slug: slug,
+        title: title,
+        company: company,
+        location: location,
+        country: country,
+        employmentType: employmentType,
+        workMode: workMode,
+        experienceLevel: experienceLevel,
+        thumbnailUrl: thumbnailUrl,
+        isFeatured: isFeatured,
+        isUrgent: isUrgent,
+        isVerified: isVerified,
+        isSaved: isSaved ?? this.isSaved,
+        isDemo: isDemo,
+        publishedAt: publishedAt,
+        applicationDeadline: applicationDeadline,
+        opportunityType: opportunityType,
+        availability: availability,
+        isOfficialSource: isOfficialSource,
+        lastVerifiedAt: lastVerifiedAt,
       );
 }
 
@@ -97,6 +137,15 @@ class JobDetail {
     required this.isFeatured,
     required this.isDemo,
     required this.isSaved,
+    this.opportunityType = "JOB",
+    this.availability = "ACTIVE",
+    this.isOfficialSource = false,
+    this.lastVerifiedAt,
+    this.educationRequirements,
+    this.experienceRequirements,
+    this.programDuration,
+    this.programStartDate,
+    this.eligibility = const {},
   });
 
   final String id;
@@ -133,6 +182,17 @@ class JobDetail {
   final bool isFeatured;
   final bool isDemo;
   final bool isSaved;
+  final String opportunityType;
+  final String availability;
+  final bool isOfficialSource;
+  final DateTime? lastVerifiedAt;
+  final List<String>? educationRequirements;
+  final List<String>? experienceRequirements;
+
+  /// Programme facts — only present when the official source states them.
+  final String? programDuration;
+  final DateTime? programStartDate;
+  final Map<String, dynamic> eligibility;
 
   static List<String>? _stringList(dynamic value) =>
       value == null ? null : (value as List).map((e) => e as String).toList();
@@ -173,5 +233,14 @@ class JobDetail {
         isFeatured: json["is_featured"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
+        opportunityType: json["opportunity_type"] as String? ?? "JOB",
+        availability: json["availability"] as String? ?? "ACTIVE",
+        isOfficialSource: json["is_official_source"] as bool? ?? false,
+        lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
+        educationRequirements: _stringList(json["education_requirements"]),
+        experienceRequirements: _stringList(json["experience_requirements"]),
+        programDuration: json["program_duration"] as String?,
+        programStartDate: json["program_start_date"] != null ? DateTime.parse(json["program_start_date"] as String) : null,
+        eligibility: (json["eligibility_json"] as Map<String, dynamic>?) ?? const {},
       );
 }

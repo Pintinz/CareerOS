@@ -51,6 +51,11 @@ final _latestIntelligenceProvider = FutureProvider.autoDispose<List<Intelligence
   return (await ref.watch(intelligenceRepositoryProvider).list()).items;
 });
 
+/// Published updates from companies the user follows — empty (and hidden) when they follow none.
+final _followedUpdatesProvider = FutureProvider.autoDispose<List<IntelligenceCard>>((ref) async {
+  return (await ref.watch(intelligenceRepositoryProvider).list(followedOnly: true)).items;
+});
+
 const _interviewStages = {
   ApplicationStage.interview,
   ApplicationStage.finalInterview,
@@ -76,6 +81,7 @@ class HomeTab extends ConsumerWidget {
     ref.invalidate(_latestJobsProvider);
     ref.invalidate(_scholarshipsProvider);
     ref.invalidate(_latestIntelligenceProvider);
+    ref.invalidate(_followedUpdatesProvider);
     await ref.read(applicationListProvider.notifier).refresh();
   }
 
@@ -919,20 +925,28 @@ class _IntelligenceSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final posts = ref.watch(_latestIntelligenceProvider).valueOrNull ?? const <IntelligenceCard>[];
-    if (posts.isEmpty) return const SizedBox.shrink();
+    final followed = (ref.watch(_followedUpdatesProvider).valueOrNull ?? const <IntelligenceCard>[]).take(3).toList();
+    final followedIds = {for (final post in followed) post.id};
+    final latest = (ref.watch(_latestIntelligenceProvider).valueOrNull ?? const <IntelligenceCard>[])
+        .where((post) => !followedIds.contains(post.id))
+        .take(3)
+        .toList();
+    if (followed.isEmpty && latest.isEmpty) return const SizedBox.shrink();
 
-    return _Section(
-      title: "Company intelligence",
-      onSeeAll: onSeeAll,
-      child: Column(
-        children: [
-          for (final (i, post) in posts.take(3).indexed) ...[
-            if (i > 0) Gap.sm,
-            IntelligenceCardTile(post: post, showSummary: false),
+    Widget list(List<IntelligenceCard> posts) => Column(
+          children: [
+            for (final (i, post) in posts.indexed) ...[
+              if (i > 0) Gap.sm,
+              IntelligenceCardTile(post: post, showSummary: false),
+            ],
           ],
-        ],
-      ),
+        );
+
+    return Column(
+      children: [
+        if (followed.isNotEmpty) _Section(title: "From companies you follow", onSeeAll: onSeeAll, child: list(followed)),
+        if (latest.isNotEmpty) _Section(title: "Company intelligence", onSeeAll: onSeeAll, child: list(latest)),
+      ],
     );
   }
 }

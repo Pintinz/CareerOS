@@ -22,6 +22,7 @@
 | `CareerListGroup`, `CareerListRow` | `career_list.dart` | Settings/profile/secondary navigation rows in one surface |
 | `IconTile` | `icon_tile.dart` | Tinted icon square/circle |
 | `CareerNavigationBar` | `career_navigation_bar.dart` | Five-hub bottom nav; labels scale down instead of wrapping |
+| `OpportunityAvailability`, `AvailabilityNotice`, `SourceProvenance`, `isStatedValue` | `opportunity_availability.dart` | Listing state from the backend (ACTIVE/EXPIRED/CLOSED/UNAVAILABLE): notice above the title, never an Apply button unless active; quiet "Official source · Last verified" line; hide UNSPECIFIED enum facts |
 | `AppTone` | `../design/app_tone.dart` | Semantic color resolution (`color`, `tint`, `onTint` for readable text on tints) |
 
 Domain cards live with their feature but are composed from these primitives, one implementation
@@ -45,6 +46,15 @@ quick actions (max 4: Find Opportunities, Analyze CV, Prepare, Track Application
 progress (checklist from real account state; hides when complete) → latest jobs carousel →
 scholarships closing soon → company intelligence (3) → nothing else. No endless feed; every
 section has "See all" into its hub. Readiness scores appear only when the backend computes one.
+
+## Discovered content (DISCOVERY_ENGINE.md)
+Feeds only receive listings that are active at their source. Detail screens can still be opened from
+Saved items and applications after a listing expires, closes or disappears: show `AvailabilityNotice`,
+replace Apply with "View source" (expired/closed) or a disabled "No longer accepting applications"
+(unavailable), and hide the deadline for unavailable listings. Facts the source didn't state
+(`UNSPECIFIED` work mode, employment type, funding) are omitted — never shown as a label. Graduate
+programmes and internships are real opportunity types (tabs + tags); programme facts appear only
+when stated. Never surface research-engine internals (trust scores, confidence, evidence) to users.
 
 ## Feeds (jobs / scholarships / intelligence)
 Search field at top → horizontally scrolling filter chips → list. Card hierarchy for jobs:

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugify import slugify
 from app.models.company import Company
-from app.models.job import ContentStatus, Job, SavedJob, SourceState
+from app.models.job import ContentStatus, EmploymentType, Job, OpportunityType, SavedJob, SourceState
 
 
 class JobRepository:
@@ -96,7 +96,10 @@ class JobRepository:
             filters.append(Job.is_featured.is_(is_featured))
         if company_id:
             filters.append(Job.company_id == company_id)
-        if opportunity_type:
+        if opportunity_type == OpportunityType.INTERNSHIP or opportunity_type == "INTERNSHIP":
+            # Manually authored internships predate opportunity_type and carry only the employment type.
+            filters.append(or_(Job.opportunity_type == OpportunityType.INTERNSHIP, Job.employment_type == EmploymentType.INTERNSHIP))
+        elif opportunity_type:
             filters.append(Job.opportunity_type == opportunity_type)
         if posted_within_days:
             filters.append(Job.published_at >= now - timedelta(days=posted_within_days))

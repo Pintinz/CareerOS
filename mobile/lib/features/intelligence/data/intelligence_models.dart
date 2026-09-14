@@ -51,6 +51,7 @@ class IntelligenceDetail {
     this.relevantRoles,
     this.relevantSkills,
     this.sourceUrl,
+    this.sourceName,
     this.publishedAt,
     required this.isVerified,
     this.isDemo = false,
@@ -69,6 +70,9 @@ class IntelligenceDetail {
   final List<String>? relevantRoles;
   final List<String>? relevantSkills;
   final String? sourceUrl;
+
+  /// The publisher named by the source (e.g. the company newsroom), when recorded.
+  final String? sourceName;
   final DateTime? publishedAt;
   final bool isVerified;
   final bool isDemo;
@@ -87,6 +91,7 @@ class IntelligenceDetail {
         relevantRoles: (json["relevant_roles"] as List?)?.map((e) => e as String).toList(),
         relevantSkills: (json["relevant_skills"] as List?)?.map((e) => e as String).toList(),
         sourceUrl: json["source_url"] as String?,
+        sourceName: json["source_name"] as String?,
         publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
         isVerified: json["is_verified"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,

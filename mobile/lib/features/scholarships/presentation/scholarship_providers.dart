@@ -95,21 +95,8 @@ class ScholarshipListController extends Notifier<ScholarshipListState> {
     final index = state.items.indexWhere((s) => s.id == scholarshipId);
     if (index == -1) return;
     final item = state.items[index];
-    final updated = ScholarshipCard(
-      id: item.id,
-      slug: item.slug,
-      name: item.name,
-      organization: item.organization,
-      country: item.country,
-      degreeLevels: item.degreeLevels,
-      fundingType: item.fundingType,
-      applicationDeadline: item.applicationDeadline,
-      thumbnailUrl: item.thumbnailUrl,
-      isVerified: item.isVerified,
-      isFeatured: item.isFeatured,
-      isSaved: !item.isSaved,
-      isDemo: item.isDemo,
-    );
+    // copyWith keeps every field (demo flag, availability, award type) — only the save state flips.
+    final updated = item.copyWith(isSaved: !item.isSaved);
     final newItems = [...state.items];
     newItems[index] = updated;
     state = state.copyWith(items: newItems);

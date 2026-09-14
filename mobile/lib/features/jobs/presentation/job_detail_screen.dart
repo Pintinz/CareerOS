@@ -61,6 +61,8 @@ class _JobDetailView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final saving = ref.watch(_jobSaveInFlightProvider(job.id));
     final hasApplyLink = job.applicationUrl != null && job.applicationUrl!.isNotEmpty;
+    final availability = OpportunityAvailability.fromApi(job.availability);
+    final sourceLink = job.sourceUrl ?? job.applicationUrl;
 
     return DetailScaffold(
       title: job.title,
@@ -90,9 +92,14 @@ class _JobDetailView extends ConsumerWidget {
           isLoading: saving,
           onPressed: () => _toggleSave(ref),
         ),
-        primary: hasApplyLink
-            ? PrimaryButton(label: "Apply", icon: AppIcons.external, onPressed: () => openExternalUrl(context, job.applicationUrl))
-            : PrimaryButton(label: "How to Apply", onPressed: () => tabController.animateTo(0)),
+        // Never an Apply button for a listing that is expired, closed or gone at its source.
+        primary: !availability.isActive
+            ? (availability.sourceStillMeaningful && sourceLink != null
+                ? AppOutlineButton(label: "View source", icon: AppIcons.external, onPressed: () => openExternalUrl(context, sourceLink))
+                : const PrimaryButton(label: "No longer accepting applications", onPressed: null))
+            : hasApplyLink
+                ? PrimaryButton(label: "Apply", icon: AppIcons.external, onPressed: () => openExternalUrl(context, job.applicationUrl))
+                : PrimaryButton(label: "How to Apply", onPressed: () => tabController.animateTo(0)),
       ),
     );
   }
@@ -137,9 +144,11 @@ class _JobHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final deadline = job.applicationDeadline;
+    final availability = OpportunityAvailability.fromApi(job.availability);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (!availability.isActive) ...[AvailabilityNotice(availability: availability), Gap.sm],
         Text(job.title, style: context.text.headlineSmall),
         const SizedBox(height: 2),
         Row(
@@ -156,9 +165,11 @@ class _JobHeader extends StatelessWidget {
           spacing: AppSpacing.xs,
           runSpacing: AppSpacing.xs,
           children: [
+            if (job.opportunityType == "GRADUATE_PROGRAM") const TagChip(label: "Graduate programme", tone: AppTone.purple),
+            if (job.opportunityType == "INTERNSHIP" && job.employmentType != "INTERNSHIP") const TagChip(label: "Internship", tone: AppTone.info),
             if (job.location != null) TagChip(label: job.location!, icon: AppIcons.location),
-            TagChip(label: humanizeEnum(job.employmentType)),
-            TagChip(label: humanizeEnum(job.workMode)),
+            if (isStatedValue(job.employmentType)) TagChip(label: humanizeEnum(job.employmentType)),
+            if (isStatedValue(job.workMode)) TagChip(label: humanizeEnum(job.workMode)),
             if (job.experienceLevel != null) TagChip(label: humanizeEnum(job.experienceLevel!)),
             if (job.isDemo) const TagChip(label: "DEMO"),
           ],
@@ -170,14 +181,19 @@ class _JobHeader extends StatelessWidget {
           children: [
             if (job.publishedAt != null)
               _MetaText(icon: AppIcons.time, text: "Posted ${DateLabels.published(job.publishedAt!).toLowerCase()}"),
-            if (deadline != null)
+            // A deadline is only meaningful while the listing exists at its source.
+            if (deadline != null && (availability.isActive || availability == OpportunityAvailability.expired))
               _MetaText(
                 icon: AppIcons.deadline,
                 text: DateLabels.deadline(deadline),
-                color: DateLabels.deadlineTone(deadline).onTint(context),
+                color: availability.isActive ? DateLabels.deadlineTone(deadline).onTint(context) : null,
               ),
           ],
         ),
+        if (job.isOfficialSource) ...[
+          Gap.xs,
+          SourceProvenance(isOfficialSource: job.isOfficialSource, lastVerifiedAt: job.lastVerifiedAt),
+        ],
         Gap.md,
         Row(
           children: [
@@ -243,6 +259,19 @@ class _OverviewTab extends StatelessWidget {
     return "$currency $range$period".trim();
   }
 
+  bool get _hasProgrammeFacts => job.programDuration != null || job.programStartDate != null || _eligibilityFacts.isNotEmpty;
+
+  /// Eligibility exactly as the source states it — shown as text, never scored against the user.
+  List<(String, String)> get _eligibilityFacts {
+    String? join(dynamic value) => value is List && value.isNotEmpty ? value.join(", ") : (value is String && value.isNotEmpty ? value : null);
+    return [
+      if (join(job.eligibility["eligible_degrees"]) case final degrees?) ("Eligible degrees", degrees),
+      if (join(job.eligibility["eligible_fields"]) case final fields?) ("Fields", fields),
+      if (join(job.eligibility["graduation_year_requirements"]) case final years?) ("Graduation year", years),
+      if (join(job.eligibility["age_requirements"]) case final age?) ("Age", age),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasHowToApply = job.applicationInstructions != null || job.applicationEmail != null;
@@ -273,6 +302,19 @@ class _OverviewTab extends StatelessWidget {
               ],
             ),
           ),
+        if (_hasProgrammeFacts)
+          DetailSection(
+            title: "Programme details",
+            icon: AppIcons.graduateProgram,
+            child: Column(
+              children: [
+                if (job.programDuration != null) FactRow(icon: AppIcons.time, label: "Duration", value: job.programDuration!),
+                if (job.programStartDate != null)
+                  FactRow(icon: AppIcons.deadline, label: "Starts", value: DateLabels.shortDate(job.programStartDate!)),
+                for (final entry in _eligibilityFacts) FactRow(icon: Icons.fact_check_outlined, label: entry.$1, value: entry.$2),
+              ],
+            ),
+          ),
         if (job.responsibilities?.isNotEmpty ?? false)
           DetailSection(title: "Responsibilities", child: BulletList(items: job.responsibilities!)),
         if (hasHowToApply)
@@ -297,11 +339,11 @@ class _OverviewTab extends StatelessWidget {
             title: "No description provided",
             message: "The employer hasn't shared more detail yet. Check the official listing when you apply.",
           ),
-        if (job.sourceUrl != null)
+        if (job.sourceUrl != null && OpportunityAvailability.fromApi(job.availability).sourceStillMeaningful)
           TextButton.icon(
             onPressed: () => openExternalUrl(context, job.sourceUrl),
             icon: const Icon(AppIcons.external, size: 18),
-            label: const Text("View original listing"),
+            label: Text(job.isOfficialSource ? "View official listing" : "View original listing"),
           ),
       ],
     );
@@ -315,8 +357,11 @@ class _RequirementsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasContent =
-        (job.requirements?.isNotEmpty ?? false) || (job.preferredSkills?.isNotEmpty ?? false) || (job.benefits?.isNotEmpty ?? false);
+    final hasContent = (job.requirements?.isNotEmpty ?? false) ||
+        (job.preferredSkills?.isNotEmpty ?? false) ||
+        (job.benefits?.isNotEmpty ?? false) ||
+        (job.educationRequirements?.isNotEmpty ?? false) ||
+        (job.experienceRequirements?.isNotEmpty ?? false);
 
     if (!hasContent) {
       return const EmptyState(
@@ -331,6 +376,10 @@ class _RequirementsTab extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (job.requirements?.isNotEmpty ?? false) DetailSection(title: "Requirements", child: BulletList(items: job.requirements!)),
+        if (job.educationRequirements?.isNotEmpty ?? false)
+          DetailSection(title: "Education", child: BulletList(items: job.educationRequirements!)),
+        if (job.experienceRequirements?.isNotEmpty ?? false)
+          DetailSection(title: "Experience", child: BulletList(items: job.experienceRequirements!)),
         if (job.preferredSkills?.isNotEmpty ?? false)
           DetailSection(
             title: "Preferred skills",

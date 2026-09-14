@@ -13,6 +13,9 @@ class ScholarshipCard {
     required this.isFeatured,
     required this.isSaved,
     this.isDemo = false,
+    this.awardType = "SCHOLARSHIP",
+    this.availability = "ACTIVE",
+    this.isOfficialSource = false,
   });
 
   final String id;
@@ -29,6 +32,11 @@ class ScholarshipCard {
   final bool isSaved;
   final bool isDemo;
 
+  /// SCHOLARSHIP | FELLOWSHIP | GRANT
+  final String awardType;
+  final String availability;
+  final bool isOfficialSource;
+
   factory ScholarshipCard.fromJson(Map<String, dynamic> json) => ScholarshipCard(
         id: json["id"] as String,
         slug: json["slug"] as String,
@@ -44,6 +52,28 @@ class ScholarshipCard {
         isFeatured: json["is_featured"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,
+        awardType: json["award_type"] as String? ?? "SCHOLARSHIP",
+        availability: json["availability"] as String? ?? "ACTIVE",
+        isOfficialSource: json["is_official_source"] as bool? ?? false,
+      );
+
+  ScholarshipCard copyWith({bool? isSaved}) => ScholarshipCard(
+        id: id,
+        slug: slug,
+        name: name,
+        organization: organization,
+        country: country,
+        degreeLevels: degreeLevels,
+        fundingType: fundingType,
+        applicationDeadline: applicationDeadline,
+        thumbnailUrl: thumbnailUrl,
+        isVerified: isVerified,
+        isFeatured: isFeatured,
+        isSaved: isSaved ?? this.isSaved,
+        isDemo: isDemo,
+        awardType: awardType,
+        availability: availability,
+        isOfficialSource: isOfficialSource,
       );
 }
 
@@ -77,6 +107,12 @@ class ScholarshipDetail {
     this.isDemo = false,
     required this.isFeatured,
     required this.isSaved,
+    this.awardType = "SCHOLARSHIP",
+    this.availability = "ACTIVE",
+    this.isOfficialSource = false,
+    this.lastVerifiedAt,
+    this.openingDate,
+    this.sourceUrl,
   });
 
   final String id;
@@ -107,6 +143,12 @@ class ScholarshipDetail {
   final bool isDemo;
   final bool isFeatured;
   final bool isSaved;
+  final String awardType;
+  final String availability;
+  final bool isOfficialSource;
+  final DateTime? lastVerifiedAt;
+  final DateTime? openingDate;
+  final String? sourceUrl;
 
   static List<String>? _stringList(dynamic value) =>
       value == null ? null : (value as List).map((e) => e as String).toList();
@@ -141,5 +183,11 @@ class ScholarshipDetail {
         isDemo: json["is_demo"] as bool? ?? false,
         isFeatured: json["is_featured"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
+        awardType: json["award_type"] as String? ?? "SCHOLARSHIP",
+        availability: json["availability"] as String? ?? "ACTIVE",
+        isOfficialSource: json["is_official_source"] as bool? ?? false,
+        lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
+        openingDate: json["opening_date"] != null ? DateTime.parse(json["opening_date"] as String) : null,
+        sourceUrl: json["source_url"] as String?,
       );
 }

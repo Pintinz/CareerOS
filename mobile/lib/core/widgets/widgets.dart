@@ -17,6 +17,7 @@ export "feed_toolbar.dart";
 export "icon_tile.dart";
 export "insight_card.dart";
 export "network_image.dart";
+export "opportunity_availability.dart";
 export "section_header.dart";
 export "stat_card.dart";
 export "state_views.dart";

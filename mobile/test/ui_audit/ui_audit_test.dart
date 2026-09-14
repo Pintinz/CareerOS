@@ -39,6 +39,7 @@ import 'package:careeros/features/jobs/data/job_models.dart';
 import 'package:careeros/features/jobs/data/job_repository.dart';
 import 'package:careeros/features/jobs/presentation/job_detail_screen.dart';
 import 'package:careeros/features/jobs/presentation/job_providers.dart';
+import 'package:careeros/features/jobs/presentation/job_list_tab.dart';
 import 'package:careeros/features/onboarding/presentation/onboarding_illustrations.dart';
 import 'package:careeros/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:careeros/features/onboarding/presentation/welcome_screen.dart';
@@ -148,6 +149,39 @@ JobDetail _jobDetail() => JobDetail(
       isSaved: false,
     );
 
+/// A graduate programme whose official listing disappeared: exercises programme facts, provenance
+/// and the "Listing unavailable" state (no Apply button).
+JobDetail _removedProgrammeDetail() => JobDetail(
+      id: 'job-2',
+      slug: 'graduate-programme-removed',
+      title: 'Graduate Engineer Trainee Programme 2027',
+      company: _jobDetail().company,
+      location: 'Port Harcourt, Nigeria',
+      employmentType: 'UNSPECIFIED',
+      workMode: 'UNSPECIFIED',
+      description: 'A two-year rotational programme across operations and maintenance.',
+      sourceType: 'WORKDAY',
+      sourceUrl: 'https://example.com/programme',
+      applicationUrl: 'https://example.com/programme/apply',
+      publishedAt: _now.subtract(const Duration(days: 20)),
+      applicationDeadline: _now.add(const Duration(days: 10)),
+      isVerified: true,
+      isFeatured: false,
+      isDemo: true,
+      isSaved: true,
+      opportunityType: 'GRADUATE_PROGRAM',
+      availability: 'UNAVAILABLE',
+      isOfficialSource: true,
+      lastVerifiedAt: _now.subtract(const Duration(days: 1)),
+      programDuration: '24 months',
+      programStartDate: DateTime(2027, 2, 1),
+      eligibility: const {
+        'eligible_degrees': ['B.Eng', 'B.Sc'],
+        'eligible_fields': ['Mechanical Engineering', 'Chemical Engineering'],
+        'graduation_year_requirements': ['2024', '2025', '2026'],
+      },
+    );
+
 List<ScholarshipCard> _scholarships() => [
       ScholarshipCard(
         id: 's1',
@@ -243,7 +277,8 @@ class _JobRepo extends JobRepository {
   Future<({List<JobCard> items, int total})> list({int page = 1, JobFilters filters = const JobFilters()}) async =>
       (items: _jobs(), total: 2);
   @override
-  Future<JobDetail> getByIdOrSlug(String idOrSlug) async => _jobDetail();
+  Future<JobDetail> getByIdOrSlug(String idOrSlug) async =>
+      idOrSlug == 'graduate-programme-removed' ? _removedProgrammeDetail() : _jobDetail();
   @override
   Future<({List<JobCard> items, int total})> listByCompany(String companyId, {int page = 1}) async => (items: _jobs(), total: 2);
   @override
@@ -268,7 +303,8 @@ class _IntelligenceRepo extends IntelligenceRepository {
     String? category,
     bool followedOnly = false,
   }) async =>
-      (items: _posts(), total: 1);
+      // The demo user follows no companies.
+      followedOnly ? (items: <IntelligenceCard>[], total: 0) : (items: _posts(), total: 1);
 }
 
 class _ProfileRepo extends ProfileRepository {
@@ -383,6 +419,8 @@ final _screens = <_Screen>[
   _Screen('04_home', () => const HomeShell()),
   _Screen('05_opportunities', () => const Scaffold(body: SafeArea(child: OpportunitiesTab()))),
   _Screen('06_job_detail', () => const JobDetailScreen(idOrSlug: 'process-technician')),
+  _Screen('06b_job_detail_unavailable_programme', () => const JobDetailScreen(idOrSlug: 'graduate-programme-removed')),
+  _Screen('06c_graduate_programmes_feed', () => const Scaffold(body: SafeArea(child: JobListTab(feed: JobFeed.graduatePrograms)))),
   _Screen('07_scholarship_detail', () => const ScholarshipDetailScreen(idOrSlug: 'global-masters')),
   _Screen('08_intelligence', () => const Scaffold(body: SafeArea(child: IntelligenceFeedTab()))),
   _Screen('09_applications', () => const ApplicationListScreen()),

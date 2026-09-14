@@ -27,13 +27,16 @@ class JobCardTile extends StatelessWidget {
 
   String get _meta {
     final location = job.location?.trim() ?? "";
-    final workMode = humanizeEnum(job.workMode);
+    // A work mode the source didn't state is left out rather than guessed.
+    final workMode = isStatedValue(job.workMode) ? humanizeEnum(job.workMode) : "";
     return [
       if (location.isNotEmpty) location,
       // Avoid "Remote • Remote" when the listing's location already states the work mode.
-      if (location.toLowerCase() != workMode.toLowerCase()) workMode,
+      if (workMode.isNotEmpty && location.toLowerCase() != workMode.toLowerCase()) workMode,
     ].join(" • ");
   }
+
+  OpportunityAvailability get _availability => OpportunityAvailability.fromApi(job.availability);
 
   @override
   Widget build(BuildContext context) {
@@ -44,9 +47,15 @@ class JobCardTile extends StatelessWidget {
         spacing: 6,
         runSpacing: 6,
         children: [
-          TagChip(label: humanizeEnum(job.employmentType)),
+          // Saved items and history can show listings that are no longer open.
+          if (!_availability.isActive) TagChip(label: _availability.shortLabel, tone: _availability.tone),
+          if (job.opportunityType == "GRADUATE_PROGRAM")
+            const TagChip(label: "Graduate programme", tone: AppTone.purple)
+          else if (job.opportunityType == "INTERNSHIP" && job.employmentType != "INTERNSHIP")
+            const TagChip(label: "Internship", tone: AppTone.info),
+          if (isStatedValue(job.employmentType)) TagChip(label: humanizeEnum(job.employmentType)),
           if (job.experienceLevel != null) TagChip(label: humanizeEnum(job.experienceLevel!)),
-          if (job.applicationDeadline != null && DateLabels.daysUntil(job.applicationDeadline!) >= 0 && DateLabels.daysUntil(job.applicationDeadline!) <= 14)
+          if (_availability.isActive && job.applicationDeadline != null && DateLabels.daysUntil(job.applicationDeadline!) >= 0 && DateLabels.daysUntil(job.applicationDeadline!) <= 14)
             TagChip(
               label: DateLabels.deadline(job.applicationDeadline!),
               icon: AppIcons.deadline,

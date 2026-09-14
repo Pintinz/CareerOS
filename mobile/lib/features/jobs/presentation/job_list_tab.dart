@@ -19,7 +19,7 @@ const _employmentTypes = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP", "T
 const _workModes = ["REMOTE", "HYBRID", "ON_SITE"];
 const _experienceLevels = ["ENTRY", "JUNIOR", "MID", "SENIOR", "LEAD", "EXECUTIVE"];
 
-/// A job-backed Opportunities feed (Jobs, Internships or Entry Level — see [JobFeed]).
+/// A job-backed Opportunities feed (Jobs, Internships or Graduate Programs — see [JobFeed]).
 class JobListTab extends ConsumerStatefulWidget {
   const JobListTab({super.key, this.feed = JobFeed.all});
 
@@ -61,7 +61,7 @@ class _JobListTabState extends ConsumerState<JobListTab> with AutomaticKeepAlive
   String get _searchHint => switch (widget.feed) {
         JobFeed.all => "Search roles, companies or skills",
         JobFeed.internships => "Search internships",
-        JobFeed.entryLevel => "Search entry-level roles",
+        JobFeed.graduatePrograms => "Search graduate programmes",
       };
 
   void _openFilters() {
@@ -90,7 +90,14 @@ class _JobListTabState extends ConsumerState<JobListTab> with AutomaticKeepAlive
                   labelFor: humanizeEnum,
                   onChanged: (v) => update(filters.copyWith(workMode: v)),
                 ),
-                if (widget.feed != JobFeed.internships)
+                FilterOptionGroup(
+                  title: "Date posted",
+                  options: const ["1", "7", "30"],
+                  selected: filters.postedWithinDays,
+                  labelFor: (v) => switch (v) { "1" => "Last 24 hours", "7" => "Last 7 days", _ => "Last 30 days" },
+                  onChanged: (v) => update(filters.copyWith(postedWithinDays: v)),
+                ),
+                if (widget.feed == JobFeed.all)
                   FilterOptionGroup(
                     title: "Employment type",
                     options: _employmentTypes,
@@ -98,7 +105,7 @@ class _JobListTabState extends ConsumerState<JobListTab> with AutomaticKeepAlive
                     labelFor: humanizeEnum,
                     onChanged: (v) => update(filters.copyWith(employmentType: v)),
                   ),
-                if (widget.feed != JobFeed.entryLevel)
+                if (widget.feed != JobFeed.graduatePrograms)
                   FilterOptionGroup(
                     title: "Experience level",
                     options: _experienceLevels,
@@ -209,11 +216,15 @@ class _JobListBody extends ConsumerWidget {
                     onAction: onClearFilters,
                   )
                 : EmptyState(
-                    icon: feed == JobFeed.internships ? AppIcons.internship : AppIcons.job,
+                    icon: switch (feed) {
+                      JobFeed.internships => AppIcons.internship,
+                      JobFeed.graduatePrograms => AppIcons.graduateProgram,
+                      JobFeed.all => AppIcons.job,
+                    },
                     title: switch (feed) {
                       JobFeed.all => "No jobs published yet",
                       JobFeed.internships => "No internships right now",
-                      JobFeed.entryLevel => "No entry-level roles right now",
+                      JobFeed.graduatePrograms => "No graduate programmes right now",
                     },
                     message: "New opportunities appear here as soon as they're published. Pull down to refresh.",
                   ),

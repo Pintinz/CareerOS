@@ -19,6 +19,7 @@ class ScholarshipCardTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final deadline = scholarship.applicationDeadline;
     final fullyFunded = scholarship.fundingType == "FULLY_FUNDED";
+    final availability = OpportunityAvailability.fromApi(scholarship.availability);
 
     return CareerCard(
       onTap: onTap,
@@ -59,12 +60,16 @@ class ScholarshipCardTile extends StatelessWidget {
                   spacing: 6,
                   runSpacing: 6,
                   children: [
-                    TagChip(label: humanizeEnum(scholarship.fundingType), tone: fullyFunded ? AppTone.success : null),
+                    if (!availability.isActive) TagChip(label: availability.shortLabel, tone: availability.tone),
+                    if (scholarship.awardType == "FELLOWSHIP") const TagChip(label: "Fellowship", tone: AppTone.purple),
+                    // Funding the provider didn't state is never labelled.
+                    if (isStatedValue(scholarship.fundingType))
+                      TagChip(label: humanizeEnum(scholarship.fundingType), tone: fullyFunded ? AppTone.success : null),
                     for (final level in scholarship.degreeLevels ?? const <String>[]) TagChip(label: humanizeEnum(level)),
                     if (scholarship.isDemo) const TagChip(label: "DEMO"),
                   ],
                 ),
-                if (deadline != null) ...[
+                if (deadline != null && availability.isActive) ...[
                   Gap.sm,
                   Row(
                     children: [
