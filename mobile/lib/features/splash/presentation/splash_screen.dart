@@ -32,14 +32,15 @@ class SplashScreen extends ConsumerWidget {
           child: Column(
             children: [
               const Spacer(flex: 5),
-              const CareerOSMark(size: 88, onDark: true),
-              Gap.lg,
-              const CareerOSWordmark(fontSize: 34, onDark: true),
-              Gap.sm,
+              // Stacked primary logo, proportioned like the brand board.
+              const CareerOSMark(size: 128, onDark: true, decorative: true),
+              Gap.xs,
+              const CareerOSWordmark(height: 34, onDark: true),
+              Gap.md,
               Text(
                 "Opportunities Today.\nA Brighter You Tomorrow.",
                 textAlign: TextAlign.center,
-                style: context.text.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.72)),
+                style: context.text.bodyMedium?.copyWith(color: Colors.white.withValues(alpha: 0.72), letterSpacing: 0.6),
               ),
               const Spacer(flex: 6),
               SizedBox.square(

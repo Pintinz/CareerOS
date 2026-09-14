@@ -4,7 +4,7 @@ The admin is an **operational tool** that shares CareerOS identity. Desktop info
 do not copy mobile cards onto desktop.
 
 ## Shell
-- Left sidebar, deep navy `#071A38`, 256 px, fixed. Top: `[pathway mark] CareerOS Admin`
+- Left sidebar, deep navy `#071A38`, 256 px, fixed. Top: `BrandLockup` (on-dark logo + "Admin")
   (white "Career", blue "OS", muted "Admin").
 - Nav items: white/80% text, 20 px outline icons, 40 px rows, 8 px radius. Active item: electric
   blue `#1677FF` background (or 12% blue tint + blue left rail) with white text.
@@ -12,7 +12,7 @@ do not copy mobile cards onto desktop.
   Sources · Discovery · Users · Notifications · Operations · Audit Logs · Settings.
 - Main area: `#F6F8FC` background, page header (title 24 px bold, subtitle, primary action button
   on the right), content max-width none, 32 px padding.
-- Favicon: `admin/app/icon.svg` (pathway mark).
+- Favicon: `admin/app/icon.png` + `apple-icon.png` (app icon tile, generated).
 
 ## Tokens
 Tailwind `careeros` palette in `tailwind.config.ts`: `navy, blue, brightBlue, cyan, bg, surface,

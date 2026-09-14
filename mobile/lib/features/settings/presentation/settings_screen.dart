@@ -137,7 +137,7 @@ class SettingsScreen extends ConsumerWidget {
                   context: context,
                   applicationName: "CareerOS",
                   applicationLegalese: "Opportunities Today. A Brighter You Tomorrow.",
-                  applicationIcon: const Padding(padding: EdgeInsets.all(AppSpacing.md), child: CareerOSMark(size: 56)),
+                  applicationIcon: const Padding(padding: EdgeInsets.all(AppSpacing.md), child: CareerOSMark(size: 56, decorative: true)),
                 ),
               ),
             ],

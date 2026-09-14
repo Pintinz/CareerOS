@@ -1,158 +1,274 @@
-"""Regenerates CareerOS raster brand assets from the pathway-mark geometry.
+"""Regenerates every CareerOS brand raster from the official brand board.
 
-Source of truth for the geometry: .claude/skills/careeros-ui-system/assets/brand-reference/careeros-mark.svg
-(mirrored by CareerOSMark in lib/core/widgets/careeros_logo.dart). Vector surfaces (Android adaptive
-icon foreground, Android splash, admin favicon) are hand-written SVG/VectorDrawable and don't need
-this script; it only produces PNGs that platforms require:
+Source of truth: .claude/skills/careeros-ui-system/assets/brand-reference/careeros-brand-board.png
+(the owner-supplied Logos.png: primary logo, symbol, app icon). The artwork only exists as that
+raster, so this script cuts the symbol and wordmark out of it with clean transparency and derives
+every platform asset from those cut-outs:
 
-  - Android legacy launcher icons (API 24-25): mipmap-*/ic_launcher.png, ic_launcher_round.png
-  - iOS AppIcon set (opaque, full-bleed)
-  - iOS LaunchImage (reversed mark, transparent, on the navy launch screen)
+  - Brand masters (skill brand-reference): symbol / wordmark, full colour and on-dark, app icon
+  - Flutter assets (mobile/assets/brand, 1x/2x/3x): symbol + wordmark, full colour and on-dark
+  - Android: adaptive icon layers + monochrome, legacy launcher icons, launch-window logo
+  - iOS: AppIcon set, LaunchImage
+  - Admin: public/brand cut-outs, app/icon.png, app/apple-icon.png
+
+On-dark variants follow the board's app icon: the navy C becomes white; ribbon, arrow and spark
+keep their blues. If a vector or larger export of the logo becomes available, replace the board
+and the crop boxes below — nothing else needs to change.
 
 Usage (needs Pillow; the backend venv has it):
-    python mobile/tool/generate_brand_assets.py
+    python mobile/tool/generate_brand_assets.py [path/to/board.png]
 """
 
 from __future__ import annotations
 
 import json
 import math
+import sys
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
-ROOT = Path(__file__).resolve().parents[1]
-ANDROID_RES = ROOT / "android/app/src/main/res"
-IOS_ICONS = ROOT / "ios/Runner/Assets.xcassets/AppIcon.appiconset"
-IOS_LAUNCH = ROOT / "ios/Runner/Assets.xcassets/LaunchImage.imageset"
+MOBILE = Path(__file__).resolve().parents[1]
+REPO = MOBILE.parent
+BRAND_REFERENCE = REPO / ".claude/skills/careeros-ui-system/assets/brand-reference"
+DEFAULT_BOARD = BRAND_REFERENCE / "careeros-brand-board.png"
 
-NAVY = (7, 26, 56)
-NAVY_LIGHT = (11, 37, 80)
-BLUE = (22, 119, 255)
-BRIGHT_BLUE = (36, 155, 255)
-CYAN = (19, 189, 235)
+FLUTTER_BRAND = MOBILE / "assets/brand"
+ANDROID_RES = MOBILE / "android/app/src/main/res"
+IOS_ICONS = MOBILE / "ios/Runner/Assets.xcassets/AppIcon.appiconset"
+IOS_LAUNCH = MOBILE / "ios/Runner/Assets.xcassets/LaunchImage.imageset"
+ADMIN = REPO / "admin"
+
+# Tight bounding boxes on the 1448×1086 board (large primary logo).
+SYMBOL_BOX = (497, 74, 1011, 523)
+WORDMARK_BOX = (330, 537, 1117, 665)
+PAD = 4
+
+# Where the C's gradient turns bright blue near its upper terminal (symbol cut-out coordinates,
+# including PAD). Pixels here belong to the C even though their blue channel looks like ribbon.
+C_TERMINAL_ZONE = (289, 24, 394, 109)
+
 WHITE = (255, 255, 255)
+# App icon ground, sampled from the board's app icon: bright blue glow top-right into deep navy.
+ICON_GLOW = (0, 84, 180)
+ICON_MID = (4, 40, 92)
+ICON_DEEP = (3, 23, 60)
 
-SUPERSAMPLE = 4
-
-
-def _gradient(size: tuple[int, int], start: tuple[int, int, int], end: tuple[int, int, int]) -> Image.Image:
-    """Diagonal gradient: `start` at bottom-left, `end` at top-right (matches the SVG x1=0 y1=1 x2=1 y2=0)."""
-    w, h = max(size[0], 1), max(size[1], 1)
-    # linear_gradient is black at the top; rotating 90° counter-clockwise puts black on the left.
-    horizontal = Image.linear_gradient("L").rotate(90, expand=True).resize((w, h))
-    vertical_up = ImageChops.invert(Image.linear_gradient("L").resize((w, h)))
-    t = Image.blend(horizontal, vertical_up, 0.5)
-    return Image.composite(Image.new("RGB", (w, h), end), Image.new("RGB", (w, h), start), t)
+# Icon composition (fractions of the icon edge), matched to the board's app icon.
+ICON_SYMBOL_WIDTH = 0.72
+ICON_SYMBOL_CENTER = (0.51, 0.47)
 
 
-def _cubic(p0, p1, p2, p3, steps=64):
-    pts = []
-    for i in range(steps + 1):
-        t = i / steps
-        mt = 1 - t
-        x = mt**3 * p0[0] + 3 * mt**2 * t * p1[0] + 3 * mt * t**2 * p2[0] + t**3 * p3[0]
-        y = mt**3 * p0[1] + 3 * mt**2 * t * p1[1] + 3 * mt * t**2 * p2[1] + t**3 * p3[1]
-        pts.append((x, y))
-    return pts
+# --------------------------------------------------------------------------------------------------
+# Cut-out
+# --------------------------------------------------------------------------------------------------
 
 
-def _paste_gradient(canvas: Image.Image, mask: Image.Image, colors) -> None:
-    box = mask.getbbox()
-    if not box:
-        return
-    grad = _gradient((box[2] - box[0], box[3] - box[1]), *colors)
-    canvas.paste(grad, box[:2], mask.crop(box))
+def _smoothstep(edge0: float, edge1: float, x: float) -> float:
+    t = min(max((x - edge0) / (edge1 - edge0), 0.0), 1.0)
+    return t * t * (3 - 2 * t)
 
 
-def draw_mark(canvas: Image.Image, origin: tuple[float, float], scale: float, *, reversed_: bool) -> None:
-    """Draws the 64-unit mark onto `canvas` (RGBA) at `origin` with `scale` pixels per unit."""
-    ox, oy = origin
+def cut_out(board: Image.Image, box: tuple[int, int, int, int]) -> Image.Image:
+    """Removes the near-white board background, un-mixing anti-aliased edges.
 
-    def p(x, y):
-        return (ox + x * scale, oy + y * scale)
+    Every colour in the logo has a red channel near 0 while the ground is ~254, so red measures
+    coverage precisely: alpha = (ground - R) / (ground - R_foreground), with R_foreground taken
+    from the darkest red nearby (a min filter), then the foreground colour is recovered from the
+    compositing equation. Faint glow with no real foreground nearby is dropped.
+    """
+    x0, y0, x1, y1 = box[0] - PAD, box[1] - PAD, box[2] + PAD, box[3] + PAD
+    rgb = board.convert("RGB").crop((x0, y0, x1, y1))
+    w, h = rgb.size
 
-    draw = ImageDraw.Draw(canvas)
+    border = [rgb.getpixel((x, 0)) for x in range(w)] + [rgb.getpixel((x, h - 1)) for x in range(w)]
+    ground = tuple(round(sum(p[i] for p in border) / len(border)) for i in range(3))
 
-    # C: arc through (49.5,17.5) -> (53,41), r=22, large-arc, counter-clockwise. Centre solved from
-    # the SVG arc parameters.
-    cx, cy, r = 32.93, 31.98, 22.0
-    stroke = 8.5
-    start_deg = math.degrees(math.atan2(41 - cy, 53 - cx))
-    end_deg = math.degrees(math.atan2(17.5 - cy, 49.5 - cx)) + 360
-    outer = r + stroke / 2
-    c_color = WHITE if reversed_ else NAVY
-    draw.arc([p(cx - outer, cy - outer), p(cx + outer, cy + outer)], start_deg, end_deg, fill=c_color, width=round(stroke * scale))
-    for ex, ey in ((49.5, 17.5), (53, 41)):
-        rr = stroke / 2 * scale
-        x, y = p(ex, ey)
-        draw.ellipse([x - rr, y - rr, x + rr, y + rr], fill=c_color)
-
-    gradient_colors = (BRIGHT_BLUE, CYAN) if reversed_ else (BLUE, CYAN)
-
-    # Pathway
-    path_mask = Image.new("L", canvas.size, 0)
-    pm = ImageDraw.Draw(path_mask)
-    # Stamp discs densely along the curve: a round-capped stroke without the seam artifacts that
-    # ImageDraw.line's per-segment joins leave on tight curves.
-    rr = 6.5 / 2 * scale
-    for x, y in (p(x, y) for x, y in _cubic((17, 44), (27, 44), (34, 38), (44.5, 27.5), steps=int(120 * scale))):
-        pm.ellipse([x - rr, y - rr, x + rr, y + rr], fill=255)
-    _paste_gradient(canvas, path_mask, gradient_colors)
-
-    # Arrowhead (polygon + 2-unit rounded stroke)
-    arrow_mask = Image.new("L", canvas.size, 0)
-    am = ImageDraw.Draw(arrow_mask)
-    tri = [p(57, 15), p(51.6, 32.4), p(39.6, 20.4)]
-    am.polygon(tri, fill=255)
-    am.line(tri + [tri[0]], fill=255, width=round(2 * scale), joint="curve")
-    for x, y in tri:
-        rr = scale
-        am.ellipse([x - rr, y - rr, x + rr, y + rr], fill=255)
-    _paste_gradient(canvas, arrow_mask, gradient_colors)
-
-    # Spark
-    spark = [(58, 4), (59.4, 7.6), (63, 9), (59.4, 10.4), (58, 14), (56.6, 10.4), (53, 9), (56.6, 7.6)]
-    draw.polygon([p(x, y) for x, y in spark], fill=CYAN)
+    near_red = rgb.getchannel("R").filter(ImageFilter.MinFilter(7)).load()
+    src = rgb.load()
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    dst = out.load()
+    for y in range(h):
+        for x in range(w):
+            c = src[x, y]
+            coverage = max(ground[i] - c[i] for i in range(3))
+            if coverage < 4:
+                continue
+            span = ground[0] - near_red[x, y]
+            if coverage >= 150:
+                alpha = 1.0
+            elif span < 120:
+                continue
+            else:
+                alpha = min(max((ground[0] - c[0]) / span, 0.0), 1.0)
+            if alpha < 0.03:
+                continue
+            fg = tuple(
+                round(min(max((c[i] - (1 - alpha) * ground[i]) / alpha, 0), 255)) for i in range(3)
+            )
+            dst[x, y] = (*fg, round(alpha * 255))
+    return out
 
 
-def render_icon(size: int, *, shape: str) -> Image.Image:
-    """shape: 'square' (opaque full-bleed, iOS), 'rounded' (legacy Android), 'circle' (legacy round)."""
-    big = size * SUPERSAMPLE
-    background = _gradient((big, big), NAVY, NAVY_LIGHT).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-    canvas = background.convert("RGBA")
-    # Mark occupies 62.5% of the icon (inside the 66% adaptive safe zone), centred.
-    mark_px = big * 0.625
-    draw_mark(canvas, ((big - mark_px) / 2, (big - mark_px) / 2), mark_px / 64, reversed_=True)
+def on_dark(image: Image.Image, *, ribbon_from: float, ribbon_full: float, keep_zone=None) -> Image.Image:
+    """Navy → white; blues (blue channel ≥ ribbon_full) keep their colour; blends in between.
 
-    if shape != "square":
-        mask = Image.new("L", (big, big), 0)
-        md = ImageDraw.Draw(mask)
-        if shape == "circle":
-            md.ellipse([0, 0, big - 1, big - 1], fill=255)
-        else:
-            md.rounded_rectangle([0, 0, big - 1, big - 1], radius=round(big * 0.22), fill=255)
-        canvas.putalpha(mask)
+    The ribbon's shaded fold inside the C is as dark as the C's brighter end, but far less green
+    (G/B ≈ 0.3 vs ≥ 0.4 across the C), so low G/B also counts as ribbon.
+    """
+    out = image.copy()
+    px = out.load()
+    w, h = out.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            if keep_zone and keep_zone[0] <= x < keep_zone[2] and keep_zone[1] <= y < keep_zone[3]:
+                t = 0.0
+            else:
+                t = _smoothstep(ribbon_from, ribbon_full, b)
+                if b >= 120:
+                    t = max(t, _smoothstep(0.40, 0.34, g / b) * _smoothstep(120, 150, b))
+            px[x, y] = (
+                round(WHITE[0] + (r - WHITE[0]) * t),
+                round(WHITE[1] + (g - WHITE[1]) * t),
+                round(WHITE[2] + (b - WHITE[2]) * t),
+                a,
+            )
+    return out
 
-    image = canvas.resize((size, size), Image.Resampling.LANCZOS)
-    return image.convert("RGB") if shape == "square" else image
+
+def silhouette(image: Image.Image) -> Image.Image:
+    out = Image.new("RGBA", image.size, (*WHITE, 0))
+    out.putalpha(image.getchannel("A"))
+    return out
 
 
-def render_launch_mark(size: int) -> Image.Image:
-    big = size * SUPERSAMPLE
-    canvas = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    draw_mark(canvas, (0, 0), big / 64, reversed_=True)
-    return canvas.resize((size, size), Image.Resampling.LANCZOS)
+def resize(image: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Premultiplied resampling so edges never pick up dark or white fringes."""
+    size = (max(1, round(size[0])), max(1, round(size[1])))
+    scaled = image.convert("RGBa").resize(size, Image.Resampling.LANCZOS).convert("RGBA")
+    if size[0] > image.size[0]:
+        # The board is the only source; soften the upscale softness on the largest icons.
+        rgb = scaled.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
+        rgb.putalpha(scaled.getchannel("A"))
+        scaled = rgb
+    return scaled
+
+
+def fit_width(image: Image.Image, width: float) -> Image.Image:
+    return resize(image, (width, width * image.size[1] / image.size[0]))
+
+
+# --------------------------------------------------------------------------------------------------
+# Icons
+# --------------------------------------------------------------------------------------------------
+
+
+def icon_ground(size: int) -> Image.Image:
+    """The board's app-icon ground: a soft glow from the top-right corner falling into deep navy."""
+    master = 256
+    img = Image.new("RGB", (master, master))
+    px = img.load()
+    for y in range(master):
+        for x in range(master):
+            u, v = x / (master - 1), y / (master - 1)
+            d = math.hypot((1 - u) * 0.85, v)
+            t = _smoothstep(0.0, 1.15, d)
+            if t < 0.45:
+                k = t / 0.45
+                c = [ICON_GLOW[i] + (ICON_MID[i] - ICON_GLOW[i]) * k for i in range(3)]
+            else:
+                k = (t - 0.45) / 0.55
+                c = [ICON_MID[i] + (ICON_DEEP[i] - ICON_MID[i]) * k for i in range(3)]
+            px[x, y] = tuple(round(ch) for ch in c)
+    return img.resize((size, size), Image.Resampling.BICUBIC)
+
+
+def place(canvas: Image.Image, symbol: Image.Image, width: float, center: tuple[float, float]) -> None:
+    mark = fit_width(symbol, width)
+    cx, cy = center[0] * canvas.size[0], center[1] * canvas.size[1]
+    canvas.alpha_composite(mark, (round(cx - mark.size[0] / 2), round(cy - mark.size[1] / 2)))
+
+
+def app_icon(size: int, symbol_on_dark: Image.Image, *, shape: str = "square", symbol_width: float = ICON_SYMBOL_WIDTH) -> Image.Image:
+    """shape: 'square' (opaque, full-bleed: iOS/stores), 'rounded' (legacy Android, admin favicon), 'circle'."""
+    canvas = icon_ground(size).convert("RGBA")
+    place(canvas, symbol_on_dark, size * symbol_width, ICON_SYMBOL_CENTER if shape != "circle" else (0.5, 0.5))
+    if shape == "square":
+        return canvas.convert("RGB")
+    ss = 4
+    mask = Image.new("L", (size * ss, size * ss), 0)
+    draw = ImageDraw.Draw(mask)
+    if shape == "circle":
+        draw.ellipse([0, 0, size * ss - 1, size * ss - 1], fill=255)
+    else:
+        draw.rounded_rectangle([0, 0, size * ss - 1, size * ss - 1], radius=round(size * ss * 0.22), fill=255)
+    canvas.putalpha(mask.resize((size, size), Image.Resampling.LANCZOS))
+    return canvas
+
+
+def save(image: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(path, optimize=True)
+
+
+# --------------------------------------------------------------------------------------------------
+# Outputs
+# --------------------------------------------------------------------------------------------------
 
 
 def main() -> None:
-    densities = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
-    for density, px in densities.items():
-        folder = ANDROID_RES / f"mipmap-{density}"
-        folder.mkdir(parents=True, exist_ok=True)
-        render_icon(px, shape="rounded").save(folder / "ic_launcher.png", optimize=True)
-        render_icon(px, shape="circle").save(folder / "ic_launcher_round.png", optimize=True)
+    board_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_BOARD
+    board = Image.open(board_path)
+    if board.size != (1448, 1086):
+        raise SystemExit(f"Unexpected board size {board.size}; update SYMBOL_BOX / WORDMARK_BOX for the new artwork.")
 
+    symbol = cut_out(board, SYMBOL_BOX)
+    symbol_dark = on_dark(symbol, ribbon_from=150, ribbon_full=185, keep_zone=C_TERMINAL_ZONE)
+    wordmark = cut_out(board, WORDMARK_BOX)
+    wordmark_dark = on_dark(wordmark, ribbon_from=150, ribbon_full=220)
+
+    # Brand masters (native resolution).
+    save(symbol, BRAND_REFERENCE / "careeros-symbol.png")
+    save(symbol_dark, BRAND_REFERENCE / "careeros-symbol-on-dark.png")
+    save(wordmark, BRAND_REFERENCE / "careeros-wordmark.png")
+    save(wordmark_dark, BRAND_REFERENCE / "careeros-wordmark-on-dark.png")
+    save(app_icon(1024, symbol_dark), BRAND_REFERENCE / "careeros-app-icon.png")
+
+    # Flutter: native cut-out is the 3.0x variant.
+    for name, image in {
+        "careeros_symbol.png": symbol,
+        "careeros_symbol_on_dark.png": symbol_dark,
+        "careeros_wordmark.png": wordmark,
+        "careeros_wordmark_on_dark.png": wordmark_dark,
+    }.items():
+        save(image, FLUTTER_BRAND / "3.0x" / name)
+        save(fit_width(image, image.size[0] * 2 / 3), FLUTTER_BRAND / "2.0x" / name)
+        save(fit_width(image, image.size[0] / 3), FLUTTER_BRAND / name)
+
+    # Android. Adaptive icon layers are 108dp; the symbol stays inside the 66dp safe circle.
+    densities = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
+    for density, scale in densities.items():
+        mipmap = ANDROID_RES / f"mipmap-{density}"
+        legacy = round(48 * scale)
+        save(app_icon(legacy, symbol_dark, shape="rounded"), mipmap / "ic_launcher.png")
+        save(app_icon(legacy, symbol_dark, shape="circle", symbol_width=0.62), mipmap / "ic_launcher_round.png")
+
+        layer = round(108 * scale)
+        save(icon_ground(layer), mipmap / "ic_launcher_background.png")
+        foreground = Image.new("RGBA", (layer, layer), (0, 0, 0, 0))
+        place(foreground, symbol_dark, layer * 50 / 108, (0.5, 0.5))
+        save(foreground, mipmap / "ic_launcher_foreground.png")
+        monochrome = Image.new("RGBA", (layer, layer), (0, 0, 0, 0))
+        place(monochrome, silhouette(symbol), layer * 50 / 108, (0.5, 0.5))
+        save(monochrome, mipmap / "ic_launcher_monochrome.png")
+
+        # Launch window (Android 7–11): on-dark symbol, 112dp wide, centred on navy.
+        save(fit_width(symbol_dark, 112 * scale), ANDROID_RES / f"drawable-{density}" / "splash_logo.png")
+
+    # iOS.
     contents = json.loads((IOS_ICONS / "Contents.json").read_text())
     for entry in contents["images"]:
         filename = entry.get("filename")
@@ -160,11 +276,19 @@ def main() -> None:
             continue
         points = float(entry["size"].split("x")[0])
         factor = int(entry["scale"].rstrip("x"))
-        render_icon(round(points * factor), shape="square").save(IOS_ICONS / filename, optimize=True)
-
+        save(app_icon(round(points * factor), symbol_dark), IOS_ICONS / filename)
     for suffix, factor in (("", 1), ("@2x", 2), ("@3x", 3)):
-        render_launch_mark(96 * factor).save(IOS_LAUNCH / f"LaunchImage{suffix}.png", optimize=True)
+        save(fit_width(symbol_dark, 112 * factor), IOS_LAUNCH / f"LaunchImage{suffix}.png")
 
+    # Admin.
+    save(symbol, ADMIN / "public/brand/careeros-symbol.png")
+    save(symbol_dark, ADMIN / "public/brand/careeros-symbol-on-dark.png")
+    save(wordmark, ADMIN / "public/brand/careeros-wordmark.png")
+    save(wordmark_dark, ADMIN / "public/brand/careeros-wordmark-on-dark.png")
+    save(app_icon(512, symbol_dark, shape="rounded"), ADMIN / "app/icon.png")
+    save(app_icon(180, symbol_dark), ADMIN / "app/apple-icon.png")
+
+    print(f"symbol {symbol.size}, wordmark {wordmark.size}")
     print("Brand assets regenerated.")
 
 

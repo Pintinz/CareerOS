@@ -25,7 +25,7 @@ Do **not** take from it (not real in CareerOS today, or forbidden by ux-rules.md
   **CV & Career Tools**.
 - Tools that don't exist yet (cover letter generator, bullet improver, offer comparison, roadmap)
   as active entries.
-- The 3D "C" splash glyph — the brand mark is the pathway C in `../brand-reference/`.
+- The mockup's splash glyph — the official logo is in `../brand-reference/careeros-brand-board.png`.
 
 ## Screenshot QA
 Put emulator/device capture sets here as `qa-YYYY-MM-DD/<screen>.png` with a contact sheet.

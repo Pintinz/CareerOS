@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ system splash: navy ground with the adaptive launcher icon (pathway mark). -->
+    <!-- Android 12+ system splash: navy ground with the adaptive launcher icon (CareerOS symbol). -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">@color/careeros_navy</item>

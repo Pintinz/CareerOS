@@ -38,7 +38,7 @@ class ProScreen extends StatelessWidget {
               children: [
                 const Row(
                   children: [
-                    CareerOSMark(size: 36, onDark: true),
+                    CareerOSMark(size: 36, onDark: true, decorative: true),
                     Gap.sm,
                     Icon(AppIcons.pro, color: Colors.white),
                   ],

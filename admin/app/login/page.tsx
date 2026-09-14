@@ -42,7 +42,7 @@ export default function LoginPage() {
         </div>
         <p className="text-sm text-white/40">Opportunities Today. A Brighter You Tomorrow.</p>
         <div className="pointer-events-none absolute -bottom-24 -right-24 opacity-10" aria-hidden>
-          <BrandMark size={420} onDark />
+          <BrandMark size={420} onDark decorative />
         </div>
       </section>
 

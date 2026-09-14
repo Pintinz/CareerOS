@@ -180,7 +180,7 @@ class _Banner extends StatelessWidget {
       ),
       child: const Align(
         alignment: Alignment(0.85, 0.2),
-        child: Opacity(opacity: 0.16, child: CareerOSMark(size: 120, onDark: true)),
+        child: Opacity(opacity: 0.16, child: CareerOSMark(size: 120, onDark: true, decorative: true)),
       ),
     );
     return ColoredBox(

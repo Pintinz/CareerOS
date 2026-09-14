@@ -74,6 +74,6 @@ void main() {
       ),
     );
 
-    expect(find.text('CareerOS'), findsOneWidget);
+    expect(find.bySemanticsLabel('CareerOS'), findsOneWidget);
   });
 }

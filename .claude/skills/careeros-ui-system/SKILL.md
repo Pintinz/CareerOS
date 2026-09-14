@@ -23,8 +23,10 @@ an ad-driven app.
    button, chip, empty/error/loading state, sheet or dialog. Never create a second version of an
    existing pattern — extend the shared one.
 4. **One primary CTA per screen.** Everything else is secondary (tonal/outline) or tertiary (text).
-5. **Brand = pathway C.** The graduation-cap / award-ribbon identity is retired. Use
-   `CareerOSMark` / `CareerOSLogo` (Flutter) or `assets/brand-reference/careeros-mark.svg`.
+5. **Brand = the official logo** (`assets/brand-reference/careeros-brand-board.png`: navy C, rising
+   ribbon arrow, spark). Use `CareerOSMark` / `CareerOSWordmark` / `CareerOSLogo` (Flutter) or
+   `BrandMark` / `BrandLockup` (admin) — never redraw it or set the wordmark as live text. The
+   graduation-cap / award-ribbon identity is retired.
 6. **Theme-aware.** Mode-dependent colors come from `context.colors` (the `CareerColors` theme
    extension) so light and dark both work. `AppColors.*` is only for brand/semantic constants.
 7. **Ads are always labelled "Advertisement"**, visually distinct from content, and never appear
@@ -65,6 +67,6 @@ Screen quality questions are in `references/ux-rules.md` — go through them bef
 | Admin portal shell, tables, forms, badges, brand | `references/admin-design.md` |
 | Truthfulness, CTA hierarchy, empty/error/loading copy, progressive disclosure, ads, QA checklist | `references/ux-rules.md` |
 
-Brand files: `assets/brand-reference/` (SVG mark, app-icon master). Visual north star:
+Brand files: `assets/brand-reference/` (brand board + generated symbol/wordmark/app-icon masters). Visual north star:
 `assets/ui-reference/careeros-mockup-board.png` — read `assets/ui-reference/README.md` first for what
 to take from it and what is fictional. Screenshot QA captures also belong in `assets/ui-reference/`.
