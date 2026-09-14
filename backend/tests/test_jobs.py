@@ -245,12 +245,18 @@ async def test_expired_job_hidden_from_public_even_if_still_marked_published(
         json={"status": "PUBLISHED", "expires_at": yesterday},
     )
 
-    # Admin never flipped is_active/status — only the expiry date passed. It must still 404
-    # publicly rather than relying on someone remembering to archive it.
+    # Admin never flipped is_active/status — only the expiry date passed. It must not surface as an
+    # active listing, rather than relying on someone remembering to archive it. Since the live
+    # discovery engine (DISCOVERY_ENGINE.md §Expiry) the detail stays reachable for users who saved
+    # or tracked it, marked EXPIRED so the app shows no Apply button — it used to 404.
     public_detail = await client.get(f"/api/v1/jobs/{job_id}")
-    assert public_detail.status_code == 404
+    assert public_detail.status_code == 200
+    assert public_detail.json()["availability"] == "EXPIRED"
     public_list = await client.get("/api/v1/jobs")
     assert public_list.json()["total"] == 0
+    # ...and it can't be newly saved.
+    save = await client.post(f"/api/v1/jobs/{job_id}/save", headers=await _user_headers(client))
+    assert save.status_code == 404
 
 
 async def test_create_job_rejects_unknown_company(client: AsyncClient, db_session: AsyncSession) -> None:

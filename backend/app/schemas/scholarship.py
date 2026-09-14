@@ -2,8 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.job import ContentStatus, SourceType
-from app.models.scholarship import DegreeLevel, FundingType
+from app.models.job import ContentStatus, SourceState, SourceType
+from app.models.scholarship import AwardType, DegreeLevel, FundingType
 from app.schemas.pagination import PaginatedResponse
 
 
@@ -23,6 +23,10 @@ class ScholarshipCardOut(BaseModel):
     is_featured: bool
     is_saved: bool = False
     is_demo: bool = False
+    award_type: AwardType = AwardType.SCHOLARSHIP
+    availability: str = "ACTIVE"
+    is_official_source: bool = False
+    last_verified_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -71,6 +75,12 @@ class ScholarshipDetailOut(BaseModel):
     is_featured: bool
     is_demo: bool
     is_saved: bool = False
+    award_type: AwardType = AwardType.SCHOLARSHIP
+    opening_date: datetime | None = None
+    source_state: SourceState = SourceState.ACTIVE
+    availability: str = "ACTIVE"
+    is_official_source: bool = False
+    last_verified_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -125,6 +135,8 @@ class _ScholarshipWritableFields(BaseModel):
     is_active: bool = True
     is_demo: bool = False
     status: ContentStatus = ContentStatus.DRAFT
+    award_type: AwardType = AwardType.SCHOLARSHIP
+    opening_date: datetime | None = None
 
 
 class ScholarshipCreate(_ScholarshipWritableFields):

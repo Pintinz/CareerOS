@@ -14,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.intelligence_post import IntelligencePost
-from app.models.job import ContentStatus, Job
+from app.models.job import ContentStatus, Job, SourceState
+from app.services import audit_service
 from app.models.scholarship import Scholarship
 
 
@@ -42,24 +43,37 @@ async def publish_scheduled_content(db: AsyncSession) -> int:
 
 
 async def expire_content(db: AsyncSession) -> int:
-    """Jobs use `expires_at`; scholarships use `application_deadline` (they have no separate
-    expiry field — see DATABASE.md). Intelligence posts have no expiry concept (news doesn't
-    "expire" the way a time-bound listing does) and are deliberately excluded."""
+    """Jobs expire at `expires_at` or, when earlier/only one set, at their `application_deadline`;
+    scholarships at `application_deadline`. The row is kept (saved items, applications and CV
+    analyses still reference it) and its `source_state` records why. Intelligence posts have no
+    expiry concept (news doesn't "expire" the way a time-bound listing does)."""
     now = datetime.now(timezone.utc)
     expired = 0
 
-    result = await db.execute(select(Job).where(Job.expires_at.isnot(None)))
+    result = await db.execute(select(Job).where((Job.expires_at.isnot(None)) | (Job.application_deadline.isnot(None))))
     for job in result.scalars().all():
-        if job.status == ContentStatus.EXPIRED or _as_aware_utc(job.expires_at) > now:
+        if job.status in (ContentStatus.EXPIRED, ContentStatus.ARCHIVED):
+            continue
+        if job.application_deadline is not None and _as_aware_utc(job.application_deadline) <= now:
+            state = SourceState.DEADLINE_PASSED
+        elif job.expires_at is not None and _as_aware_utc(job.expires_at) <= now:
+            state = SourceState.EXPIRED
+        else:
             continue
         job.status = ContentStatus.EXPIRED
+        if job.source_state == SourceState.ACTIVE:
+            job.source_state = state
+        audit_service.add(db, admin_id=None, action="content_expired", entity_type="job", entity_id=job.id, metadata={"reason": state.value})
         expired += 1
 
     result = await db.execute(select(Scholarship).where(Scholarship.application_deadline.isnot(None)))
     for scholarship in result.scalars().all():
-        if scholarship.status == ContentStatus.EXPIRED or _as_aware_utc(scholarship.application_deadline) > now:
+        if scholarship.status in (ContentStatus.EXPIRED, ContentStatus.ARCHIVED) or _as_aware_utc(scholarship.application_deadline) > now:
             continue
         scholarship.status = ContentStatus.EXPIRED
+        if scholarship.source_state == SourceState.ACTIVE:
+            scholarship.source_state = SourceState.DEADLINE_PASSED
+        audit_service.add(db, admin_id=None, action="content_expired", entity_type="scholarship", entity_id=scholarship.id, metadata={"reason": "DEADLINE_PASSED"})
         expired += 1
 
     if expired:

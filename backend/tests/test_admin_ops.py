@@ -339,7 +339,8 @@ async def test_discovery_create_draft_never_auto_publishes(client: AsyncClient, 
     assert job_detail.json()["status"] == "DRAFT"  # never PUBLISHED automatically.
 
     item_detail = await client.get(f"/api/v1/admin/discovery/{item_id}", headers=admin_headers)
-    assert item_detail.json()["status"] == "REVIEWED"
+    # Live discovery engine status vocabulary (was "REVIEWED" before the discovery statuses were extended).
+    assert item_detail.json()["status"] == "DRAFT_CREATED"
 
     # Reviewing twice is refused rather than creating a second draft.
     repeat = await client.post(

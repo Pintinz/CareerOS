@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.scholarship import FundingType
+from app.models.scholarship import AwardType, FundingType
 from app.models.user import User
 from app.schemas.scholarship import ScholarshipDetailOut, ScholarshipListResponse
 from app.security.dependencies import get_current_user, get_optional_current_user
@@ -19,6 +19,9 @@ async def list_scholarships(
     country: str | None = None,
     degree_level: str | None = None,
     funding_type: FundingType | None = None,
+    award_type: AwardType | None = None,
+    field_of_study: str | None = Query(default=None, max_length=120),
+    deadline_within_days: int | None = Query(default=None, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
     viewer: User | None = Depends(get_optional_current_user),
 ) -> ScholarshipListResponse:
@@ -30,6 +33,9 @@ async def list_scholarships(
         country=country,
         degree_level=degree_level,
         funding_type=funding_type,
+        award_type=award_type,
+        field_of_study=field_of_study,
+        deadline_within_days=deadline_within_days,
     )
     return ScholarshipListResponse(items=items, page=page, page_size=page_size, total=total)
 

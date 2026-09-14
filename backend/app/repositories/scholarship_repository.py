@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugify import slugify
-from app.models.job import ContentStatus
+from app.models.job import ContentStatus, SourceState
 from app.models.scholarship import SavedScholarship, Scholarship
 
 
@@ -39,8 +41,17 @@ class ScholarshipRepository:
         country: str | None = None,
         degree_level: str | None = None,
         funding_type: str | None = None,
+        award_type: str | None = None,
+        field_of_study: str | None = None,
+        deadline_within_days: int | None = None,
     ) -> tuple[list[Scholarship], int]:
-        base_conditions = [Scholarship.status == ContentStatus.PUBLISHED, Scholarship.is_active.is_(True)]
+        now = datetime.now(timezone.utc)
+        base_conditions = [
+            Scholarship.status == ContentStatus.PUBLISHED,
+            Scholarship.is_active.is_(True),
+            Scholarship.source_state == SourceState.ACTIVE,
+            or_(Scholarship.application_deadline.is_(None), Scholarship.application_deadline > now),
+        ]
 
         query = select(Scholarship)
         count_query = select(func.count()).select_from(Scholarship)
@@ -53,6 +64,8 @@ class ScholarshipRepository:
             condition = or_(
                 func.lower(Scholarship.name).like(pattern),
                 func.lower(Scholarship.organization).like(pattern),
+                func.lower(Scholarship.country).like(pattern),
+                func.lower(cast(Scholarship.fields_of_study, String)).like(pattern),
             )
             query = query.where(condition)
             count_query = count_query.where(condition)
@@ -62,6 +75,17 @@ class ScholarshipRepository:
         if funding_type:
             query = query.where(Scholarship.funding_type == funding_type)
             count_query = count_query.where(Scholarship.funding_type == funding_type)
+        if award_type:
+            query = query.where(Scholarship.award_type == award_type)
+            count_query = count_query.where(Scholarship.award_type == award_type)
+        if field_of_study:
+            condition = func.lower(cast(Scholarship.fields_of_study, String)).like(f"%{field_of_study.lower()}%")
+            query = query.where(condition)
+            count_query = count_query.where(condition)
+        if deadline_within_days:
+            condition = Scholarship.application_deadline <= now + timedelta(days=deadline_within_days)
+            query = query.where(condition)
+            count_query = count_query.where(condition)
         if degree_level:
             # `degree_levels` is a JSON list column. This does a substring match on its text
             # representation (portable across SQLite/Postgres) rather than a real JSON

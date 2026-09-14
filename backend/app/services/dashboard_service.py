@@ -45,7 +45,7 @@ async def get_dashboard(db: AsyncSession) -> dict:
         "outlook_connections": await _count(db, EmailConnection, EmailConnection.provider == EmailProvider.OUTLOOK, EmailConnection.disconnected_at.is_(None)),
         "connections_requiring_reauth": await _count(db, EmailConnection, EmailConnection.status == EmailConnectionStatus.REAUTHORIZATION_REQUIRED),
         "failed_email_syncs": await _count(db, EmailConnection, EmailConnection.status == EmailConnectionStatus.ERROR),
-        "discovery_items_awaiting_review": await _count(db, DiscoveredItem, DiscoveredItem.status == DiscoveredItemStatus.PENDING),
+        "discovery_items_awaiting_review": await _count(db, DiscoveredItem, DiscoveredItem.status.in_((DiscoveredItemStatus.NEW, DiscoveredItemStatus.NEEDS_REVIEW, DiscoveredItemStatus.VERIFIED))),
     }
 
 
@@ -69,7 +69,7 @@ async def get_operations(db: AsyncSession) -> dict:
             "active_sources": await _count(db, ContentSource, ContentSource.is_active.is_(True)),
             "failed_sources": await _count(db, ContentSource, ContentSource.last_error.isnot(None)),
             "discovered_today": await _discovered_today(db),
-            "awaiting_review": await _count(db, DiscoveredItem, DiscoveredItem.status == DiscoveredItemStatus.PENDING),
+            "awaiting_review": await _count(db, DiscoveredItem, DiscoveredItem.status.in_((DiscoveredItemStatus.NEW, DiscoveredItemStatus.NEEDS_REVIEW, DiscoveredItemStatus.VERIFIED))),
         },
         "background_jobs": get_job_run_history(),
     }

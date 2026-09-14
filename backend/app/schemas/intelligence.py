@@ -15,7 +15,7 @@ class IntelligenceCardOut(BaseModel):
     category: IntelligenceCategory
     company: JobCompanySummary | None = None
     thumbnail_url: str | None = None
-    # Short dek for feed cards (Phase UI restructure) — already stored on the post, max 500 chars.
+    # Short dek for feed cards (Phase UI restructure) ï¿½ already stored on the post, max 500 chars.
     summary: str | None = None
     published_at: datetime | None = None
     is_featured: bool
@@ -40,6 +40,8 @@ class IntelligenceDetailOut(BaseModel):
     source_type: SourceType
     source_url: str | None = None
     source_published_at: datetime | None = None
+    source_name: str | None = None
+    last_verified_at: datetime | None = None
     published_at: datetime | None = None
     is_verified: bool
     is_featured: bool

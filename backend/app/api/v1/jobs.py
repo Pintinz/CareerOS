@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.models.job import EmploymentType, ExperienceLevel, WorkMode
+from app.models.job import EmploymentType, ExperienceLevel, OpportunityType, WorkMode
 from app.models.user import User
 from app.schemas.job import JobDetailOut, JobListResponse
 from app.security.dependencies import get_current_user, get_optional_current_user
@@ -24,6 +24,8 @@ async def list_jobs(
     experience_level: ExperienceLevel | None = None,
     is_featured: bool | None = None,
     company_id: str | None = None,
+    opportunity_type: OpportunityType | None = None,
+    posted_within_days: int | None = Query(default=None, ge=1, le=365),
     sort: str = Query(default="newest", pattern="^(newest|recommended|deadline)$"),
     db: AsyncSession = Depends(get_db),
     viewer: User | None = Depends(get_optional_current_user),
@@ -41,6 +43,8 @@ async def list_jobs(
         experience_level=experience_level,
         is_featured=is_featured,
         company_id=company_id,
+        opportunity_type=opportunity_type,
+        posted_within_days=posted_within_days,
         sort=sort,
     )
     return JobListResponse(items=items, page=page, page_size=page_size, total=total)

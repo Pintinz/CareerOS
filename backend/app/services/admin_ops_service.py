@@ -1,43 +1,16 @@
-import re
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.admin_ops import (
-    AdminNotification,
-    ContentSource,
-    DiscoveredItem,
-    DiscoveredItemStatus,
-    DiscoveredItemType,
-    NotificationStatus,
-)
-from app.models.intelligence_post import IntelligenceCategory, IntelligencePost
-from app.models.job import ContentStatus, Job
-from app.models.scholarship import Scholarship
-from app.repositories.admin_ops_repository import (
-    AdminNotificationRepository,
-    AuditLogRepository,
-    ContentSourceRepository,
-    DiscoveredItemRepository,
-)
-from app.repositories.company_repository import CompanyRepository
-from app.repositories.intelligence_repository import IntelligenceRepository
-from app.repositories.job_repository import JobRepository
-from app.repositories.scholarship_repository import ScholarshipRepository
+from app.models.admin_ops import AdminNotification, NotificationStatus
+from app.repositories.admin_ops_repository import AdminNotificationRepository, AuditLogRepository
 from app.repositories.user_repository import UserRepository
-from app.schemas.admin_ops import (
-    AdminNotificationCreate,
-    ContentSourceCreate,
-    ContentSourceUpdate,
-    DiscoveredItemCreate,
-    DiscoveryDraftIn,
-    UserAdminOut,
-)
+from app.schemas.admin_ops import AdminNotificationCreate, UserAdminOut
 
-
-def _normalize_title(title: str) -> str:
-    return re.sub(r"\s+", " ", title.strip().lower())
+# The source registry and discovery queue services live with the discovery engine; re-exported
+# here so existing imports keep working.
+from app.services.discovery.review import ContentSourceService, DiscoveryService  # noqa: F401,E402
 
 
 class AuditLogService:
@@ -46,178 +19,6 @@ class AuditLogService:
 
     async def list_admin(self, **kwargs):
         return await self.repo.list_admin(**kwargs)
-
-
-class ContentSourceService:
-    def __init__(self, db: AsyncSession) -> None:
-        self.db = db
-        self.repo = ContentSourceRepository(db)
-
-    async def list_all(self) -> list[ContentSource]:
-        return await self.repo.list_all()
-
-    async def get_or_404(self, source_id: str) -> ContentSource:
-        source = await self.repo.get_by_id(source_id)
-        if source is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
-        return source
-
-    async def create(self, payload: ContentSourceCreate, *, admin_id: str | None) -> ContentSource:
-        source = self.repo.add(ContentSource(created_by_admin_id=admin_id, **payload.model_dump()))
-        await self.db.commit()
-        await self.db.refresh(source)
-        return source
-
-    async def update(self, source_id: str, payload: ContentSourceUpdate) -> ContentSource:
-        source = await self.get_or_404(source_id)
-        for field, value in payload.model_dump(exclude_unset=True).items():
-            setattr(source, field, value)
-        await self.db.commit()
-        await self.db.refresh(source)
-        return source
-
-    async def delete(self, source_id: str) -> None:
-        source = await self.get_or_404(source_id)
-        await self.repo.delete(source)
-        await self.db.commit()
-
-
-class DiscoveryService:
-    """Spec §25-27. Nothing here ever auto-publishes: `create_draft` always creates a
-    `ContentStatus.DRAFT` row and marks the discovered item `REVIEWED`, never `PUBLISHED`."""
-
-    def __init__(self, db: AsyncSession) -> None:
-        self.db = db
-        self.repo = DiscoveredItemRepository(db)
-        self.sources = ContentSourceRepository(db)
-        self.jobs = JobRepository(db)
-        self.scholarships = ScholarshipRepository(db)
-        self.intelligence = IntelligenceRepository(db)
-        self.companies = CompanyRepository(db)
-
-    async def list_admin(self, **kwargs):
-        return await self.repo.list_admin(**kwargs)
-
-    async def get_or_404(self, item_id: str) -> DiscoveredItem:
-        item = await self.repo.get_by_id(item_id)
-        if item is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Discovered item not found")
-        return item
-
-    async def ingest(self, payload: DiscoveredItemCreate) -> DiscoveredItem | None:
-        """Returns None (rather than raising) when this is a duplicate of an already-tracked item
-        (spec §27) — the caller (a future real adapter, or this phase's manual/test entry point)
-        should treat that as a safe no-op, exactly like the Phase 8 webhook dedup pattern."""
-        source = await self.sources.get_by_id(payload.source_id)
-        if source is None:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown source_id")
-        normalized = _normalize_title(payload.detected_title)
-        duplicate = await self.repo.find_duplicate(
-            source_id=payload.source_id, external_id=payload.external_id, normalized_title=normalized, original_url=payload.original_url
-        )
-        if duplicate:
-            return None
-        item = self.repo.add(
-            DiscoveredItem(
-                source_id=payload.source_id,
-                item_type=payload.item_type,
-                external_id=payload.external_id,
-                detected_title=payload.detected_title,
-                detected_company_name=payload.detected_company_name,
-                original_url=payload.original_url,
-                raw_payload_json=payload.raw_payload,
-                normalized_title=normalized,
-            )
-        )
-        await self.db.commit()
-        await self.db.refresh(item)
-        return item
-
-    async def ignore(self, item_id: str, *, admin_id: str | None) -> DiscoveredItem:
-        item = await self.get_or_404(item_id)
-        item.status = DiscoveredItemStatus.IGNORED
-        item.reviewed_by_admin_id = admin_id
-        item.reviewed_at = datetime.now(timezone.utc)
-        await self.db.commit()
-        return item
-
-    async def reject(self, item_id: str, *, admin_id: str | None) -> DiscoveredItem:
-        item = await self.get_or_404(item_id)
-        item.status = DiscoveredItemStatus.REJECTED
-        item.reviewed_by_admin_id = admin_id
-        item.reviewed_at = datetime.now(timezone.utc)
-        await self.db.commit()
-        return item
-
-    async def create_draft(self, item_id: str, payload: DiscoveryDraftIn, *, admin_id: str | None) -> dict:
-        item = await self.get_or_404(item_id)
-        if item.status != DiscoveredItemStatus.PENDING:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This item has already been reviewed.")
-
-        draft_id: str
-        if item.item_type == DiscoveredItemType.JOB:
-            if not payload.company_id:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="company_id is required for a job draft")
-            company = await self.companies.get_by_id(payload.company_id)
-            if company is None:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown company_id")
-            slug = await self.jobs.generate_unique_slug(payload.title, company.name)
-            from app.models.job import EmploymentType, WorkMode
-
-            job = Job(
-                slug=slug,
-                company_id=payload.company_id,
-                title=payload.title,
-                short_summary=payload.summary,
-                description=payload.description,
-                employment_type=EmploymentType.FULL_TIME,
-                work_mode=WorkMode.ON_SITE,
-                source_url=item.original_url,
-                status=ContentStatus.DRAFT,
-                created_by_admin_id=admin_id,
-            )
-            await self.jobs.create(job)
-            await self.db.flush()
-            draft_id = job.id
-        elif item.item_type == DiscoveredItemType.SCHOLARSHIP:
-            slug = await self.scholarships.generate_unique_slug(payload.title)
-            scholarship = Scholarship(
-                slug=slug,
-                name=payload.title,
-                organization=payload.company_id,
-                summary=payload.summary,
-                description=payload.description,
-                source_url=item.original_url,
-                status=ContentStatus.DRAFT,
-                created_by_admin_id=admin_id,
-            )
-            await self.scholarships.create(scholarship)
-            await self.db.flush()
-            draft_id = scholarship.id
-        else:
-            slug = await self.intelligence.generate_unique_slug(payload.title)
-            category = IntelligenceCategory(payload.category) if payload.category else IntelligenceCategory.OTHER
-            post = IntelligencePost(
-                slug=slug,
-                company_id=payload.company_id,
-                headline=payload.title,
-                category=category,
-                summary=payload.summary,
-                full_content=payload.description,
-                source_url=item.original_url,
-                status=ContentStatus.DRAFT,
-                created_by_admin_id=admin_id,
-            )
-            await self.intelligence.create(post)
-            await self.db.flush()
-            draft_id = post.id
-
-        item.status = DiscoveredItemStatus.REVIEWED
-        item.created_draft_id = draft_id
-        item.reviewed_by_admin_id = admin_id
-        item.reviewed_at = datetime.now(timezone.utc)
-        await self.db.commit()
-        return {"item_type": item.item_type.value, "draft_id": draft_id}
 
 
 class NotificationService:

@@ -55,6 +55,11 @@ class IntelligencePost(TimestampMixin, Base):
     source_type: Mapped[SourceType] = mapped_column(Enum(SourceType), nullable=False, default=SourceType.OTHER)
     source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content_source_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("content_sources.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

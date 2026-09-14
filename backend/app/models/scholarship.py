@@ -5,7 +5,7 @@ from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, new_uuid
-from app.models.job import ContentStatus, SourceType
+from app.models.job import ContentStatus, SourceState, SourceType, string_enum
 
 
 class DegreeLevel(str, enum.Enum):
@@ -18,6 +18,14 @@ class DegreeLevel(str, enum.Enum):
 class FundingType(str, enum.Enum):
     FULLY_FUNDED = "FULLY_FUNDED"
     PARTIAL = "PARTIAL"
+    # Funding not stated by the source: never shown as "fully" or "partially" funded.
+    UNSPECIFIED = "UNSPECIFIED"
+
+
+class AwardType(str, enum.Enum):
+    SCHOLARSHIP = "SCHOLARSHIP"
+    FELLOWSHIP = "FELLOWSHIP"
+    GRANT = "GRANT"
 
 
 class Scholarship(TimestampMixin, Base):
@@ -60,6 +68,19 @@ class Scholarship(TimestampMixin, Base):
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     application_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    award_type: Mapped[AwardType] = mapped_column(
+        string_enum(AwardType), nullable=False, default=AwardType.SCHOLARSHIP,
+        server_default=AwardType.SCHOLARSHIP.value, index=True,
+    )
+    opening_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    content_source_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("content_sources.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_state: Mapped[SourceState] = mapped_column(
+        string_enum(SourceState), nullable=False, default=SourceState.ACTIVE,
+        server_default=SourceState.ACTIVE.value, index=True,
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

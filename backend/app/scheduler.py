@@ -8,10 +8,10 @@ Jobs registered here (spec §38-39, closing the Phase 8 gap):
   - Gmail/Outlook watch-and-subscription renewal (`EmailTrackingService.renew_expiring_watches`)
   - Scheduled content publishing (`content_lifecycle_service.publish_scheduled_content`)
   - Content expiration (`content_lifecycle_service.expire_content`)
-
-Source-discovery polling (spec §37's fourth bullet) is deliberately NOT registered — no ingestion
-adapter exists in this codebase to poll (see ARCHITECTURE.md's Discovery section); registering a
-job with nothing behind it would be dead weight, not architecture.
+  - Discovery dispatch (`discovery.worker.dispatch`): enqueues registered sources whose crawl
+    interval elapsed and executes queued discovery runs — per-source intervals replace separate
+    discover_jobs / discover_scholarships / discover_company_intelligence timers (DISCOVERY_ENGINE.md)
+  - Active opportunity re-verification (`discovery.verification.verify_active_opportunities`)
 """
 
 import logging
@@ -25,7 +25,10 @@ from sqlalchemy import text
 
 from app.core.error_reporting import report_exception
 from app.db.session import AsyncSessionLocal, engine
+from app.core.config import get_settings
 from app.services import content_lifecycle_service
+from app.services.discovery import worker as discovery_worker
+from app.services.discovery.verification import verify_active_opportunities
 from app.services.email_tracking_service import EmailTrackingService
 
 logger = logging.getLogger("careeros.scheduler")
@@ -111,6 +114,15 @@ async def _expire_content(db) -> int:
     return await content_lifecycle_service.expire_content(db)
 
 
+async def _discovery_dispatch(db) -> dict:
+    return await discovery_worker.dispatch(db, AsyncSessionLocal)
+
+
+async def _verify_active_opportunities(db) -> dict:
+    run = await verify_active_opportunities(db)
+    return {"run_id": run.id, **(run.stats_json or {})}
+
+
 def start_scheduler() -> AsyncIOScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -128,6 +140,16 @@ def start_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(
         _run_tracked, "interval", hours=1, id="content_expiration",
         args=["content_expiration", _expire_content], next_run_time=datetime.now(timezone.utc),
+    )
+    settings = get_settings()
+    scheduler.add_job(
+        _run_tracked, "interval", minutes=settings.discovery_dispatch_interval_minutes, id="discovery_dispatch",
+        args=["discovery_dispatch", _discovery_dispatch], next_run_time=datetime.now(timezone.utc),
+        max_instances=1, coalesce=True,
+    )
+    scheduler.add_job(
+        _run_tracked, "interval", hours=settings.verification_interval_hours, id="verify_active_opportunities",
+        args=["verify_active_opportunities", _verify_active_opportunities], max_instances=1, coalesce=True,
     )
     scheduler.start()
     _scheduler = scheduler

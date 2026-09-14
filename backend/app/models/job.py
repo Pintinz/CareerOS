@@ -14,12 +14,16 @@ class EmploymentType(str, enum.Enum):
     INTERNSHIP = "INTERNSHIP"
     TEMPORARY = "TEMPORARY"
     VOLUNTEER = "VOLUNTEER"
+    # A discovered listing that doesn't state its employment type is never labelled full-time.
+    UNSPECIFIED = "UNSPECIFIED"
 
 
 class WorkMode(str, enum.Enum):
     ON_SITE = "ON_SITE"
     REMOTE = "REMOTE"
     HYBRID = "HYBRID"
+    # Discovery never guesses a work mode the source doesn't state (DISCOVERY_ENGINE.md).
+    UNSPECIFIED = "UNSPECIFIED"
 
 
 class ExperienceLevel(str, enum.Enum):
@@ -32,12 +36,58 @@ class ExperienceLevel(str, enum.Enum):
 
 
 class SourceType(str, enum.Enum):
+    """The one source-type vocabulary shared by content rows and the source registry. It used to
+    be two Python enums with different value lists mapped to the same PostgreSQL type name
+    (`sourcetype`), so registry-only values could not be stored on PostgreSQL."""
+
+    # Tier 1 — authoritative
     OFFICIAL_CAREER_PAGE = "OFFICIAL_CAREER_PAGE"
     OFFICIAL_NEWSROOM = "OFFICIAL_NEWSROOM"
-    RSS = "RSS"
+    INVESTOR_RELATIONS = "INVESTOR_RELATIONS"
+    GOVERNMENT = "GOVERNMENT"
+    REGULATOR = "REGULATOR"
+    UNIVERSITY = "UNIVERSITY"
+    SCHOLARSHIP_PROVIDER = "SCHOLARSHIP_PROVIDER"
+    # Tier 2 — official public ATS infrastructure
+    GREENHOUSE = "GREENHOUSE"
     LEVER = "LEVER"
     ASHBY = "ASHBY"
+    SMARTRECRUITERS = "SMARTRECRUITERS"
+    WORKDAY = "WORKDAY"
+    SUCCESSFACTORS = "SUCCESSFACTORS"
+    ORACLE = "ORACLE"
+    # Tier 3 — reputable discovery sources
+    RSS = "RSS"
+    INDUSTRY_PUBLICATION = "INDUSTRY_PUBLICATION"
+    NEWS_MEDIA = "NEWS_MEDIA"
+    # Tier 4 — discovery only, never canonical
+    AGGREGATOR = "AGGREGATOR"
     OTHER = "OTHER"
+
+
+class OpportunityType(str, enum.Enum):
+    JOB = "JOB"
+    INTERNSHIP = "INTERNSHIP"
+    GRADUATE_PROGRAM = "GRADUATE_PROGRAM"
+
+
+class SourceState(str, enum.Enum):
+    """What CareerOS last established about the listing at its source (spec §22). Independent of
+    the editorial `ContentStatus`: a PUBLISHED job whose source disappeared is SOURCE_REMOVED
+    until an admin confirms, and is kept (never deleted) for users who saved or tracked it."""
+
+    ACTIVE = "ACTIVE"
+    DEADLINE_PASSED = "DEADLINE_PASSED"
+    CLOSED = "CLOSED"
+    SOURCE_REMOVED = "SOURCE_REMOVED"
+    EXPIRED = "EXPIRED"
+    UNKNOWN_REQUIRES_REVIEW = "UNKNOWN_REQUIRES_REVIEW"
+
+
+def string_enum(enum_cls: type[enum.Enum]) -> Enum:
+    """New enum columns are stored as plain VARCHAR (no native PostgreSQL ENUM type), so adding a
+    value later never needs an `ALTER TYPE` migration. Validation stays in the Python enum."""
+    return Enum(enum_cls, native_enum=False, create_constraint=False, length=40)
 
 
 class ContentStatus(str, enum.Enum):
@@ -98,6 +148,30 @@ class Job(TimestampMixin, Base):
     source_type: Mapped[SourceType] = mapped_column(Enum(SourceType), nullable=False, default=SourceType.OTHER)
     source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     source_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Live discovery (DISCOVERY_ENGINE.md). All nullable/defaulted: manually authored jobs keep
+    # working exactly as before.
+    opportunity_type: Mapped[OpportunityType] = mapped_column(
+        string_enum(OpportunityType), nullable=False, default=OpportunityType.JOB,
+        server_default=OpportunityType.JOB.value, index=True,
+    )
+    external_job_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    requisition_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    state_or_region: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    education_requirements: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    experience_requirements: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # Graduate programme / internship specifics — only what the source explicitly states.
+    program_duration: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    program_start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    eligibility_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    content_source_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("content_sources.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_state: Mapped[SourceState] = mapped_column(
+        string_enum(SourceState), nullable=False, default=SourceState.ACTIVE,
+        server_default=SourceState.ACTIVE.value, index=True,
+    )
+    last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     application_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

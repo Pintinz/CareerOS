@@ -7,6 +7,7 @@ from app.models.job import ContentStatus, Job
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.job_repository import JobRepository
 from app.schemas.company import CompanyOut
+from app.services.availability import availability_of, is_official_source, publicly_listable, publicly_viewable
 from app.schemas.job import (
     JobAdminOut,
     JobCardOut,
@@ -41,13 +42,19 @@ class JobService:
             )
         return company
 
+    @staticmethod
+    def _derived(job: Job) -> dict:
+        return {"availability": availability_of(job), "is_official_source": is_official_source(job)}
+
     def _card_from_job(self, job: Job, company) -> JobCardOut:
         data = self._job_fields(job, exclude={"company_id", "created_by_admin_id"})
         data["company"] = JobCompanySummary.model_validate(company)
+        data.update(self._derived(job))
         return JobCardOut.model_validate(data)
 
     def _admin_from_job(self, job: Job, company) -> JobAdminOut:
         data = self._job_fields(job, exclude={"company_id"})
+        data.update(self._derived(job))
         data["company"] = CompanyOut.model_validate(company)
         data["is_saved"] = False
         return JobAdminOut.model_validate(data)
@@ -61,6 +68,7 @@ class JobService:
         data = self._job_fields(job, exclude={"company_id", "created_by_admin_id"})
         data["company"] = CompanyOut.model_validate(company)
         data["is_saved"] = job.id in saved_job_ids if saved_job_ids is not None else False
+        data.update(self._derived(job))
         return JobDetailOut.model_validate(data)
 
     async def to_admin(self, job: Job) -> JobAdminOut:
@@ -92,22 +100,14 @@ class JobService:
 
     @staticmethod
     def _is_publicly_visible(job: Job) -> bool:
-        if job.status != ContentStatus.PUBLISHED or not job.is_active:
-            return False
-        expires_at = job.expires_at
-        if expires_at is not None:
-            # SQLite (local dev/test) drops tzinfo on round-trip even for a
-            # DateTime(timezone=True) column; Postgres does not. Treat a naive value as UTC —
-            # every datetime this app writes is UTC — rather than crash comparing aware/naive.
-            if expires_at.tzinfo is None:
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-            if expires_at <= datetime.now(timezone.utc):
-                return False
-        return True
+        """Listable/saveable: published, active at its source, not past deadline or expiry."""
+        return publicly_listable(job)
 
     async def get_public(self, id_or_slug: str, *, viewer_user_id: str | None = None) -> JobDetailOut:
+        """Detail stays reachable after a listing expires or leaves its source, so saved items and
+        tracked applications keep working; `availability` tells the app not to offer Apply."""
         job = await self.jobs.get_by_id_or_slug(id_or_slug)
-        if job is None or not self._is_publicly_visible(job):
+        if job is None or not publicly_viewable(job):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
         saved_ids = await self.jobs.list_saved_job_ids(viewer_user_id) if viewer_user_id else set()
         return await self.to_detail(job, saved_job_ids=saved_ids)

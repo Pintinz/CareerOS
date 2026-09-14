@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.job import ContentStatus, EmploymentType, ExperienceLevel, SourceType, WorkMode
+from app.models.job import ContentStatus, EmploymentType, ExperienceLevel, OpportunityType, SourceState, SourceType, WorkMode
 from app.schemas.company import CompanyOut
 from app.schemas.pagination import PaginatedResponse
 
@@ -36,6 +36,11 @@ class JobCardOut(BaseModel):
     is_demo: bool = False
     published_at: datetime | None = None
     application_deadline: datetime | None = None
+    opportunity_type: OpportunityType = OpportunityType.JOB
+    # ACTIVE | EXPIRED | CLOSED | UNAVAILABLE (app/services/availability.py)
+    availability: str = "ACTIVE"
+    is_official_source: bool = False
+    last_verified_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -80,6 +85,17 @@ class JobDetailOut(BaseModel):
     is_urgent: bool
     is_demo: bool
     is_saved: bool = False
+    opportunity_type: OpportunityType = OpportunityType.JOB
+    state_or_region: str | None = None
+    education_requirements: list[str] | None = None
+    experience_requirements: list[str] | None = None
+    program_duration: str | None = None
+    program_start_date: datetime | None = None
+    eligibility_json: dict | None = None
+    source_state: SourceState = SourceState.ACTIVE
+    availability: str = "ACTIVE"
+    is_official_source: bool = False
+    last_verified_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -141,6 +157,10 @@ class JobCreate(BaseModel):
     is_demo: bool = False
     status: ContentStatus = ContentStatus.DRAFT
 
+    opportunity_type: OpportunityType = OpportunityType.JOB
+    program_duration: str | None = Field(default=None, max_length=255)
+    program_start_date: datetime | None = None
+
 
 class JobUpdate(BaseModel):
     company_id: str | None = None
@@ -187,6 +207,11 @@ class JobUpdate(BaseModel):
     is_urgent: bool | None = None
     is_active: bool | None = None
     status: ContentStatus | None = None
+
+    opportunity_type: OpportunityType | None = None
+    program_duration: str | None = Field(default=None, max_length=255)
+    program_start_date: datetime | None = None
+    source_state: SourceState | None = None
 
 
 class JobListResponse(PaginatedResponse[JobCardOut]):

@@ -80,23 +80,9 @@ class DiscoveredItemRepository:
         result = await self.db.execute(select(DiscoveredItem).where(DiscoveredItem.id == item_id))
         return result.scalar_one_or_none()
 
-    async def find_duplicate(self, *, source_id: str, external_id: str | None, normalized_title: str, original_url: str) -> DiscoveredItem | None:
-        """Spec §27 — dedup by (source + external id) when the source provides one, else by
-        (source + normalized title) or an exact URL match. Checked before ever inserting a new row."""
-        query = select(DiscoveredItem).where(DiscoveredItem.source_id == source_id)
-        if external_id:
-            result = await self.db.execute(query.where(DiscoveredItem.external_id == external_id))
-            existing = result.scalar_one_or_none()
-            if existing:
-                return existing
-        result = await self.db.execute(
-            query.where((DiscoveredItem.normalized_title == normalized_title) | (DiscoveredItem.original_url == original_url))
-        )
-        return result.scalars().first()
-
     async def count_pending(self) -> int:
         result = await self.db.execute(
-            select(func.count()).select_from(DiscoveredItem).where(DiscoveredItem.status == DiscoveredItemStatus.PENDING)
+            select(func.count()).select_from(DiscoveredItem).where(DiscoveredItem.status.in_((DiscoveredItemStatus.NEW, DiscoveredItemStatus.NEEDS_REVIEW, DiscoveredItemStatus.VERIFIED)))
         )
         return result.scalar_one()
 

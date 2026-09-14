@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.job import ContentStatus
 from app.models.scholarship import Scholarship
 from app.repositories.scholarship_repository import ScholarshipRepository
+from app.services.availability import availability_of, is_official_source, publicly_listable, publicly_viewable
 from app.schemas.scholarship import (
     ScholarshipAdminOut,
     ScholarshipCardOut,
@@ -22,7 +23,10 @@ class ScholarshipService:
 
     @staticmethod
     def _fields(scholarship: Scholarship) -> dict:
-        return {name: getattr(scholarship, name) for name in scholarship.__table__.columns.keys()}
+        data = {name: getattr(scholarship, name) for name in scholarship.__table__.columns.keys()}
+        data["availability"] = availability_of(scholarship)
+        data["is_official_source"] = is_official_source(scholarship)
+        return data
 
     def to_card(self, scholarship: Scholarship, *, is_saved: bool = False) -> ScholarshipCardOut:
         data = self._fields(scholarship)
@@ -51,7 +55,8 @@ class ScholarshipService:
 
     async def get_public(self, id_or_slug: str, *, viewer_user_id: str | None = None) -> ScholarshipDetailOut:
         scholarship = await self.repo.get_by_id_or_slug(id_or_slug)
-        if scholarship is None or scholarship.status != ContentStatus.PUBLISHED or not scholarship.is_active:
+        # Reachable after expiry/removal for saved items; `availability` tells the app not to offer Apply.
+        if scholarship is None or not publicly_viewable(scholarship):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
         is_saved = False
         if viewer_user_id:
@@ -100,7 +105,7 @@ class ScholarshipService:
 
     async def save_for_user(self, user_id: str, scholarship_id: str) -> None:
         scholarship = await self.repo.get_by_id(scholarship_id)
-        if scholarship is None or scholarship.status != ContentStatus.PUBLISHED or not scholarship.is_active:
+        if scholarship is None or not publicly_listable(scholarship):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scholarship not found")
         await self.repo.save(user_id, scholarship_id)
         await self.db.commit()

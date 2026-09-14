@@ -31,3 +31,26 @@ async def record(
         )
     )
     await db.commit()
+
+
+def add(
+    db: AsyncSession,
+    *,
+    admin_id: str | None,
+    action: str,
+    entity_type: str,
+    entity_id: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """Same as `record` but without committing — for background jobs (admin_id None = system) that
+    commit their own unit of work, so the audit row lands atomically with the change it describes."""
+    db.add(
+        AuditLog(
+            admin_id=admin_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            metadata_json=metadata or {},
+            created_at=datetime.now(timezone.utc),
+        )
+    )

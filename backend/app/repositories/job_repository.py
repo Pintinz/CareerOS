@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugify import slugify
 from app.models.company import Company
-from app.models.job import ContentStatus, Job, SavedJob
+from app.models.job import ContentStatus, Job, SavedJob, SourceState
 
 
 class JobRepository:
@@ -46,15 +46,20 @@ class JobRepository:
         experience_level: str | None = None,
         is_featured: bool | None = None,
         company_id: str | None = None,
+        opportunity_type: str | None = None,
+        posted_within_days: int | None = None,
         sort: str = "newest",
     ) -> tuple[list[Job], int]:
         now = datetime.now(timezone.utc)
         base_conditions = [
             Job.status == ContentStatus.PUBLISHED,
             Job.is_active.is_(True),
-            # A job past its own expiry date shouldn't surface even if an admin forgot to
-            # manually archive it — never rely solely on manual status changes for this.
+            # A job past its own expiry date or deadline shouldn't surface even if an admin forgot
+            # to archive it — never rely solely on manual status changes for this.
             or_(Job.expires_at.is_(None), Job.expires_at > now),
+            or_(Job.application_deadline.is_(None), Job.application_deadline > now),
+            # Listings whose source removed or closed them stay out of feeds (detail stays reachable).
+            Job.source_state == SourceState.ACTIVE,
         ]
 
         query = select(Job).join(Company, Job.company_id == Company.id)
@@ -68,7 +73,12 @@ class JobRepository:
         if search:
             pattern = f"%{search.lower()}%"
             filters.append(
-                or_(func.lower(Job.title).like(pattern), func.lower(Company.name).like(pattern))
+                or_(
+                    func.lower(Job.title).like(pattern),
+                    func.lower(Company.name).like(pattern),
+                    func.lower(Job.location).like(pattern),
+                    func.lower(cast(Job.preferred_skills, String)).like(pattern),
+                )
             )
         if country:
             filters.append(func.lower(Job.country) == country.lower())
@@ -86,6 +96,10 @@ class JobRepository:
             filters.append(Job.is_featured.is_(is_featured))
         if company_id:
             filters.append(Job.company_id == company_id)
+        if opportunity_type:
+            filters.append(Job.opportunity_type == opportunity_type)
+        if posted_within_days:
+            filters.append(Job.published_at >= now - timedelta(days=posted_within_days))
 
         for f in filters:
             query = query.where(f)
