@@ -39,7 +39,9 @@ import 'package:careeros/features/jobs/data/job_models.dart';
 import 'package:careeros/features/jobs/data/job_repository.dart';
 import 'package:careeros/features/jobs/presentation/job_detail_screen.dart';
 import 'package:careeros/features/jobs/presentation/job_providers.dart';
+import 'package:careeros/features/onboarding/presentation/onboarding_illustrations.dart';
 import 'package:careeros/features/onboarding/presentation/onboarding_screen.dart';
+import 'package:careeros/features/onboarding/presentation/welcome_screen.dart';
 import 'package:careeros/features/opportunities/presentation/opportunities_tab.dart';
 import 'package:careeros/features/profile/data/profile_repository.dart';
 import 'package:careeros/features/profile/presentation/profile_providers.dart';
@@ -366,6 +368,17 @@ class _Screen {
 final _screens = <_Screen>[
   _Screen('01_splash', () => const SplashScreen()),
   _Screen('02_onboarding', () => const OnboardingScreen()),
+  _Screen('02b_welcome', () => const WelcomeScreen()),
+  _Screen(
+    '02c_onboarding_art',
+    () => Scaffold(
+      body: SafeArea(
+        child: Column(
+          children: [for (final scene in OnboardingScene.values) Expanded(child: OnboardingIllustration(scene: scene))],
+        ),
+      ),
+    ),
+  ),
   _Screen('03_login', () => const LoginScreen()),
   _Screen('04_home', () => const HomeShell()),
   _Screen('05_opportunities', () => const Scaffold(body: SafeArea(child: OpportunitiesTab()))),

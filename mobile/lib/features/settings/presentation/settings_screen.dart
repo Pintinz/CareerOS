@@ -129,6 +129,13 @@ class SettingsScreen extends ConsumerWidget {
             title: "About",
             children: [
               CareerListRow(
+                icon: AppIcons.introduction,
+                tone: AppTone.primary,
+                title: "App introduction",
+                subtitle: "See what CareerOS can do",
+                onTap: () => context.push("/onboarding?replay=1"),
+              ),
+              CareerListRow(
                 icon: AppIcons.about,
                 tone: AppTone.neutral,
                 title: "About CareerOS",

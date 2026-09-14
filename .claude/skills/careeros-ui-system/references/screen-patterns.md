@@ -30,6 +30,15 @@ each: `JobCardTile` (jobs, `compact:` carousel variant), `ScholarshipCardTile` (
 (applications). Dates on cards come from `core/utils/date_labels.dart` (`DateLabels.published`,
 `DateLabels.deadline`, `deadlineTone`, `humanizeEnum`).
 
+## Welcome & onboarding
+Welcome (`welcome_screen.dart`, mockup §1): navy radial ground → stacked on-dark logo → "Your
+Career Intelligence & Opportunity Platform" → checklist of capabilities that really exist →
+**Get Started** (primary) → "Already have an account? Log in" → brand tagline. Onboarding carousel
+(`onboarding_screen.dart`, mockup §2): large flat blue illustration (`OnboardingIllustration`
+scenes, drawn in code on a 320×260 canvas, theme-aware, never containing numbers) → bold centred
+title → one-sentence body → page dots → **Next** / **Create Account** → Skip or "I already have an
+account" underneath. No ads, no bottom nav.
+
 ## Home
 Order: greeting hero (date, name, real stats) → recruitment attention cards (only when present) →
 quick actions (max 4: Find Opportunities, Analyze CV, Prepare, Track Application) → career setup

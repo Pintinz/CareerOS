@@ -30,6 +30,7 @@ import "../features/interview/presentation/star_story_editor_screen.dart";
 import "../features/interview/presentation/star_story_list_screen.dart";
 import "../features/jobs/presentation/job_detail_screen.dart";
 import "../features/onboarding/presentation/onboarding_screen.dart";
+import "../features/onboarding/presentation/welcome_screen.dart";
 import "../features/profile/presentation/saved_items_screen.dart";
 import "../features/scholarships/presentation/scholarship_detail_screen.dart";
 import "../features/settings/presentation/ads_privacy_screen.dart";
@@ -59,20 +60,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final isAuthenticated = authState.value == AuthState.authenticated;
-      final hasOnboarded = ref.read(appPreferencesProvider).hasCompletedOnboarding;
-      final isAuthRoute = location == "/login" || location == "/register";
+      const signedOutRoutes = {"/welcome", "/onboarding", "/login", "/register"};
+      final isSignedOutRoute = signedOutRoutes.contains(location);
 
-      if (!hasOnboarded) {
-        return location == "/onboarding" ? null : "/onboarding";
-      }
-      if (location == "/onboarding") {
-        return isAuthenticated ? "/home" : "/login";
-      }
+      // Signed out: the welcome screen is the front door (it routes first-timers into onboarding).
       if (!isAuthenticated) {
-        return isAuthRoute ? null : "/login";
+        return isSignedOutRoute ? null : "/welcome";
       }
-      // Authenticated + onboarded: keep out of splash/auth/onboarding routes.
-      if (location == "/splash" || isAuthRoute) {
+      // Signed in: keep out of splash and signed-out routes — except replaying the app
+      // introduction from Settings.
+      final isReplay = location == "/onboarding" && state.uri.queryParameters["replay"] == "1";
+      if (location == "/splash" || (isSignedOutRoute && !isReplay)) {
         return "/home";
       }
       return null;
@@ -97,7 +95,11 @@ final routerProvider = Provider<GoRouter>((ref) {
     ),
     routes: [
       GoRoute(path: "/splash", builder: (context, state) => const SplashScreen()),
-      GoRoute(path: "/onboarding", builder: (context, state) => const OnboardingScreen()),
+      GoRoute(path: "/welcome", builder: (context, state) => const WelcomeScreen()),
+      GoRoute(
+        path: "/onboarding",
+        builder: (context, state) => OnboardingScreen(replay: state.uri.queryParameters["replay"] == "1"),
+      ),
       GoRoute(path: "/login", builder: (context, state) => const LoginScreen()),
       GoRoute(path: "/register", builder: (context, state) => const RegisterScreen()),
       // `/home?tab=opportunities` opens a specific hub — lets pushed screens (e.g. an empty tracker)

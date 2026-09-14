@@ -99,7 +99,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       footer: AuthSwitchPrompt(
         prompt: "Already have an account?",
         actionLabel: "Log in",
-        onPressed: isLoading ? null : () => context.pop(),
+        // Register can be reached from login, welcome or onboarding, so go to login rather than pop.
+        onPressed: isLoading ? null : () => context.go("/login"),
       ),
     );
   }

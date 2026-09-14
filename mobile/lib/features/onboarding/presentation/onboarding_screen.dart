@@ -5,53 +5,45 @@ import "package:go_router/go_router.dart";
 import "../../../core/app_providers.dart";
 import "../../../core/design/design.dart";
 import "../../../core/widgets/widgets.dart";
+import "onboarding_illustrations.dart";
 
 class _OnboardingPage {
-  const _OnboardingPage({required this.icon, required this.tone, required this.title, required this.body, required this.chips});
+  const _OnboardingPage({required this.scene, required this.title, required this.body});
 
-  final IconData icon;
-  final AppTone tone;
+  final OnboardingScene scene;
   final String title;
   final String body;
-
-  /// Feature labels shown around the illustration — capabilities that exist, not statistics.
-  final List<String> chips;
 }
 
 const _pages = [
   _OnboardingPage(
-    icon: AppIcons.opportunities,
-    tone: AppTone.primary,
-    title: "Find Better Opportunities",
-    body: "Jobs, internships, entry-level roles and scholarships in one place.",
-    chips: ["Jobs", "Scholarships"],
+    scene: OnboardingScene.climb,
+    title: "Unlock Your Career Potential",
+    body: "Jobs, scholarships, company news and career tools — all in one place.",
   ),
   _OnboardingPage(
-    icon: AppIcons.cv,
-    tone: AppTone.purple,
-    title: "Know Your Career Fit",
-    body: "See how your CV reads against a role and what to improve before you apply.",
-    chips: ["CV analysis", "Job match"],
+    scene: OnboardingScene.opportunities,
+    title: "Find Opportunities That Fit",
+    body: "Search and filter jobs, internships, entry-level roles and scholarships, and save the ones you like.",
   ),
   _OnboardingPage(
-    icon: AppIcons.prepare,
-    tone: AppTone.success,
-    title: "Prepare Smarter",
-    body: "Practice aptitude tests and interviews, and build STAR stories that stand out.",
-    chips: ["Aptitude", "Interviews"],
+    scene: OnboardingScene.prepare,
+    title: "Prepare With Confidence",
+    body: "Practice aptitude tests and mock interviews, analyze your CV and build STAR stories.",
   ),
   _OnboardingPage(
-    icon: AppIcons.application,
-    tone: AppTone.warning,
-    title: "Track Your Journey",
-    body: "Follow every application from submission to offer.",
-    chips: ["Applied", "Interview"],
+    scene: OnboardingScene.track,
+    title: "Track Every Application",
+    body: "Follow each application from applied to offer, with deadlines and recruiter updates in one place.",
   ),
 ];
 
-/// 4-page onboarding flow (master spec §8).
+/// Illustrated onboarding carousel (mockup board §2). Reached from the welcome screen on first
+/// launch, or replayed from Settings (`/onboarding?replay=1`), which returns to where it came from.
 class OnboardingScreen extends ConsumerStatefulWidget {
-  const OnboardingScreen({super.key});
+  const OnboardingScreen({super.key, this.replay = false});
+
+  final bool replay;
 
   @override
   ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -61,38 +53,59 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _controller = PageController();
   int _page = 0;
 
+  bool get _isLastPage => _page == _pages.length - 1;
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _finish() async {
+  Future<void> _finish({required String destination}) async {
     await ref.read(appPreferencesProvider).setOnboardingComplete();
-    if (mounted) context.go("/login");
+    if (!mounted) return;
+    if (widget.replay) {
+      context.canPop() ? context.pop() : context.go("/home");
+    } else {
+      context.pushReplacement(destination);
+    }
   }
+
+  void _next() => _controller.nextPage(duration: AppMotion.of(context, AppMotion.slow), curve: AppMotion.curve);
 
   @override
   Widget build(BuildContext context) {
-    final isLastPage = _page == _pages.length - 1;
     final colors = context.colors;
+    final primaryLabel = _isLastPage ? (widget.replay ? "Done" : "Create Account") : "Next";
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.xs, AppSpacing.xs, 0),
-              child: Row(
-                children: [
-                  const CareerOSLogo(markSize: 28),
-                  const Spacer(),
-                  AnimatedOpacity(
-                    opacity: isLastPage ? 0 : 1,
-                    duration: AppMotion.of(context, AppMotion.fast),
-                    child: TextButton(onPressed: isLastPage ? null : _finish, child: const Text("Skip")),
-                  ),
-                ],
+            SizedBox(
+              height: 52,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+                child: Row(
+                  children: [
+                    if (context.canPop())
+                      IconButton(
+                        tooltip: "Back",
+                        onPressed: () => _page > 0
+                            ? _controller.previousPage(duration: AppMotion.of(context, AppMotion.slow), curve: AppMotion.curve)
+                            : context.pop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                      ),
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.sm),
+                      child: Text(
+                        "${_page + 1} / ${_pages.length}",
+                        style: context.text.labelMedium?.copyWith(color: colors.textSecondary),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             Expanded(
@@ -116,27 +129,36 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     width: i == _page ? 24 : 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: i == _page ? colors.primary : colors.border,
+                      color: i == _page ? colors.primary : colors.tint(colors.primary),
                       borderRadius: AppRadius.pillAll,
                     ),
                   ),
                 ),
               ),
             ),
-            if (isLastPage) ...[
-              Gap.md,
-              Text("Plan. Prepare. Apply. Grow.", style: context.text.labelMedium?.copyWith(color: colors.primary)),
-            ],
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.xs),
               child: PrimaryButton(
-                label: isLastPage ? "Get Started" : "Next",
-                icon: isLastPage ? null : Icons.arrow_forward_rounded,
-                onPressed: isLastPage
-                    ? _finish
-                    : () => _controller.nextPage(duration: AppMotion.slow, curve: AppMotion.curve),
+                label: primaryLabel,
+                onPressed: _isLastPage ? () => _finish(destination: "/register") : _next,
               ),
             ),
+            SizedBox(
+              height: 48,
+              child: _isLastPage
+                  ? (widget.replay
+                      ? null
+                      : TextButton(
+                          onPressed: () => _finish(destination: "/login"),
+                          child: const Text("I already have an account"),
+                        ))
+                  : TextButton(
+                      onPressed: () => widget.replay ? _finish(destination: "/home") : _finish(destination: "/register"),
+                      style: TextButton.styleFrom(foregroundColor: colors.textSecondary),
+                      child: const Text("Skip"),
+                    ),
+            ),
+            Gap.sm,
           ],
         ),
       ),
@@ -152,93 +174,40 @@ class _OnboardingPageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final accent = page.tone.color(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final art = (constraints.maxHeight * 0.42).clamp(160.0, 260.0);
+        final artHeight = (constraints.maxHeight * 0.56).clamp(150.0, 320.0);
         return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ExcludeSemantics(
-                  child: SizedBox.square(
-                    dimension: art,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(colors: [page.tone.tint(context), colors.background]),
-                          ),
-                        ),
-                        Container(
-                          width: art * 0.46,
-                          height: art * 0.46,
-                          decoration: BoxDecoration(
-                            color: colors.surface,
-                            borderRadius: BorderRadius.circular(art * 0.14),
-                            border: Border.all(color: colors.border),
-                            boxShadow: AppShadows.raised(context),
-                          ),
-                          alignment: Alignment.center,
-                          child: Icon(page.icon, size: art * 0.2, color: accent),
-                        ),
-                        Positioned(
-                          left: 0,
-                          top: art * 0.2,
-                          child: _FloatingChip(label: page.chips[0], tone: page.tone),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: art * 0.2,
-                          child: _FloatingChip(label: page.chips[1], tone: AppTone.primary),
-                        ),
-                      ],
-                    ),
+                SizedBox(height: artHeight, child: OnboardingIllustration(scene: page.scene)),
+                Gap.xl,
+                Semantics(
+                  header: true,
+                  child: Text(
+                    page.title,
+                    textAlign: TextAlign.center,
+                    style: context.text.headlineMedium?.copyWith(fontWeight: FontWeight.w800, height: 1.15),
                   ),
                 ),
-                Gap.xxl,
-                Text(page.title, textAlign: TextAlign.center, style: context.text.headlineMedium),
                 Gap.sm,
-                Text(page.body, textAlign: TextAlign.center, style: context.text.bodyLarge?.copyWith(color: colors.textSecondary)),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 340),
+                  child: Text(
+                    page.body,
+                    textAlign: TextAlign.center,
+                    style: context.text.bodyLarge?.copyWith(color: colors.textSecondary, height: 1.45),
+                  ),
+                ),
               ],
             ),
           ),
         );
       },
-    );
-  }
-}
-
-class _FloatingChip extends StatelessWidget {
-  const _FloatingChip({required this.label, required this.tone});
-
-  final String label;
-  final AppTone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AppRadius.pillAll,
-        border: Border.all(color: colors.border),
-        boxShadow: AppShadows.card(context),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: tone.color(context), shape: BoxShape.circle)),
-          const SizedBox(width: 6),
-          Text(label, style: context.text.labelMedium?.copyWith(color: colors.textPrimary)),
-        ],
-      ),
     );
   }
 }

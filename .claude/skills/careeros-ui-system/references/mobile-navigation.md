@@ -22,6 +22,10 @@ Rules:
 - Distraction-free flows (active aptitude test, mock interview session) are full-screen pushed
   routes with no bottom nav and no ads; exits confirm when progress would be lost.
 - Auth/onboarding/splash are outside the shell; redirects in `routerProvider` stay authoritative.
+- Signed-out flow: `/splash` → `/welcome` (front door) → **Get Started** → `/onboarding` carousel →
+  `/register`; **Log in** → `/login`. Every signed-out redirect lands on `/welcome`. Signed-in users
+  are kept out of these routes, except `/onboarding?replay=1` (Settings → App introduction), which
+  pops back when done.
 
 ## Screen chrome
 - Hub roots: large page title inside the scroll view (no AppBar), optional trailing actions

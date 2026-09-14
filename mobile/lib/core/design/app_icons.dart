@@ -53,4 +53,7 @@ abstract final class AppIcons {
   static const timer = Icons.timer_outlined;
   static const offline = Icons.cloud_off;
   static const error = Icons.error_outline_rounded;
+  static const achievement = Icons.emoji_events_outlined;
+  static const microphone = Icons.mic_rounded;
+  static const introduction = Icons.auto_awesome_outlined;
 }
