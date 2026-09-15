@@ -61,6 +61,60 @@ _BY_NAME = {name.lower(): name for name in _NAMES.values()} | _ALIASES
 _TRAILING = sorted(_BY_NAME, key=len, reverse=True)
 
 
+# Regions used for filtering ("jobs in Africa"). Membership is by the canonical country names above,
+# so a new country only needs adding here — no fixed per-country logic elsewhere.
+REGIONS: dict[str, frozenset[str]] = {
+    "AFRICA": frozenset({
+        "Algeria", "Angola", "Benin", "Botswana", "Burkina Faso", "Burundi", "Cabo Verde", "Cameroon", "Central African Republic",
+        "Chad", "Comoros", "Côte d'Ivoire", "Democratic Republic of the Congo", "Djibouti", "Egypt", "Equatorial Guinea", "Eritrea",
+        "Eswatini", "Ethiopia", "Gabon", "Gambia", "Ghana", "Guinea", "Guinea-Bissau", "Kenya", "Lesotho", "Liberia", "Libya",
+        "Madagascar", "Malawi", "Mali", "Mauritania", "Mauritius", "Morocco", "Mozambique", "Namibia", "Niger", "Nigeria",
+        "Republic of the Congo", "Rwanda", "São Tomé and Príncipe", "Senegal", "Seychelles", "Sierra Leone", "Somalia",
+        "South Africa", "South Sudan", "Sudan", "Tanzania", "Togo", "Tunisia", "Uganda", "Zambia", "Zimbabwe",
+    }),
+    "EUROPE": frozenset({
+        "Albania", "Andorra", "Austria", "Belarus", "Belgium", "Bosnia and Herzegovina", "Bulgaria", "Croatia", "Cyprus", "Czechia",
+        "Denmark", "Estonia", "Finland", "France", "Georgia", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy", "Latvia",
+        "Lithuania", "Luxembourg", "Malta", "Moldova", "Montenegro", "Netherlands", "North Macedonia", "Norway", "Poland", "Portugal",
+        "Romania", "Serbia", "Slovakia", "Slovenia", "Spain", "Sweden", "Switzerland", "Türkiye", "Ukraine", "United Kingdom",
+    }),
+    "MIDDLE_EAST": frozenset({
+        "Bahrain", "Iraq", "Israel", "Jordan", "Kuwait", "Lebanon", "Oman", "Palestine", "Qatar", "Saudi Arabia", "Syria",
+        "United Arab Emirates", "Yemen",
+    }),
+    "NORTH_AMERICA": frozenset({"Canada", "Mexico", "United States"}),
+}
+
+
+def _canonical(value: str) -> str | None:
+    text = value.strip()
+    return _NAMES.get(text.upper()) if len(text) == 2 and text.isalpha() else match_country(text)
+
+
+def region_countries(region: str | None) -> frozenset[str] | None:
+    return REGIONS.get((region or "").strip().upper().replace(" ", "_").replace("-", "_"))
+
+
+def location_matches(filters: list[str] | tuple[str, ...], *, country: str | None, location: str | None) -> bool:
+    """Whether a listing belongs to a source's configured country/region scope. Filters are country
+    names (any spelling `match_country` knows) or region keys such as AFRICA. A listing whose
+    country is unknown matches only if its location text names a filtered country."""
+    wanted: set[str] = set()
+    for value in filters:
+        members = region_countries(str(value))
+        if members:
+            wanted |= members
+        elif _canonical(str(value)):
+            wanted.add(_canonical(str(value)))
+    if not wanted:
+        return True
+    resolved = _canonical(country) if country else None
+    if resolved:
+        return resolved in wanted
+    text = f" {(location or '').lower()} "
+    return any(f" {name.lower()}" in text or f",{name.lower()}" in text for name in wanted)
+
+
 def country_name(value: str | None) -> str | None:
     if not value:
         return None

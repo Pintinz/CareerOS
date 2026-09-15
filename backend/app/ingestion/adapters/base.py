@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.ingestion.http_client import DiscoveryHttpClient
-from app.ingestion.schemas import ExtractedIntelligence, ExtractedJob, ExtractedRecord, ExtractedScholarship
+from app.ingestion.schemas import JOB_CONTENT_TYPES, ExtractedIntelligence, ExtractedJob, ExtractedRecord, ExtractedScholarship
 
 MAX_RAW_STRING = 2_000
 MAX_INVALID_RECORDED = 25
@@ -31,6 +31,9 @@ class SourceSnapshot:
     adapter_config: dict
     trust_level: int
     company_name: str | None = None
+    # External ids CareerOS already tracks for this source, so adapters can spend detail requests
+    # on new postings first.
+    known_external_ids: frozenset[str] = frozenset()
 
     @property
     def organization_name(self) -> str | None:
@@ -84,7 +87,30 @@ class AdapterConfigurationError(Exception):
     code = "ADAPTER_CONFIG"
 
 
+@dataclass
+class HealthCheck:
+    ok: bool
+    found: int = 0
+    complete: bool = False
+    sample_titles: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    error_code: str | None = None
+    error: str | None = None
+
+
 class SourceAdapter(ABC):
+    """One implementation per provider (Lever, Greenhouse, Workday, Oracle Recruiting, official pages…),
+    configured per employer through the source registry — never company-specific code paths.
+
+    The career-source interface (CAREER_SOURCE_INTEGRATION.md) maps onto it as:
+    - validate_source(): configuration check without network access
+    - fetch_jobs() / discover(): fetch current listings, normalized and validated (`AdapterResult`)
+    - normalize_job / get_job_details: provider-internal mapping and detail requests
+    - get_external_id / get_canonical_url: `record.source_external_id` / `record_canonical_url()`
+    - check_job_status(): the re-verification job (`services/discovery/verification.py`)
+    - health_check(): a bounded live fetch used by "Test connection"
+    """
+
     name: str = "base"
     method: str = "STRUCTURED_API"
 
@@ -93,6 +119,26 @@ class SourceAdapter(ABC):
 
     @abstractmethod
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult: ...
+
+    def validate_source(self, source: SourceSnapshot) -> None:
+        """Raise AdapterConfigurationError when the source can't be fetched as configured."""
+
+    async def fetch_jobs(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
+        return await self.discover(source, client, max_items=max_items)
+
+    async def health_check(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int = 5) -> HealthCheck:
+        """Live but bounded: nothing is stored. Errors are reported, never raised."""
+        from app.ingestion.http_client import FetchError  # local: avoid an import cycle at module load
+
+        try:
+            self.validate_source(source)
+            result = await self.discover(source, client, max_items=max_items)
+        except AdapterConfigurationError as exc:
+            return HealthCheck(ok=False, error_code=exc.code, error=str(exc)[:300])
+        except FetchError as exc:
+            return HealthCheck(ok=False, error_code=exc.code, error=str(exc)[:300])
+        titles = [getattr(l.record, "title", None) or getattr(l.record, "name", None) or getattr(l.record, "headline", "") for l in result.listings[:max_items]]
+        return HealthCheck(ok=True, found=len(result.listings), complete=result.complete, sample_titles=titles, warnings=result.warnings[:5])
 
 
 def trim_raw(value, *, depth: int = 0):
@@ -111,7 +157,7 @@ def trim_raw(value, *, depth: int = 0):
 
 
 def build_record(kind: str, data: dict) -> ExtractedRecord:
-    if kind in ("JOB", "INTERNSHIP", "GRADUATE_PROGRAM"):
+    if kind in JOB_CONTENT_TYPES:
         return ExtractedJob.model_validate({**data, "content_type": kind})
     if kind in ("SCHOLARSHIP", "FELLOWSHIP"):
         return ExtractedScholarship.model_validate({**data, "content_type": kind})

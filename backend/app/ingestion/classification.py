@@ -14,10 +14,12 @@ from app.ingestion.countries import match_country
 
 _GRADUATE_MARKERS = re.compile(
     r"\b(graduate\s+(programme|program|scheme|trainee(ship)?|development\s+programme|development\s+program|intake|rotation)"
-    r"|management\s+trainee(\s+programme|\s+program)?|early[\s-]careers?\s+(programme|program)"
-    r"|trainee\s+(programme|program)|new\s+grad(uate)?\s+program(me)?|graduate\s+engineer\s+trainee)",
+    r"|early[\s-]careers?\s+(programme|program)|new\s+grad(uate)?\s+program(me)?|graduate\s+engineer\s+trainee)",
     re.IGNORECASE,
 )
+# Trainee schemes that aren't presented as graduate programmes ("Management Trainee Programme").
+_TRAINEE_MARKERS = re.compile(r"\b(management\s+trainee(s)?|trainee\s+(programme|program|scheme))\b", re.IGNORECASE)
+_APPRENTICESHIP_MARKERS = re.compile(r"\b(apprentice|apprentices|apprenticeship|apprenticeships|aprendiz|auszubildende[rn]?)\b", re.IGNORECASE)
 _EXPERIENCED_MARKERS = re.compile(
     r"\b(senior|sr\.?|lead|principal|staff|manager|head\s+of|director|chief|vp|vice\s+president|architect"
     r"|\d+\s*\+?\s*years?)\b",
@@ -36,8 +38,15 @@ _EXECUTIVE_MARKERS = re.compile(r"\b(director|chief|vp|vice\s+president|cxo|ceo|
 
 
 def classify_job_content_type(title: str, *, employment_type: str | None = None, text: str | None = None) -> str:
-    if _GRADUATE_MARKERS.search(title) and not _EXPERIENCED_MARKERS.search(title):
+    """From the title (and the source's own employment type) only — explicit markers, never weak
+    keyword guesses. Anything led by an experienced-hire marker stays a JOB."""
+    experienced = _EXPERIENCED_MARKERS.search(title)
+    if _GRADUATE_MARKERS.search(title) and not experienced:
         return "GRADUATE_PROGRAM"
+    if _TRAINEE_MARKERS.search(title) and not experienced:
+        return "TRAINEE_PROGRAM"
+    if _APPRENTICESHIP_MARKERS.search(title) and not experienced:
+        return "APPRENTICESHIP"
     if employment_type == "INTERNSHIP" or _INTERNSHIP_MARKERS.search(title):
         return "INTERNSHIP"
     return "JOB"

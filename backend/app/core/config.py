@@ -1,11 +1,12 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore", populate_by_name=True)
 
     environment: str = "development"
     app_name: str = "CareerOS API"
@@ -74,7 +75,12 @@ class Settings(BaseSettings):
 
     # Live discovery engine (DISCOVERY_ENGINE.md). Kill switches first: turning any of these off
     # stops automatic fetching/research without affecting manual admin content management.
-    web_discovery_enabled: bool = True
+    # Career-feed flag names (CAREER_SOURCE_INTEGRATION.md) are accepted as aliases of the original ones.
+    web_discovery_enabled: bool = Field(default=True, validation_alias=AliasChoices("web_discovery_enabled", "career_source_sync_enabled"))
+    # Group switches: every public ATS adapter (Lever, Greenhouse, Ashby, SmartRecruiters, Workday) /
+    # the official-page structured-data adapter. Per-adapter flags below still apply.
+    structured_ats_sync_enabled: bool = True
+    html_source_sync_enabled: bool = True
     lever_discovery_enabled: bool = True
     greenhouse_discovery_enabled: bool = True
     ashby_discovery_enabled: bool = True
@@ -82,15 +88,20 @@ class Settings(BaseSettings):
     # and disallows all other crawlers, and discovery always honours robots.txt. Enable only if that
     # changes or SmartRecruiters grants access; until then such sources fail as ROBOTS_DISALLOWED.
     smartrecruiters_discovery_enabled: bool = False
-    # Workday's public career-site JSON is undocumented and varies by tenant — opt in per deployment.
-    workday_discovery_enabled: bool = False
+    # Workday and Oracle Recruiting career sites expose public, tenant-specific JSON (live-verified on
+    # employer tenants 2026-09-15); each source is still configured and polled individually.
+    workday_discovery_enabled: bool = True
+    oracle_recruiting_discovery_enabled: bool = True
     rss_discovery_enabled: bool = True
     structured_page_discovery_enabled: bool = True
     # Publishing stays an editorial decision unless this AND the source's auto_publish_allowed
     # AND every verification gate pass. Never on by default.
-    auto_publish_discovery: bool = False
+    auto_publish_discovery: bool = Field(default=False, validation_alias=AliasChoices("auto_publish_discovery", "source_auto_publish_enabled"))
+    # Consecutive complete syncs a listing must be absent before it is treated as removed at its
+    # source (hidden, pending admin confirmation). Earlier misses only flag it POSSIBLY_REMOVED.
+    discovery_removal_confirmations: int = Field(default=2, ge=1, le=10)
 
-    ai_research_enabled: bool = False
+    ai_research_enabled: bool = Field(default=False, validation_alias=AliasChoices("ai_research_enabled", "ai_extraction_enabled"))
     anthropic_research_enabled: bool = False
     anthropic_api_key: str | None = None  # server-side only; never sent to clients or logged.
     # Configurable per deployment; pick a smaller model here to trade quality for cost.
@@ -98,7 +109,7 @@ class Settings(BaseSettings):
     ai_research_max_items_per_run: int = 5
     ai_research_max_tokens_per_batch: int = 60_000
     ai_research_min_trust_level: int = 3
-    ai_research_content_types: str = "JOB,INTERNSHIP,GRADUATE_PROGRAM,SCHOLARSHIP,FELLOWSHIP,INTELLIGENCE"
+    ai_research_content_types: str = "JOB,INTERNSHIP,GRADUATE_PROGRAM,APPRENTICESHIP,TRAINEE_PROGRAM,SCHOLARSHIP,FELLOWSHIP,INTELLIGENCE"
 
     discovery_user_agent: str = "CareerOSDiscoveryBot/1.0 (+https://careeros.app/bot)"
     discovery_request_timeout_seconds: float = 20.0

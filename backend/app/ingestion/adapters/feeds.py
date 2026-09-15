@@ -220,6 +220,42 @@ def extract_json_ld(markup: str) -> list[dict]:
     return objects
 
 
+def extract_microdata(markup: str, *, item_type: str = "JobPosting") -> list[dict]:
+    """schema.org microdata (itemscope/itemprop) as JSON-LD-shaped dicts, for sites such as SAP
+    SuccessFactors career sites that mark postings up in HTML rather than a JSON-LD block. Only
+    attribute values and text are read; `description` keeps its markup for html_to_text."""
+    try:
+        root = lxml_html.fromstring(markup[:3_000_000])
+    except (ParserError, ValueError):
+        return []
+    scopes = root.xpath(f'//*[@itemscope][contains(@itemtype, "schema.org/{item_type}")]')[:MAX_JSON_LD_BLOCKS]
+    return [_microdata_item(scope) for scope in scopes]
+
+
+def _microdata_item(scope, depth: int = 0) -> dict:
+    node: dict = {"@type": (scope.get("itemtype") or "").rstrip("/").rsplit("/", 1)[-1]}
+    for element in scope.xpath(".//*[@itemprop]")[:400]:
+        owner = element.getparent()
+        while owner is not None and owner is not scope and owner.get("itemscope") is None:
+            owner = owner.getparent()
+        if owner is not scope:
+            continue  # belongs to a nested item
+        name = element.get("itemprop")
+        if element.get("itemscope") is not None and depth < 3:
+            value = _microdata_item(element, depth + 1)
+        elif element.get("content") is not None:
+            value = element.get("content")
+        elif element.get("datetime"):
+            value = element.get("datetime")
+        elif name in ("description", "responsibilities", "qualifications", "experienceRequirements"):
+            value = lxml_html.tostring(element, encoding="unicode")[:MAX_JSON_LD_CHARS]
+        else:
+            value = element.text_content().strip()
+        if name and value not in (None, "") and name not in node:
+            node[name] = value
+    return node
+
+
 def _types(node: dict) -> set[str]:
     value = node.get("@type")
     return {str(v) for v in value} if isinstance(value, list) else {str(value)} if value else set()
@@ -271,11 +307,15 @@ class StructuredPageAdapter(SourceAdapter):
     max_linked_pages = 50
 
     def is_enabled(self, settings: Settings) -> bool:
-        return settings.structured_page_discovery_enabled
+        return settings.html_source_sync_enabled and settings.structured_page_discovery_enabled
 
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
         result = AdapterResult()
-        if source.config("listing_pages"):
+        if source.config("sitemap_urls"):
+            # Large career sites publish every opening in a sitemap; each opening page carries the data.
+            pages, complete = await self._sitemap_pages(source, client, result)
+            follow_up = True
+        elif source.config("listing_pages"):
             # Careers sites that list openings on one page and publish JobPosting data on each
             # opening's own page (e.g. Flair-hosted boards).
             pages, complete = await self._linked_pages(source, client, result)
@@ -344,16 +384,67 @@ class StructuredPageAdapter(SourceAdapter):
                 parts = urlsplit(absolute)
                 if parts.scheme in ("http", "https") and parts.hostname in hosts and marker in parts.path and absolute not in links:
                     links.append(absolute)
+        links = self._filtered(source, links)
         complete = len(links) <= self.max_linked_pages
         if not complete:
             result.warnings.append(f"followed the first {self.max_linked_pages} openings only")
+        return links[: self.max_linked_pages], complete
+
+    @staticmethod
+    def _filtered(source: SourceSnapshot, links: list[str]) -> list[str]:
+        """`link_filters`: keep only opening URLs containing one of these fragments (e.g. "/lagos/"),
+        for career sites whose URLs carry the location."""
+        fragments = [str(f).lower() for f in source.config("link_filters") or [] if str(f).strip()]
+        return [link for link in links if any(f in link.lower() for f in fragments)] if fragments else links
+
+    async def _sitemap_pages(self, source: SourceSnapshot, client: DiscoveryHttpClient, result: AdapterResult) -> tuple[list[str], bool]:
+        marker = source.config("job_link_contains")
+        sitemaps = source.config("sitemap_urls")
+        if not isinstance(sitemaps, list) or not marker:
+            raise AdapterConfigurationError("adapter_config.sitemap_urls needs a list of URLs and job_link_contains")
+        source_host = urlsplit(source.url).hostname
+        entries: list[tuple[str, str]] = []  # (lastmod, url)
+        queue = [str(url) for url in sitemaps[:10]]
+        fetched = 0
+        while queue and fetched < 10:
+            try:
+                sitemap_url = validate_public_url(queue.pop(0))
+            except UnsafeUrlError as exc:
+                raise AdapterConfigurationError("adapter_config.sitemap_urls contains an unsafe URL") from exc
+            response = await client.fetch(sitemap_url, accept="application/xml, text/xml;q=0.9, */*;q=0.5")
+            fetched += 1
+            result.pages += 1
+            try:
+                root = SafeET.fromstring(response.body)
+            except (SafeET.ParseError, DefusedXmlException, ValueError) as exc:
+                raise InvalidResponseError("sitemap is not well-formed XML") from exc
+            hosts = {urlsplit(response.url).hostname, source_host}
+            for element in root:
+                tag = _local(element.tag)
+                loc = _child_text(element, "loc")
+                if not loc:
+                    continue
+                if tag == "sitemap" and len(queue) < 10:
+                    queue.append(loc)  # a sitemap index: follow child sitemaps (bounded)
+                elif tag == "url":
+                    parts = urlsplit(loc)
+                    if parts.scheme in ("http", "https") and parts.hostname in hosts and marker in parts.path:
+                        entries.append((_child_text(element, "lastmod") or "", loc))
+        entries.sort(key=lambda entry: entry[0], reverse=True)  # newest openings first
+        links = self._filtered(source, list(dict.fromkeys(url for _, url in entries)))
+        complete = len(links) <= self.max_linked_pages and not queue
+        if len(links) > self.max_linked_pages:
+            result.warnings.append(f"followed the {self.max_linked_pages} most recently updated openings only")
         return links[: self.max_linked_pages], complete
 
     def extract_into(self, result: AdapterResult, source: SourceSnapshot, page_url: str, markup: str, *, max_items: int = 500) -> int:
         """Deterministic schema.org extraction from one already-fetched page. Returns how many
         structured objects were recognized (0 → the page needs research or manual review)."""
         found = 0
-        for node in extract_json_ld(markup):
+        nodes = extract_json_ld(markup)
+        if not any("JobPosting" in _types(node) for node in nodes):
+            nodes = nodes + extract_microdata(markup)
+        for node in nodes:
             if len(result.listings) + result.invalid_count >= max_items:
                 break
             types = _types(node)
@@ -378,6 +469,15 @@ class StructuredPageAdapter(SourceAdapter):
         city, region = _text(address.get("addressLocality")), _text(address.get("addressRegion"))
         country = country_name(_text(address.get("addressCountry")))
         location = ", ".join(p for p in (city, region, country) if p) or None
+        street = _text(address.get("streetAddress"))
+        if location is None and street:
+            # "Lagos, NG": a trailing ISO code is the country.
+            parts = [p.strip() for p in street.split(",") if p.strip()]
+            if len(parts) >= 2 and len(parts[-1]) == 2 and parts[-1].isalpha():
+                location = ", ".join(parts[:-1] + [country_name(parts[-1])])
+            else:
+                location = street
+            city, region, country = split_location(location)
         if location is None and _text(place.get("name")):
             # Some boards only name the place ("Port Harcourt"); parse it without inventing a country.
             location = _text(place.get("name"))

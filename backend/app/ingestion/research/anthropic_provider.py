@@ -28,6 +28,7 @@ from app.ingestion.research.providers import (
     apply_evidence_checks,
 )
 from app.ingestion.research.security import BOUNDARY_TAG, frame_untrusted_page
+from app.ingestion.schemas import JOB_CONTENT_TYPES
 from app.ingestion.url_safety import UnsafeUrlError, registrable_domain, validate_public_url
 
 logger = logging.getLogger("careeros.discovery.research")
@@ -63,7 +64,7 @@ EXTRACTION_SCHEMA = {
                     "relevant_skills", "evidence_quotes", "confidence",
                 ],
                 "properties": {
-                    "content_type": {"type": "string", "enum": ["JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "SCHOLARSHIP", "FELLOWSHIP", "INTELLIGENCE"]},
+                    "content_type": {"type": "string", "enum": ["JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "APPRENTICESHIP", "TRAINEE_PROGRAM", "SCHOLARSHIP", "FELLOWSHIP", "INTELLIGENCE"]},
                     "title": {"type": "string"},
                     "organization": _NULLABLE_STRING,
                     "location": _NULLABLE_STRING,
@@ -119,7 +120,7 @@ def _record_payload(item: dict, *, page_url: str) -> tuple[str, dict]:
     """Map the provider's generic record onto the matching Extracted* input."""
     kind = item.get("content_type") or "JOB"
     common = {"source_url": page_url, "confidence": float(item.get("confidence") or 0.5)}
-    if kind in ("JOB", "INTERNSHIP", "GRADUATE_PROGRAM"):
+    if kind in JOB_CONTENT_TYPES:
         return kind, {
             **common, "title": item.get("title"), "company": item.get("organization"), "location": item.get("location"),
             "country": item.get("country"), "work_mode": item.get("work_mode") or "UNSPECIFIED",

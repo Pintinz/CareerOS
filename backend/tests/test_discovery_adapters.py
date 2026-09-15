@@ -1,5 +1,7 @@
 """Source adapter + discovery HTTP client tests (spec §63). All sources are mocked fixtures."""
 
+import json
+
 import httpx
 import pytest
 
@@ -192,6 +194,60 @@ async def test_workday_adapter_reads_public_career_site_json() -> None:
     assert record.content_type == "GRADUATE_PROGRAM"
     assert record.requisition_id == "R100"
     assert record.published_at is None  # "Posted 3 days ago" style dates are never estimated
+    assert result.listings[0].record.source_external_id == "/job/Lagos/GET_R100"  # stable with or without detail
+
+
+# Facet shape as returned by live tenants (2026-09-15): countries nested under a location group.
+WORKDAY_FACETS = [
+    {"facetParameter": "jobFamilyGroup", "values": [{"descriptor": "Engineering", "id": "fam1", "count": 3}]},
+    {"facetParameter": "locationMainGroup", "values": [
+        {"facetParameter": "locationCountry", "descriptor": "Location Country", "values": [
+            {"descriptor": "Nigeria", "id": "ng-id", "count": 2}, {"descriptor": "Germany", "id": "de-id", "count": 40},
+        ]},
+    ]},
+]
+
+
+async def test_workday_applies_the_tenants_country_facet_and_budgets_details() -> None:
+    host = "https://acme.wd3.myworkdayjobs.com"
+    bodies = []
+
+    def jobs(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if not body["appliedFacets"]:
+            return httpx.Response(200, json={"total": 42, "facets": WORKDAY_FACETS, "jobPostings": []})
+        return httpx.Response(200, json={"total": 2, "jobPostings": [
+            {"title": "Process Engineer", "externalPath": "/job/Lagos/PE_R1", "locationsText": "Lagos, Nigeria", "bulletFields": ["R1"]},
+            {"title": "Field Technician", "externalPath": "/job/Bonny/FT_R2", "locationsText": "Bonny, Nigeria", "bulletFields": ["R2"]},
+        ]})
+
+    detail_calls = []
+
+    def detail(request: httpx.Request) -> httpx.Response:
+        detail_calls.append(request.url.path)
+        return httpx.Response(200, json={"jobPostingInfo": {"title": "Process Engineer", "location": "Lagos, Nigeria", "jobDescription": "<p>Run the plant.</p>"}})
+
+    router = Router().add("POST", f"{host}/wday/cxs/acme/External/jobs", jobs).add("GET", f"{host}/wday/cxs/acme/External/job/", detail)
+    source = snapshot("WORKDAY", f"{host}/External", adapter_config={"country_filter": ["AFRICA"]}, known_external_ids=frozenset({"/job/Bonny/FT_R2"}))
+    async with make_client(router) as client:
+        result = await WorkdayAdapter().discover(source, client, max_items=10)
+
+    assert bodies[-1]["appliedFacets"] == {"locationCountry": ["ng-id"]}  # Germany's 40 roles never fetched
+    assert result.complete is True and len(result.listings) == 2
+    assert detail_calls == ["/wday/cxs/acme/External/job/Lagos/PE_R1"]  # the known posting isn't re-fetched
+    new, known = result.listings
+    assert new.evidence["partial_record"] is False and known.evidence["partial_record"] is True
+    assert known.record.country == "Nigeria"
+
+
+async def test_workday_tenant_with_no_in_scope_country_is_a_complete_empty_listing() -> None:
+    host = "https://acme.wd3.myworkdayjobs.com"
+    router = Router().json("POST", f"{host}/wday/cxs/acme/External/jobs", {"total": 40, "facets": WORKDAY_FACETS, "jobPostings": []})
+    source = snapshot("WORKDAY", f"{host}/External", adapter_config={"country_filter": ["Kenya"]})
+    async with make_client(router) as client:
+        result = await WorkdayAdapter().discover(source, client, max_items=10)
+    assert result.listings == [] and result.complete is True
 
 
 # --------------------------------------------------------------------------------------------------
@@ -353,6 +409,12 @@ async def test_structured_page_extracts_job_posting_and_flags_unstructured_pages
         ("Internal Auditor", None, "JOB"),  # "internal" is not "intern"
         ("Process Technician", "INTERNSHIP", "INTERNSHIP"),
         ("Process Technician", None, "JOB"),
+        ("Management Trainee Programme – Lagos", None, "TRAINEE_PROGRAM"),
+        ("Graduate Trainee – Finance", None, "GRADUATE_PROGRAM"),
+        ("Electrical Apprenticeship 2027", None, "APPRENTICESHIP"),
+        ("Senior Apprenticeship Coordinator", None, "JOB"),  # runs the scheme; not an apprenticeship
+        ("Software Engineering Intern", None, "INTERNSHIP"),
+        ("Senior Mechanical Engineer", None, "JOB"),
     ],
 )
 async def test_classification_is_conservative(title, employment, expected) -> None:
@@ -518,3 +580,132 @@ async def test_company_careers_page_can_list_openings_hosted_on_its_board() -> N
         result = await StructuredPageAdapter().discover(source, client, max_items=10)
     assert result.seen_ids == {"A1", "A2"} and result.complete is True
     assert not any("evil.example" in str(request.url) for request in router.requests)
+
+
+# --------------------------------------------------------------------------------------------------
+# Oracle Recruiting Cloud (response shapes as returned by live Candidate Experience sites, 2026-09-15)
+# --------------------------------------------------------------------------------------------------
+
+ORC_HOST = "https://acme.fa.em2.oraclecloud.com"
+
+
+def orc_router(detail_calls: list[str]) -> Router:
+    def search(request: httpx.Request) -> httpx.Response:
+        finder = request.url.params.get("finder", "")
+        if "selectedLocationsFacet=3001" in finder:
+            requisitions = [
+                {"Id": "7001", "Title": "Graduate Trainee Programme 2027", "PostedDate": "2026-09-10", "PrimaryLocation": "Ikoyi, Lagos, Nigeria",
+                 "PrimaryLocationCountry": "NG", "WorkplaceType": "On-site", "ShortDescriptionStr": "Two-year programme."},
+                {"Id": "7002", "Title": "Network Engineer", "PostedDate": "2026-09-09", "PrimaryLocation": "Abuja, Nigeria", "PrimaryLocationCountry": "NG"},
+            ]
+            return httpx.Response(200, json={"items": [{"TotalJobsCount": 2, "requisitionList": requisitions}]})
+        return httpx.Response(200, json={"items": [{"TotalJobsCount": 30, "requisitionList": [], "locationsFacet": [
+            {"Id": 3001, "Name": "Nigeria", "TotalCount": 2}, {"Id": 3002, "Name": "Cameroon", "TotalCount": 9},
+            {"Id": 3003, "Name": "Lagos, Nigeria", "TotalCount": 2},
+        ]}]})
+
+    def detail(request: httpx.Request) -> httpx.Response:
+        detail_calls.append(request.url.params.get("finder", ""))
+        return httpx.Response(200, json={"items": [{
+            "Id": "7001", "Title": "Graduate Trainee Programme 2027", "PrimaryLocation": "Ikoyi, Lagos, Nigeria", "PrimaryLocationCountry": "NG",
+            "ExternalDescriptionStr": "<p>Rotations across network, IT and commercial teams.</p>",
+            "ExternalQualificationsStr": "<ul><li>First degree in engineering</li><li>NYSC completed</li></ul>",
+            "InternalQualificationsStr": "<p>INTERNAL ONLY: shortlist from referrals</p>",
+            "ExternalPostedStartDate": "2026-09-10T09:00:00+00:00", "ExternalPostedEndDate": "2026-09-27T20:00:00+00:00",
+            "JobSchedule": "Full time", "StudyLevel": "Bachelor's Degree",
+        }]})
+
+    return (
+        Router()
+        .add("GET", f"{ORC_HOST}/hcmRestApi/resources/latest/recruitingCEJobRequisitions", search)
+        .add("GET", f"{ORC_HOST}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails", detail)
+    )
+
+
+async def test_oracle_recruiting_scopes_by_country_facet_and_reads_external_fields_only() -> None:
+    from app.ingestion.adapters.oracle import OracleRecruitingAdapter
+
+    detail_calls: list[str] = []
+    source = snapshot(
+        "ORACLE", f"{ORC_HOST}/hcmUI/CandidateExperience/en/sites/CX_1", adapter_config={"country_filter": ["Nigeria"]},
+        known_external_ids=frozenset({"7002"}),
+    )
+    async with make_client(orc_router(detail_calls)) as client:
+        result = await OracleRecruitingAdapter().discover(source, client, max_items=10)
+
+    assert result.complete is True and result.seen_ids == {"7001", "7002"}
+    assert len(detail_calls) == 1 and "7001" in detail_calls[0]  # only the posting CareerOS hasn't seen
+    programme, engineer = (listing.record for listing in result.listings)
+    assert programme.content_type == "GRADUATE_PROGRAM"
+    assert programme.application_deadline.isoformat() == "2026-09-27T20:00:00+00:00"  # the posting's stated end date
+    assert programme.requirements == ["First degree in engineering", "NYSC completed"]
+    assert "INTERNAL" not in str(result.listings[0].raw) and "INTERNAL" not in (programme.description or "")
+    assert programme.application_url == f"{ORC_HOST}/hcmUI/CandidateExperience/en/sites/CX_1/job/7001"
+    assert (programme.country, engineer.country) == ("Nigeria", "Nigeria")
+    assert result.listings[1].evidence["partial_record"] is True
+
+
+async def test_oracle_recruiting_requires_a_candidate_experience_site() -> None:
+    from app.ingestion.adapters.oracle import OracleRecruitingAdapter
+
+    async with make_client(Router()) as client:
+        with pytest.raises(AdapterConfigurationError):
+            await OracleRecruitingAdapter().discover(snapshot("ORACLE", "https://careers.example.com/jobs"), client, max_items=5)
+
+
+# SAP SuccessFactors career sites mark postings up with microdata (shape observed live, 2026-09-15).
+CSB_JOB = """<html><body><div itemscope itemtype="http://schema.org/JobPosting">
+  <span itemprop="jobLocation" itemscope itemtype="http://schema.org/Place">
+    <span itemprop="address" itemscope itemtype="http://schema.org/PostalAddress"><meta itemprop="streetAddress" content="Lagos, NG"></span>
+  </span>
+  <meta itemprop="datePosted" content="Thu Aug 20 02:00:00 UTC 2026">
+  <meta itemprop="validThrough" content="Sat Oct 31 23:00:00 UTC 2026">
+  <meta itemprop="hiringOrganization" content="Acme">
+  <span itemprop="title">Manager, Regulatory Compliance</span>
+  <span itemprop="description"><p>Lead compliance reviews.</p><ul><li>Degree in law</li></ul></span>
+</div></body></html>"""
+
+
+async def test_structured_page_reads_microdata_postings() -> None:
+    router = (
+        Router()
+        .add("GET", "https://careers.acme.com/acme/search/", httpx.Response(200, text='<a href="/acme/job/Lagos-Manager/1377383933/">Manager</a>'))
+        .add("GET", "https://careers.acme.com/acme/job/", httpx.Response(200, text=CSB_JOB))
+    )
+    source = snapshot(
+        "OFFICIAL_CAREER_PAGE", "https://careers.acme.com/acme/", discovery_method="STRUCTURED_DATA",
+        adapter_config={"listing_pages": ["https://careers.acme.com/acme/search/?q=&locationsearch=Nigeria"], "job_link_contains": "/job/"},
+    )
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(source, client, max_items=10)
+    record = result.listings[0].record
+    assert record.title == "Manager, Regulatory Compliance"
+    assert (record.location, record.city, record.country) == ("Lagos, Nigeria", "Lagos", "Nigeria")
+    assert record.published_at.isoformat() == "2026-08-20T02:00:00+00:00"
+    assert record.application_deadline.isoformat() == "2026-10-31T23:00:00+00:00"
+    assert "Degree in law" in record.description
+
+
+async def test_structured_page_follows_newest_openings_from_a_sitemap_with_link_filters() -> None:
+    sitemap = """<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url><loc>https://careers.acme.com/job/lagos/process-engineer/1/111</loc><lastmod>2026-09-10</lastmod></url>
+      <url><loc>https://careers.acme.com/job/houston/process-engineer/1/222</loc><lastmod>2026-09-12</lastmod></url>
+      <url><loc>https://careers.acme.com/job/lagos/field-operator/1/333</loc><lastmod>2026-09-14</lastmod></url>
+      <url><loc>https://careers.acme.com/about</loc></url>
+      <url><loc>https://evil.example/job/lagos/x/1/999</loc></url>
+    </urlset>"""
+    router = (
+        Router()
+        .add("GET", "https://careers.acme.com/sitemap.xml", httpx.Response(200, text=sitemap, headers={"content-type": "application/xml"}))
+        .add("GET", "https://careers.acme.com/job/lagos/process-engineer/1/111", httpx.Response(200, text=job_posting_page("Process Engineer", valid_through="2026-10-01", identifier="111")))
+        .add("GET", "https://careers.acme.com/job/lagos/field-operator/1/333", httpx.Response(200, text=job_posting_page("Field Operator", valid_through="2026-10-01", identifier="333")))
+    )
+    source = snapshot(
+        "OFFICIAL_CAREER_PAGE", "https://careers.acme.com/", discovery_method="STRUCTURED_DATA",
+        adapter_config={"sitemap_urls": ["https://careers.acme.com/sitemap.xml"], "job_link_contains": "/job/", "link_filters": ["/lagos/"]},
+    )
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(source, client, max_items=10)
+    assert [listing.record.title for listing in result.listings] == ["Field Operator", "Process Engineer"]  # newest first
+    assert result.complete is True
+    assert not any("houston" in str(r.url) or "evil.example" in str(r.url) for r in router.requests)

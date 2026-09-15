@@ -292,6 +292,7 @@ class DiscoveryHttpClient:
             except httpx.HTTPError as exc:
                 raise NetworkError(f"network error ({type(exc).__name__})") from exc
 
+            self.stats["last_status"] = response.status_code
             try:
                 if response.status_code in (301, 302, 303, 307, 308):
                     location = response.headers.get("location")

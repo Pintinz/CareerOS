@@ -143,6 +143,11 @@ def parse_datetime(value) -> datetime | None:
         parsed = parsedate_to_datetime(text)
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     except (TypeError, ValueError, IndexError):
+        pass
+    # Java Date.toString(), as SAP SuccessFactors career sites print it: "Thu Aug 20 02:00:00 UTC 2026".
+    try:
+        return datetime.strptime(text, "%a %b %d %H:%M:%S UTC %Y").replace(tzinfo=timezone.utc)
+    except ValueError:
         return None
 
 

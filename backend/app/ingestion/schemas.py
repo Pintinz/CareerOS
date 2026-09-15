@@ -20,7 +20,9 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_valida
 from app.ingestion.text import clean_text, parse_datetime
 from app.ingestion.url_safety import UnsafeUrlError, validate_public_url
 
-ContentTypeLiteral = Literal["JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "SCHOLARSHIP", "FELLOWSHIP", "INTELLIGENCE"]
+# Vacancy-like content types, all stored as Job rows (opportunity_type).
+JOB_CONTENT_TYPES = ("JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "APPRENTICESHIP", "TRAINEE_PROGRAM")
+ContentTypeLiteral = Literal["JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "APPRENTICESHIP", "TRAINEE_PROGRAM", "SCHOLARSHIP", "FELLOWSHIP", "INTELLIGENCE"]
 
 
 def _bounded_text(max_length: int):
@@ -95,7 +97,7 @@ class _Extracted(BaseModel):
 
 
 class ExtractedJob(_Extracted):
-    content_type: Literal["JOB", "INTERNSHIP", "GRADUATE_PROGRAM"] = "JOB"
+    content_type: Literal["JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "APPRENTICESHIP", "TRAINEE_PROGRAM"] = "JOB"
     title: Title
     company: ShortText = None
     requisition_id: Annotated[str | None, _bounded_text(255)] = None
@@ -249,7 +251,7 @@ def record_published_at(record: ExtractedRecord) -> datetime | None:
 def parse_record(data: dict) -> ExtractedRecord:
     """Validate a stored/untrusted dict back into the right model by its content_type."""
     content_type = str(data.get("content_type", "")).upper()
-    if content_type in ("JOB", "INTERNSHIP", "GRADUATE_PROGRAM"):
+    if content_type in JOB_CONTENT_TYPES:
         return ExtractedJob.model_validate(data)
     if content_type in ("SCHOLARSHIP", "FELLOWSHIP"):
         return ExtractedScholarship.model_validate(data)

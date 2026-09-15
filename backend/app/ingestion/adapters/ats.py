@@ -92,7 +92,7 @@ class LeverAdapter(_AtsAdapter):
     page_size = 100
 
     def is_enabled(self, settings: Settings) -> bool:
-        return settings.lever_discovery_enabled
+        return settings.structured_ats_sync_enabled and settings.lever_discovery_enabled
 
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
         site = _identifier(source, config_key="company", hosts=("lever.co",), api_prefix=("v0", "postings"))
@@ -168,7 +168,7 @@ class GreenhouseAdapter(_AtsAdapter):
     api_label = "greenhouse_job_board_v1"
 
     def is_enabled(self, settings: Settings) -> bool:
-        return settings.greenhouse_discovery_enabled
+        return settings.structured_ats_sync_enabled and settings.greenhouse_discovery_enabled
 
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
         token = _identifier(source, config_key="board_token", hosts=("greenhouse.io",), api_prefix=("v1", "boards"))
@@ -226,7 +226,7 @@ class AshbyAdapter(_AtsAdapter):
     _WORKPLACE = {"OnSite": "ON_SITE", "Remote": "REMOTE", "Hybrid": "HYBRID"}
 
     def is_enabled(self, settings: Settings) -> bool:
-        return settings.ashby_discovery_enabled
+        return settings.structured_ats_sync_enabled and settings.ashby_discovery_enabled
 
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
         board = _identifier(source, config_key="board_name", hosts=("ashbyhq.com",), api_prefix=("posting-api", "job-board"))
@@ -301,7 +301,7 @@ class SmartRecruitersAdapter(_AtsAdapter):
     _EXPERIENCE = {"entry_level": "ENTRY", "internship": "ENTRY", "associate": "JUNIOR", "director": "EXECUTIVE", "executive": "EXECUTIVE"}
 
     def is_enabled(self, settings: Settings) -> bool:
-        return settings.smartrecruiters_discovery_enabled
+        return settings.structured_ats_sync_enabled and settings.smartrecruiters_discovery_enabled
 
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
         company = _identifier(source, config_key="company_identifier", hosts=("smartrecruiters.com",), api_prefix=("v1", "companies"))

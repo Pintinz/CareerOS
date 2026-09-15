@@ -8,6 +8,7 @@ from app.core.config import Settings
 from app.ingestion.adapters.ats import AshbyAdapter, GreenhouseAdapter, LeverAdapter, SmartRecruitersAdapter
 from app.ingestion.adapters.base import SourceAdapter, SourceSnapshot
 from app.ingestion.adapters.feeds import RssAdapter, StructuredPageAdapter
+from app.ingestion.adapters.oracle import OracleRecruitingAdapter
 from app.ingestion.adapters.workday import WorkdayAdapter
 
 _BY_SOURCE_TYPE: dict[str, type[SourceAdapter]] = {
@@ -16,6 +17,7 @@ _BY_SOURCE_TYPE: dict[str, type[SourceAdapter]] = {
     "ASHBY": AshbyAdapter,
     "SMARTRECRUITERS": SmartRecruitersAdapter,
     "WORKDAY": WorkdayAdapter,
+    "ORACLE": OracleRecruitingAdapter,
     "RSS": RssAdapter,
 }
 
@@ -61,8 +63,9 @@ DEFAULT_DISCOVERY_METHOD = {
 # Default polling intervals (spec §29): career sources 6-12h, scholarships 12-24h, newsrooms
 # 6-24h, slow university sources 24-72h.
 DEFAULT_CRAWL_INTERVAL_MINUTES = {
-    "GREENHOUSE": 720, "LEVER": 720, "ASHBY": 720, "SMARTRECRUITERS": 720, "WORKDAY": 720, "OFFICIAL_CAREER_PAGE": 720,
+    # Official career sources: every 6 hours; very large boards are set to 12h per source in the seed.
+    "GREENHOUSE": 360, "LEVER": 360, "ASHBY": 360, "SMARTRECRUITERS": 360, "WORKDAY": 360, "OFFICIAL_CAREER_PAGE": 360,
     "OFFICIAL_NEWSROOM": 720, "INVESTOR_RELATIONS": 1440, "RSS": 720, "INDUSTRY_PUBLICATION": 1440, "NEWS_MEDIA": 1440,
     "SCHOLARSHIP_PROVIDER": 1440, "GOVERNMENT": 1440, "REGULATOR": 1440, "UNIVERSITY": 2880,
-    "SUCCESSFACTORS": 1440, "ORACLE": 1440, "AGGREGATOR": 1440, "OTHER": 1440,
+    "SUCCESSFACTORS": 720, "ORACLE": 720, "AGGREGATOR": 1440, "OTHER": 1440,
 }
