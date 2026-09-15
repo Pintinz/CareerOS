@@ -53,7 +53,7 @@ _CONTENT_TYPES = {t.value for t in DiscoveredItemType}
 # so secrets can never end up in the database or the admin UI (spec §28).
 _ALLOWED_ADAPTER_KEYS = {
     "company", "board_token", "board_name", "company_identifier", "tenant", "site", "region", "feed_url",
-    "pages", "include_all", "search_queries", "allow_ats_domains",
+    "pages", "include_all", "search_queries", "allow_ats_domains", "listing_pages", "job_link_contains",
 }
 
 
@@ -81,6 +81,15 @@ def _validate_adapter_config(value: dict | None) -> dict | None:
             raise ValueError("adapter_config.pages must be a list of at most 20 URLs")
         for page in pages:
             _validate_source_url(str(page))
+    listing_pages = value.get("listing_pages")
+    if listing_pages is not None:
+        if not isinstance(listing_pages, list) or not listing_pages or len(listing_pages) > 20:
+            raise ValueError("adapter_config.listing_pages must be a list of at most 20 URLs")
+        for page in listing_pages:
+            _validate_source_url(str(page))
+        marker = value.get("job_link_contains")
+        if not isinstance(marker, str) or not marker.strip() or len(marker) > 100:
+            raise ValueError("adapter_config.job_link_contains must be a short path fragment such as /positions/")
     queries = value.get("search_queries")
     if queries is not None and (not isinstance(queries, list) or len(queries) > 5 or any(len(str(q)) > 200 for q in queries)):
         raise ValueError("adapter_config.search_queries must be at most 5 short queries")

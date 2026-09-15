@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import json
 import re
-from urllib.parse import urljoin
+from datetime import datetime, timezone
+from urllib.parse import urldefrag, urljoin, urlsplit
 
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
@@ -28,8 +29,9 @@ from app.core.config import Settings
 from app.ingestion.adapters.base import AdapterConfigurationError, AdapterResult, DiscoveredListing, SourceAdapter, SourceSnapshot, build_record, trim_raw
 from app.ingestion.classification import classify_job_content_type, experience_level_from_title, normalize_employment_type
 from app.ingestion.countries import country_name
-from app.ingestion.http_client import DiscoveryHttpClient, InvalidResponseError
-from app.ingestion.text import clean_text, html_to_text, parse_datetime
+from app.ingestion.classification import split_location
+from app.ingestion.http_client import DiscoveryHttpClient, FetchError, InvalidResponseError
+from app.ingestion.text import clean_text, html_list_items, html_to_text, parse_datetime, text_lines_as_list
 from app.ingestion.url_safety import UnsafeUrlError, registrable_domain, validate_public_url
 
 MAX_FEED_ENTRIES = 200
@@ -237,22 +239,54 @@ _SCHEMA_EMPLOYMENT = {
 }
 _SCHEMA_SALARY_UNIT = {"HOUR": "hourly", "DAY": "daily", "WEEK": "weekly", "MONTH": "monthly", "YEAR": "yearly"}
 
+# "Application Closing Date: 25th September 2026", "Deadline: September 25, 2026", "Applications close 2026-09-25".
+_STATED_CLOSING_DATE = re.compile(
+    r"\b(?:application\s+)?(?:closing\s+date|deadline(?:\s+for\s+applications?)?|applications?\s+close[sd]?(?:\s+on)?)"
+    r"\s*[:\-–]?\s*(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9},?\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}|\d{4}-\d{2}-\d{2})",
+    re.IGNORECASE,
+)
+
+
+def stated_closing_date(*texts: str | None) -> datetime | None:
+    """A closing date the employer wrote into the posting text, used only when the structured
+    data has no `validThrough`. Taken as the end of that day (UTC); anything unparseable → None."""
+    for text in texts:
+        match = _STATED_CLOSING_DATE.search(text or "")
+        if not match:
+            continue
+        raw = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", match.group(1), flags=re.IGNORECASE).replace(",", "")
+        for fmt in ("%d %B %Y", "%d %b %Y", "%B %d %Y", "%b %d %Y", "%Y-%m-%d"):
+            try:
+                day = datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+            return day.replace(hour=23, minute=59, tzinfo=timezone.utc)
+    return None
+
 
 class StructuredPageAdapter(SourceAdapter):
     name = "structured_page"
     method = "STRUCTURED_DATA"
     max_pages = 20
+    max_linked_pages = 50
 
     def is_enabled(self, settings: Settings) -> bool:
         return settings.structured_page_discovery_enabled
 
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
-        pages = source.config("pages") or [source.url]
-        if not isinstance(pages, list) or not pages:
-            raise AdapterConfigurationError("adapter_config.pages must be a list of official page URLs")
-        source_domain = registrable_domain(source.url)
         result = AdapterResult()
-        for page_url in pages[: self.max_pages]:
+        if source.config("listing_pages"):
+            # Careers sites that list openings on one page and publish JobPosting data on each
+            # opening's own page (e.g. Flair-hosted boards).
+            pages, complete = await self._linked_pages(source, client, result)
+            follow_up = True
+        else:
+            pages = source.config("pages") or [source.url]
+            if not isinstance(pages, list) or not pages:
+                raise AdapterConfigurationError("adapter_config.pages must be a list of official page URLs")
+            pages, complete, follow_up = pages[: self.max_pages], False, False
+        source_domain = registrable_domain(source.url)
+        for page_url in pages:
             try:
                 page_url = validate_public_url(str(page_url))
             except UnsafeUrlError:
@@ -261,15 +295,59 @@ class StructuredPageAdapter(SourceAdapter):
             if registrable_domain(page_url) != source_domain:
                 result.warnings.append("skipped a page outside the source's domain")
                 continue
-            response = await client.fetch(page_url)
+            try:
+                response = await client.fetch(page_url)
+            except FetchError:
+                if not follow_up:
+                    raise
+                # An opening that closed between listing and fetch shouldn't fail the run, but the
+                # listing is then no longer known to be complete.
+                result.warnings.append("an opening's page could not be fetched")
+                complete = False
+                continue
             result.pages += 1
             found = self.extract_into(result, source, response.url, response.text, max_items=max_items)
             if found == 0:
                 result.unstructured_pages.append((response.url, response.text))
+                complete = False
             if len(result.listings) + result.invalid_count >= max_items:
                 result.warnings.append(f"stopped at max_items={max_items}")
+                complete = False
                 break
+        result.complete = complete
         return result
+
+    async def _linked_pages(self, source: SourceSnapshot, client: DiscoveryHttpClient, result: AdapterResult) -> tuple[list[str], bool]:
+        listing_pages = source.config("listing_pages")
+        marker = source.config("job_link_contains")
+        if not isinstance(listing_pages, list) or not marker:
+            raise AdapterConfigurationError("adapter_config.listing_pages needs a list of URLs and job_link_contains")
+        links: list[str] = []
+        source_host = urlsplit(source.url).hostname
+        for listing_url in listing_pages[: self.max_pages]:
+            try:
+                listing_url = validate_public_url(str(listing_url))
+            except UnsafeUrlError as exc:
+                raise AdapterConfigurationError("adapter_config.listing_pages contains an unsafe URL") from exc
+            response = await client.fetch(listing_url)
+            result.pages += 1
+            # Openings are followed on the listing page's own host or the source's host (an employer's
+            # website linking to its hosted board) — never a sibling subdomain on a shared career-site
+            # host, which is another employer's board.
+            hosts = {urlsplit(response.url).hostname, source_host}
+            try:
+                root = lxml_html.fromstring(response.text[:3_000_000])
+            except (ParserError, ValueError):
+                continue
+            for href in root.xpath("//a/@href")[:2000]:
+                absolute = urldefrag(urljoin(response.url, str(href).strip()))[0]
+                parts = urlsplit(absolute)
+                if parts.scheme in ("http", "https") and parts.hostname in hosts and marker in parts.path and absolute not in links:
+                    links.append(absolute)
+        complete = len(links) <= self.max_linked_pages
+        if not complete:
+            result.warnings.append(f"followed the first {self.max_linked_pages} openings only")
+        return links[: self.max_linked_pages], complete
 
     def extract_into(self, result: AdapterResult, source: SourceSnapshot, page_url: str, markup: str, *, max_items: int = 500) -> int:
         """Deterministic schema.org extraction from one already-fetched page. Returns how many
@@ -293,12 +371,17 @@ class StructuredPageAdapter(SourceAdapter):
         locations = node.get("jobLocation") or []
         if isinstance(locations, dict):
             locations = [locations]
-        address = (locations[0].get("address") if locations and isinstance(locations[0], dict) else None) or {}
+        place = locations[0] if locations and isinstance(locations[0], dict) else {}
+        address = place.get("address") or {}
         if isinstance(address, str):
             address = {"streetAddress": address}
         city, region = _text(address.get("addressLocality")), _text(address.get("addressRegion"))
         country = country_name(_text(address.get("addressCountry")))
         location = ", ".join(p for p in (city, region, country) if p) or None
+        if location is None and _text(place.get("name")):
+            # Some boards only name the place ("Port Harcourt"); parse it without inventing a country.
+            location = _text(place.get("name"))
+            city, region, country = split_location(location)
         employment_values = node.get("employmentType") or []
         if isinstance(employment_values, str):
             employment_values = [employment_values]
@@ -309,9 +392,13 @@ class StructuredPageAdapter(SourceAdapter):
         value = salary.get("value") if isinstance(salary, dict) else None
         value = value if isinstance(value, dict) else {}
         identifier = node.get("identifier")
-        external_id = _text(identifier) if identifier else None
-        valid_through = parse_datetime(node.get("validThrough"))
+        # schema.org PropertyValue: the id is `value` (`name` names the scheme, e.g. the company).
+        external_id = _text(identifier.get("value") or identifier.get("name")) if isinstance(identifier, dict) else _text(identifier)
         description = html_to_text(node.get("description"))
+        benefits = html_to_text(node.get("jobBenefits"))
+        experience_markup = node.get("experienceRequirements")
+        experience_text = html_to_text(experience_markup) if isinstance(experience_markup, str) else _text(experience_markup)
+        valid_through = parse_datetime(node.get("validThrough")) or stated_closing_date(description, benefits, experience_text)
         url = node.get("url") or page_url
         education = node.get("educationRequirements")
         data = {
@@ -324,7 +411,8 @@ class StructuredPageAdapter(SourceAdapter):
             "description": description,
             "summary": clean_text(description.split("\n\n", 1)[0], max_length=500) if description else None,
             "education_requirements": [_text(education)] if education else [],
-            "experience_requirements": [_text(node.get("experienceRequirements"))] if node.get("experienceRequirements") else [],
+            "experience_requirements": (html_list_items(experience_markup) if isinstance(experience_markup, str) else []) or text_lines_as_list(experience_text),
+            "responsibilities": html_list_items(node.get("responsibilities")) if isinstance(node.get("responsibilities"), str) else [],
             "preferred_skills": [s.strip() for s in str(_text(node.get("skills")) or "").split(",") if s.strip()][:25],
             "salary_min": _int(value.get("minValue") or value.get("value")),
             "salary_max": _int(value.get("maxValue") or value.get("value")),
@@ -339,6 +427,7 @@ class StructuredPageAdapter(SourceAdapter):
             "confidence": 0.8,
         }
         kind = classify_job_content_type(title, employment_type=employment)
+        result.seen_ids.add(str(external_id or url))
         try:
             record = build_record(kind, {**data, "source_external_id": external_id or url})
         except ValidationError as exc:

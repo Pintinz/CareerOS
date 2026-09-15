@@ -65,7 +65,7 @@ Code map: `backend/app/ingestion/` (fetching, adapters, validation, research pro
 | `SmartRecruitersAdapter` | `api.smartrecruiters.com/v1/companies/{id}/postings` + detail (paginated) | yes | **off** — its robots.txt disallows all crawlers except LinkedInBot (checked 2026-09-14) |
 | `WorkdayAdapter` | public career-site JSON `/wday/cxs/{tenant}/{site}/jobs` + detail | yes | **off** — undocumented, tenant-specific; experimental |
 | `RssAdapter` | RSS 2.0 / RSS 1.0 / Atom via defusedxml | no (rolling window) | on |
-| `StructuredPageAdapter` | schema.org JSON-LD `JobPosting` / `NewsArticle` on listed official pages | no | on |
+| `StructuredPageAdapter` | schema.org JSON-LD `JobPosting` / `NewsArticle` on listed official pages, or on every opening linked from `listing_pages` (links containing `job_link_contains`, same host as the listing page or the source); a closing date stated in the posting text is used when `validThrough` is absent | no | on (live-verified on a Flair-hosted board, 2026-09-15) |
 
 SuccessFactors and Oracle Recruiting were investigated: there is no single public structured
 job-board API across tenants. Register their pages as `STRUCTURED_DATA` (JSON-LD is commonly

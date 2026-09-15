@@ -5,7 +5,7 @@ import pytest
 
 from app.ingestion.adapters.ats import AshbyAdapter, GreenhouseAdapter, LeverAdapter, SmartRecruitersAdapter
 from app.ingestion.adapters.base import AdapterConfigurationError, SourceSnapshot
-from app.ingestion.adapters.feeds import RssAdapter, StructuredPageAdapter, feed_summary, parse_feed
+from app.ingestion.adapters.feeds import RssAdapter, StructuredPageAdapter, feed_summary, parse_feed, stated_closing_date
 from app.ingestion.adapters.workday import WorkdayAdapter
 from app.ingestion.classification import classify_job_content_type, location_work_mode, normalize_work_mode, split_location
 from app.ingestion.http_client import (
@@ -408,3 +408,113 @@ async def test_feed_summary_drops_cms_boilerplate() -> None:
     assert feed_summary(raw) == "Investment supports a women-led agribusiness."
     assert feed_summary("Canonical announces certified images for the new board [&#8230;]") == "Canonical announces certified images for the new board"
     assert feed_summary(None) is None
+
+
+
+# Shaped like a Flair-hosted careers board (observed during live QA, 2026-09-15): a listing page linking
+# to one page per opening, each with JobPosting data whose HTML fields are entity-escaped and whose
+# closing date is only stated in the posting text.
+def flair_position(identifier: str, title: str) -> str:
+    import html as _html
+    import json as _json
+
+    data = {
+        "@context": "https://schema.org", "@type": "JobPosting", "identifier": identifier, "title": title,
+        "datePosted": "2026-09-01", "employmentType": "FULL_TIME",
+        "description": _html.escape("<p>Join the operations team.</p><p>Maintain rotating equipment.</p>"),
+        "experienceRequirements": _html.escape("<p>• OND or equivalent in Mechanical Engineering</p><p>• 3 years in oil and gas operations</p>"),
+        "jobBenefits": _html.escape("<p>Equal Opportunity Employer.</p><p><strong>Application Closing Date: </strong><strong>25th September 2026</strong></p>"),
+        "hiringOrganization": {"@type": "Organization", "name": "Acme Energy"},
+        "jobLocation": {"@type": "Place", "name": "Port Harcourt", "address": {"@type": "PostalAddress"}},
+    }
+    return f'<html><head><script type="application/ld+json">{_json.dumps(data)}</script></head><body><h1>{title}</h1></body></html>'
+
+
+LISTING = """<html><body>
+  <a href="/positions/A1">Operations Technician</a> <a href="/positions/A2#apply">Pipeline Engineer</a>
+  <a href="/positions/A1">Operations Technician (duplicate link)</a> <a href="/about">About</a>
+  <a href="https://other-employer.careers.flair.hr/positions/X9">Another employer's job</a>
+</body></html>"""
+
+
+def flair_source():
+    return snapshot(
+        "OFFICIAL_CAREER_PAGE", "https://acme.careers.flair.hr/", discovery_method="STRUCTURED_DATA",
+        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/"], "job_link_contains": "/positions/"},
+    )
+
+
+async def test_structured_page_follows_openings_from_a_listing_page() -> None:
+    router = (
+        Router()
+        .add("GET", "https://acme.careers.flair.hr/", httpx.Response(200, text=LISTING))
+        .add("GET", "https://acme.careers.flair.hr/positions/A1", httpx.Response(200, text=flair_position("A1", "Operations Technician")))
+        .add("GET", "https://acme.careers.flair.hr/positions/A2", httpx.Response(200, text=flair_position("A2", "Pipeline Engineer")))
+    )
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(flair_source(), client, max_items=10)
+    assert [listing.record.title for listing in result.listings] == ["Operations Technician", "Pipeline Engineer"]
+    assert result.complete is True and result.seen_ids == {"A1", "A2"}
+    record = result.listings[0].record
+    assert record.application_deadline.isoformat() == "2026-09-25T23:59:00+00:00"  # stated in the posting text
+    assert (record.location, record.city, record.country) == ("Port Harcourt", None, None)  # no country invented
+    assert record.experience_requirements == ["OND or equivalent in Mechanical Engineering", "3 years in oil and gas operations"]
+    assert not any("other-employer" in str(request.url) for request in router.requests)
+
+
+async def test_opening_that_disappears_mid_run_does_not_fail_or_count_as_complete() -> None:
+    router = (
+        Router()
+        .add("GET", "https://acme.careers.flair.hr/", httpx.Response(200, text=LISTING))
+        .add("GET", "https://acme.careers.flair.hr/positions/A1", httpx.Response(200, text=flair_position("A1", "Operations Technician")))
+        .add("GET", "https://acme.careers.flair.hr/positions/A2", httpx.Response(404))
+    )
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(flair_source(), client, max_items=10)
+    assert len(result.listings) == 1 and result.complete is False
+    assert any("could not be fetched" in w for w in result.warnings)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Application Closing Date: 25th September 2026", "2026-09-25"),
+        ("Deadline: September 3, 2026.", "2026-09-03"),
+        ("Applications close on 2026-10-01", "2026-10-01"),
+        ("We review applications on a rolling basis.", None),
+        ("Closing date: soon", None),
+    ],
+)
+async def test_stated_closing_date(text, expected) -> None:
+    found = stated_closing_date(text)
+    assert (found.date().isoformat() if found else None) == expected
+
+
+async def test_listing_pages_require_a_link_marker() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas.admin_ops import ContentSourceCreate
+
+    with pytest.raises(ValidationError):
+        ContentSourceCreate(name="Acme", url="https://acme.careers.flair.hr/", source_type="OFFICIAL_CAREER_PAGE",
+                            adapter_config_json={"listing_pages": ["https://acme.careers.flair.hr/"]})
+
+
+
+async def test_company_careers_page_can_list_openings_hosted_on_its_board() -> None:
+    company_page = '<a href="https://acme.careers.flair.hr/positions/A2">Pipeline Engineer</a> <a href="https://evil.example/positions/Z">x</a>'
+    router = (
+        Router()
+        .add("GET", "https://acme-energy.com/careers", httpx.Response(200, text=company_page))
+        .add("GET", "https://acme.careers.flair.hr/", httpx.Response(200, text='<a href="/positions/A1">Operations Technician</a>'))
+        .add("GET", "https://acme.careers.flair.hr/positions/A1", httpx.Response(200, text=flair_position("A1", "Operations Technician")))
+        .add("GET", "https://acme.careers.flair.hr/positions/A2", httpx.Response(200, text=flair_position("A2", "Pipeline Engineer")))
+    )
+    source = snapshot(
+        "OFFICIAL_CAREER_PAGE", "https://acme.careers.flair.hr/", discovery_method="STRUCTURED_DATA",
+        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/", "https://acme-energy.com/careers"], "job_link_contains": "/positions/"},
+    )
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(source, client, max_items=10)
+    assert result.seen_ids == {"A1", "A2"} and result.complete is True
+    assert not any("evil.example" in str(request.url) for request in router.requests)
