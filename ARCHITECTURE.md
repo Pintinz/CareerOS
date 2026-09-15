@@ -452,8 +452,8 @@ placeholder from the original scaffold; the scheduler and its jobs live directly
 `app/scheduler.py` and `app/services/content_lifecycle_service.py` instead, since no second
 process/queue exists to justify a separate `workers/` package yet). Three jobs are registered:
 email watch/subscription renewal (24h), scheduled content publishing (15min), content expiration
-(1h). Source-discovery polling is deliberately not registered — no ingestion adapter exists in
-`app/ingestion/` (also still an empty placeholder) to poll. Each job run's outcome (last run,
+(1h), plus — since the live discovery engine — a discovery dispatcher (5min: due sources + queued
+runs + stale runs) and active-listing re-verification (12h); see **DISCOVERY_ENGINE.md**. Each job run's outcome (last run,
 success, duration, error) is tracked in an in-memory, process-local history and surfaced via
 `GET /admin/dashboard/operations` — this history is intentionally not persisted, since it describes
 "since this backend process last started," not a durable audit trail (that's what `AuditLog` is for).
@@ -475,11 +475,15 @@ Job/Scholarship/IntelligencePost each gained `scheduled_publish_at`/`reviewed_by
 `published_by_admin_id`, populated idempotently by each service's `create`/`update` via a shared
 `_apply_workflow_transitions` pattern (duplicated per-service rather than extracted into one shared
 mixin — a minor inconsistency, not a bug). `ContentSource`/`DiscoveredItem` (in
-`app/models/admin_ops.py`) model an admin-curated source registry and a discovery queue with
-deduplication before insert — but there is still no real ingestion code that populates
-`DiscoveredItem` automatically; only a manual `POST /admin/discovery/ingest` entry point exists. A
-discovered item can only ever become a **DRAFT** Job/Scholarship/IntelligencePost, never a published
-one, enforced in `DiscoveryService.create_draft()`.
+`app/models/admin_ops.py`) are now populated by the live discovery engine (**DISCOVERY_ENGINE.md**):
+`app/ingestion/` holds the safe HTTP client, deterministic adapters (Lever, Greenhouse, Ashby,
+SmartRecruiters, experimental Workday, RSS, schema.org pages), validated extraction schemas and the
+`ResearchProvider` abstraction (structured / web / Anthropic / mock); `app/services/discovery/` holds
+the pipeline (organization matching, deduplication, change detection, removal detection), the
+publishing/change-application helpers, re-verification, the queue worker and the admin review
+service. Discovered content reaches users only through an admin publish action, or through
+auto-publishing when every gate passes (off by default). Public feeds show only listings still active
+at their source; detail pages expose an `availability` state (`app/services/availability.py`).
 
 ### Audit logging and settings
 

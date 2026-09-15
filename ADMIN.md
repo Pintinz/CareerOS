@@ -90,19 +90,33 @@ replacing with a real reference table if the media library grows large.
 
 ## Content sources & discovery queue
 
-A `ContentSource` is an admin-registered thing CareerOS could pull content from (a company careers
-page, an RSS feed, a scholarship-provider site, etc.) — registering one does **not** by itself
-ingest anything. There is no live RSS/Lever/Ashby polling adapter in this codebase; the only way a
-`DiscoveredItem` enters the queue today is the manual `POST /admin/discovery/ingest` endpoint.
+The admin works like an editorial research desk: **Sources → Discovery → Verification → Draft →
+Publish → Monitor.** Full engine design: **DISCOVERY_ENGINE.md**.
 
-Reviewing a discovered item always creates the corresponding Job/Scholarship/IntelligencePost as
-**DRAFT** — nothing discovered is ever auto-published, and an item can only be turned into a draft
-once (a second attempt 409s). Ignoring or rejecting an item just marks its status; neither deletes
-the underlying `DiscoveredItem` row.
+- **Sources** (`/sources`): register official careers pages, ATS boards, newsrooms, universities,
+  scholarship providers and feeds, with content types, public adapter identifiers (board token etc. —
+  secrets are rejected), polling and crawl interval. The health table shows active/paused, ownership
+  verification, trust level, last check/success/failure (with backoff), items discovered/awaiting
+  review/published and the last run. **Run discovery** enqueues a background run and returns at once;
+  **Runs** shows history. Only ADMIN/SUPER_ADMIN may change trust level, ownership verification or
+  allow auto-publishing; trust never grants publish permission.
+- **Discovery queue** (`/discovery`): tabs All / Jobs / Scholarships / Internships / Graduate Programs
+  / Fellowships / Intelligence; filters for source, company, country, trust, status, date and
+  duplicates; each row shows type, title, organization, source, canonical URL, published date,
+  deadline, trust, extraction confidence, verification state and whether it is new, a duplicate or an
+  update of an existing record. **Run due sources** and **Verify active listings** start background
+  work; a panel lists changes detected on already-published records (apply/dismiss; confirm or keep a
+  detected removal).
+- **Review** (`/discovery/{id}`): source evidence (source quality, matched organization or a company
+  proposal, original title and URL, external id, requisition, dates, method, checks, flags, facts
+  dropped for lack of evidence, instruction-like page text, dedup reasons, raw payload) side by side
+  with the editable CareerOS record, or with the existing record and its detected changes. Actions:
+  Create draft, Publish (blockers explained), Ignore, Reject, Create company.
 
-Deduplication happens on ingest, before a `DiscoveredItem` row is even created: first by
-(source + external id) if the source provided one, else by (source + normalized title), else by
-(source + exact URL). A duplicate ingest call returns the existing item rather than an error.
+Nothing is published by default. Discovery-only (aggregator) items can't be published until an
+official URL is set, and a listing that already exists in CareerOS is reviewed as changes, not
+published again. The manual `POST /admin/discovery/ingest` entry point remains for things an editor
+spots by hand.
 
 ## Notifications
 

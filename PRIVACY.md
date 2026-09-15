@@ -225,6 +225,22 @@ user data:
   in environment/secret management exclusively; only tunable scoring weights/thresholds live in the
   `system_settings` table.
 
+## Live discovery engine
+
+- Discovery reads **public** organization content only (career listings, newsroom posts, scholarship
+  pages). It never logs in, never uses cookies or credentials, never bypasses robots.txt, paywalls,
+  CAPTCHAs or access controls, and never requests private or internal network addresses.
+- **No user data leaves CareerOS for discovery.** Requests to sources, and to the optional AI research
+  provider, contain only the public page and source metadata — never user profiles, CVs,
+  applications, recordings or email content. Personalization happens inside CareerOS on published
+  records.
+- Operational logs record source host, status, size and duration — never headers, cookies, tokens,
+  API keys or page bodies. Raw source payloads are bounded and visible to admins only.
+- Company intelligence stores a short summary, a separate hedged career-relevance note, the source
+  name and link — not full articles — and discovery never copies or hotlinks images.
+- Follower notifications for newly published content respect each user's notification preferences
+  and carry only a route to the published item.
+
 ## Account deletion
 
 Deleting an account removes profile data, documents, and application history; it is a real delete

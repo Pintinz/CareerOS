@@ -1,6 +1,6 @@
 # CareerOS — Project Status
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 This file is the single source of truth for build progress. Update it after every phase.
 
@@ -22,6 +22,8 @@ This file is the single source of truth for build progress. Update it after ever
 - `291ccb4` — Phase 9.5 (Full-System Audit, Integration Hardening & Product Coherence Review) — see below and **SYSTEM_AUDIT.md** (tagged `phase-9.5-system-audit`).
 - `af7b8f7` — docs: record Phase 9.5 commit hash.
 - `61e2b80` — Phase 10 (AdMob, Monetization & Free/Pro Entitlement Architecture) — see below and **MONETIZATION.md** (tagged `phase-10-monetization`).
+- Branch `ui-ux-restructure`: `cfb774b`…`4184f69` UI/UX restructuring, `81fefb6` official logo, `067723f` welcome + onboarding.
+- Branch `live-opportunity-discovery` (from `ui-ux-restructure`): `fd09369` Phase 11 production hardening, `fe6cfd9` discovery adapter framework + research providers, `11ecc39` verification/dedup/change tracking/expiry/review API, `b261d5c` admin research console, `4639a8b` mobile integration, then docs — see **DISCOVERY_ENGINE.md**.
 
 ## Environment notes (read before assuming anything is verified)
 
@@ -74,7 +76,8 @@ then Phase 7) — each rebuild faster than the last since everything is cached:
 | 9 — Admin | IN PROGRESS (focused subset, verified) | Real backend + admin web UI for all 15 spec areas: content CMS (jobs/scholarships/intelligence/companies), question banks (CRUD + CSV bulk import w/ dedup), media library (usage-guarded delete), source registry + discovery queue (never auto-publishes), user admin, notifications (architecture-only, no real push), audit log, system settings, a real single-scheduler background job system (email watch renewal / scheduled publish / content expiration) with retry/backoff, and an honest operations dashboard. See the Phase 9 section below for what's real vs. explicitly deferred. |
 | 9.5 — System Audit & Hardening | DONE (see SYSTEM_AUDIT.md) | Full cross-feature audit against Phases 0-9. Found and fixed 13 real issues including a critical systemic one (SQLite foreign-key enforcement was never enabled anywhere, making every `ondelete` behavior in the schema decorative in dev/test), a CASCADE-delete data-loss risk on Company→Jobs, a public-jobs-feed N+1 query, an insecure-production-default gap, a mobile 401-doesn't-force-logout bug, a demo-content mislabeling spec violation, and an external-URL-scheme-safety gap. No major new features added. See SYSTEM_AUDIT.md for the full 48-section audit and the pre-monetization checkpoint verdict. |
 | 10 — Monetization | IN PROGRESS (architecture verified with test ads) | Real AdMob integration (banner/interstitial/rewarded), all against Google's official test ad units — no real AdMob account exists. Free/Pro entitlement architecture, idempotent reward ledger, real UMP consent flow, admin-configurable via existing system-settings. App Open architecture prepared but hardcoded disabled. See MONETIZATION.md for the full breakdown and exactly what "test-ad verified" does and doesn't mean. |
-| 11 — Production Hardening | NOT STARTED | |
+| 11 — Production Hardening | IN PROGRESS | Error reporting hook, PostgreSQL-safe migrations and error handling, scheduler leader lock, CV extraction limits, email tracking kill switches (commit `fd09369`). |
+| Live Opportunity & Company Intelligence Engine | IN PROGRESS (mock-verified end to end; adapters real-web verified read-only) | Source registry + health, deterministic adapters (Lever, Greenhouse, Ashby real-web read-only verified; SmartRecruiters blocked by its robots.txt; Workday experimental), RSS, schema.org pages, optional AI research with injection defences and budgets, validation, dedup, change tracking, removal detection and re-verification, async runs, admin research console, public availability states, graduate programmes and fellowships in the app. Nothing auto-publishes by default. See DISCOVERY_ENGINE.md §16 for exactly what was and wasn't tested. |
 
 ## Completed
 
@@ -799,8 +802,8 @@ document, explicitly not a real file — see MONETIZATION.md §22 for the exact 
 
 ## Partially Complete
 
-- **Mobile app**: Phase 0-8 core loops written and verified. Not yet built: internships/graduate-
-  programme-specific UI, CV rename/set-primary, career-preferences-driven personalization anywhere,
+- **Mobile app**: Phase 0-8 core loops written and verified. Internship and graduate-programme feeds now
+  exist (live discovery engine). Not yet built: CV rename/set-primary, career-preferences-driven personalization anywhere,
   application document attachments, per-section aptitude timing, abstract-reasoning image rendering
   in the active-test/review UI (the images/alt-text now exist end-to-end on the backend — see Phase
   7.5 — but the Flutter aptitude screens still render `question_image_url` with a plain
@@ -820,8 +823,8 @@ document, explicitly not a real file — see MONETIZATION.md §22 for the exact 
 
 - Mobile: Google/Apple Sign-In, forgot-password, email verification, profile-setup wizard beyond
   name/location/experience, settings categories beyond Application Tracking.
-- Admin web: intelligence post CMS UI, aptitude question-bank CMS UI, interview question-bank CMS UI,
-  source registry, discovery queue, user mgmt, email-tracking operational metrics dashboard.
+- Admin web: email-tracking operational metrics dashboard. (Source registry, discovery queue and review
+  now exist — live discovery engine.)
 - Forward-to-CareerOS inbound mail processing (Phase 8 spec §36) — the data model, provider
   interface, and mobile UI/feature-flag all exist, but no actual inbound-email provider (e.g. a
   transactional-email vendor's inbound-parse webhook) is configured, so this stays `false`/inert.

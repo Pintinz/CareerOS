@@ -855,3 +855,38 @@ enforced) is explicitly scoped and documented, not a hidden gap, and does not ch
   verifier," not production-grade fraud protection against real ad revenue.
 - Hard enforcement of free-tier usage limits at the API layer (Phase 10, §47a above).
 - A real payment/subscription integration (CareerOS Pro is architecture-only, "Coming Soon").
+
+## 49. Live Opportunity & Company Intelligence Engine audit (2026-09-14)
+
+**Audit of what existed first:** a source registry and discovery queue (Phase 9) with a manual ingest
+endpoint, title/URL dedup and draft-only conversion; no adapters (`app/ingestion/` empty), no runs,
+no change history, no verification, no discovery scheduling; public detail endpoints 404'd expired
+listings. These were extended, not duplicated (see DISCOVERY_ENGINE.md).
+
+**Issues found and fixed while extending:**
+1. PostgreSQL: `content_sources.source_type` shared the `sourcetype` enum created with only 6 values
+   by the jobs migration — registering a UNIVERSITY/GOVERNMENT/… source would have failed on
+   PostgreSQL. Fixed in migration `c7d1e2f3a4b5` with one shared Python enum.
+2. Unstated facts could only be stored as a guess: `employment_type`, `work_mode` and `funding_type`
+   were NOT NULL with no "not stated" value (a discovered scholarship would have been labelled
+   "Partially funded"). Added `UNSPECIFIED`; the app hides it.
+3. Expired listings 404'd on detail, breaking saved items and application links — detail now returns
+   200 with `availability`, while feeds and saving still exclude them.
+4. Jobs past their `application_deadline` stayed in public feeds unless `expires_at` was also set;
+   feeds now exclude them and expiry records `source_state=DEADLINE_PASSED`.
+5. Job save toggles on mobile rebuilt cards by hand and would have dropped new fields — replaced with
+   `copyWith`.
+
+**Security review (discovery-specific):** SSRF (every hop, DNS-resolved), robots.txt fail-closed on
+unreachable robots, no credential use, response size caps, defusedxml for feeds, HTML → text only,
+URL scheme allow-list for anything shown to users, secret-looking adapter config rejected, prompt
+injection defences independent of the model, action-free AI output schema, evidence checks,
+confidence caps, auto-publish gated eight ways and off by default, audit trail for every automated
+and editorial action.
+
+**Verification:** 276 backend tests pass (196 existing + 80 new); two existing tests intentionally
+updated (discovery status vocabulary; expired job detail returns 200 with availability). Flutter
+analyze clean and 148 tests pass; admin production build passes. Real-web read-only QA succeeded for
+the Lever, Greenhouse and Ashby public job-board APIs; SmartRecruiters was correctly refused by its
+robots.txt. Not verified: PostgreSQL migration run, Workday/RSS/JSON-LD against live sites, real
+Anthropic calls, full live source → publish flow, authenticated admin screens in a browser.

@@ -77,7 +77,10 @@ class Settings(BaseSettings):
     lever_discovery_enabled: bool = True
     greenhouse_discovery_enabled: bool = True
     ashby_discovery_enabled: bool = True
-    smartrecruiters_discovery_enabled: bool = True
+    # Off by default: api.smartrecruiters.com/robots.txt (checked 2026-09-14) allows only LinkedInBot
+    # and disallows all other crawlers, and discovery always honours robots.txt. Enable only if that
+    # changes or SmartRecruiters grants access; until then such sources fail as ROBOTS_DISALLOWED.
+    smartrecruiters_discovery_enabled: bool = False
     # Workday's public career-site JSON is undocumented and varies by tenant — opt in per deployment.
     workday_discovery_enabled: bool = False
     rss_discovery_enabled: bool = True

@@ -76,7 +76,8 @@ Backend (`backend/.env.example`): `DATABASE_URL`, `JWT_SECRET_KEY`, `JWT_ALGORIT
 `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `CORS_ORIGINS`, `ENVIRONMENT`,
 `GOOGLE_CLIENT_ID` (optional), `APPLE_CLIENT_ID` (optional), `ADMOB_APP_ID` (optional), `REDIS_URL`
 (optional), plus the Phase 8 email-tracking variables documented below (all optional — the feature
-runs on a mock provider with none of them set).
+runs on a mock provider with none of them set), plus the live discovery flags and optional
+`ANTHROPIC_API_KEY` (see "Live discovery engine — production setup").
 
 Admin (`admin/.env.example`): `NEXT_PUBLIC_API_BASE_URL`, `ADMIN_SESSION_SECRET`. Note:
 `ADMIN_SESSION_SECRET` is not currently read anywhere in the admin app's code (it stores its JWT
@@ -167,9 +168,9 @@ same in-process scheduler. `app/services/background_tasks.py`'s `InlineTaskRunne
 webhook-triggered processing synchronously, in-process — fine for development and low volume, but a
 production deployment handling real webhook traffic should implement a `BackgroundTaskRunner` backed
 by whatever queue is already chosen for the rest of the platform (Celery/RQ/cloud tasks) and swap it
-in; no webhook route needs to change to make that swap. Source-discovery polling is not scheduled at
-all — no ingestion adapter exists yet (see PROJECT_STATUS.md's Phase 9 section); wiring one in would
-also mean adding it to the scheduler here.
+in; no webhook route needs to change to make that swap. Discovery runs use their own queue table
+(`discovery_runs`) drained by the scheduler's dispatcher and an in-process task — see "Live discovery
+engine" below.
 
 ### Admin seed account
 
@@ -179,6 +180,32 @@ any admin already exists (never overwrites/resets an existing account). Set both
 exactly long enough to create the real first admin, then either unset them or rotate that account's
 password immediately — they stay effective as a "create if missing" trigger on every subsequent
 restart otherwise.
+
+## Live discovery engine — production setup
+
+See **DISCOVERY_ENGINE.md** for the design.
+
+1. **Migrate** (`alembic upgrade head`, revision `c7d1e2f3a4b5`). On PostgreSQL the migration adds enum
+   values in an autocommit block — run it with a role allowed to `ALTER TYPE`. It has only been
+   exercised on SQLite so far.
+2. **Flags** (environment): `WEB_DISCOVERY_ENABLED` (kill switch), per-adapter `*_DISCOVERY_ENABLED`,
+   `AUTO_PUBLISH_DISCOVERY` (keep `false` unless a deliberate editorial decision is recorded),
+   `DISCOVERY_USER_AGENT` (identify the bot and a contact URL), politeness and budget settings
+   (`DISCOVERY_MIN_REQUEST_INTERVAL_SECONDS`, `DISCOVERY_MAX_REQUESTS_PER_RUN`,
+   `DISCOVERY_MAX_RESPONSE_BYTES`, `DISCOVERY_DISPATCH_INTERVAL_MINUTES`, `VERIFICATION_INTERVAL_HOURS`).
+   Turning discovery off never affects manual admin content management.
+3. **Optional AI research:** set `AI_RESEARCH_ENABLED=true`, `ANTHROPIC_RESEARCH_ENABLED=true` and
+   `ANTHROPIC_API_KEY` **from the secret manager only** (never Git, images, the admin bundle, the
+   mobile app or docs). Tune `ANTHROPIC_RESEARCH_MODEL`, `AI_RESEARCH_MAX_ITEMS_PER_RUN`,
+   `AI_RESEARCH_MAX_TOKENS_PER_BATCH`, `AI_RESEARCH_MIN_TRUST_LEVEL`, `AI_RESEARCH_CONTENT_TYPES`.
+   Without them discovery keeps working through adapters, RSS and structured pages.
+4. **Network:** workers need outbound HTTPS to registered sources and, if enabled, `api.anthropic.com`.
+   The client refuses private/internal addresses by design.
+5. **Multiple processes:** the dispatcher runs under the scheduler's PostgreSQL leader lock, and runs
+   are claimed with a conditional update, so replicas don't duplicate work. A run whose process dies
+   is marked `WORKER_LOST` after an hour.
+6. **Start small:** register a handful of official sources, keep polling off until a manual run looks
+   right in the queue, then enable polling. Verify source ownership before ever allowing auto-publish.
 
 ## AdMob production setup (Phase 10 — not done in this environment)
 

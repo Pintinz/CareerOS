@@ -313,6 +313,34 @@ already have rows.
 Everything else below is the **target** schema from the master spec, not yet implemented. This file
 tracks it so later phases implement against a single source of truth instead of re-deriving it.
 
+### Live discovery engine additions (migration `c7d1e2f3a4b5`)
+
+- `content_sources` + `domain`, `region`, `trust_level`, `discovery_method`, `content_types` (JSON),
+  `adapter_config_json` (public identifiers only), `polling_enabled`, `crawl_interval_minutes`,
+  `auto_publish_allowed`, `last_error_at`, `last_error_code`, `consecutive_failures`, `next_poll_after`.
+- `discovered_items` + `run_id`, `company_id`, `canonical_url`, `location`, `country`, `published_at`,
+  `deadline`, `extracted_data_json`, `evidence_json`, `content_hash`, `discovery_method`,
+  `verification_status`, `trust_level`, `confidence`, `duplicate_of_id` (self FK), `matched_entity_type`
+  / `matched_entity_id`, `last_seen_at`, `last_verified_at`. Status values extended (`PENDING` →
+  `NEEDS_REVIEW`, `REVIEWED` → `DRAFT_CREATED` migrated); item types add `INTERNSHIP`,
+  `GRADUATE_PROGRAM`, `FELLOWSHIP`.
+- New `discovery_runs` (one execution per source or verification pass, with counts, duration, error
+  code and stats), `content_changes` (field-level change history with PENDING/APPLIED/DISMISSED) and
+  `research_cache` (unique provider + URL + content hash).
+- `jobs` + `opportunity_type`, `external_job_id`, `requisition_id`, `state_or_region`,
+  `education_requirements`, `experience_requirements`, `program_duration`, `program_start_date`,
+  `eligibility_json`, `content_source_id` (FK SET NULL), `source_state`, `last_verified_at`.
+  `scholarships` + `award_type`, `opening_date`, `content_source_id`, `source_state`,
+  `last_verified_at`. `intelligence_posts` + `source_name`, `content_source_id`, `last_verified_at`.
+- Enum values `UNSPECIFIED` for `workmode`, `employmenttype`, `fundingtype`.
+- New enum-like columns are VARCHAR (`native_enum=False`), so future values need no `ALTER TYPE`.
+- **PostgreSQL fix:** `sourcetype` was created by the jobs migration with 6 values and reused by
+  `content_sources` (12 values), so registry-only values could not be stored on PostgreSQL. The
+  migration adds every value (`ADD VALUE IF NOT EXISTS`, in an autocommit block) and one Python enum
+  now backs both columns. Enum values are not removed on downgrade.
+- Verified: upgrade → downgrade → upgrade and `alembic check` on SQLite. **Not yet run against
+  PostgreSQL.**
+
 ## Entity groups (target — filled in phase by phase)
 
 ```

@@ -39,6 +39,13 @@ services:
       GMAIL_TRACKING_ENABLED: ${GMAIL_TRACKING_ENABLED:-false}
       OUTLOOK_TRACKING_ENABLED: ${OUTLOOK_TRACKING_ENABLED:-false}
       FORWARD_EMAIL_ENABLED: "false"
+      # Live discovery (DISCOVERY_ENGINE.md). Auto-publishing stays off unless deliberately enabled;
+      # AI research needs ANTHROPIC_API_KEY from the secret manager and both AI flags.
+      WEB_DISCOVERY_ENABLED: ${WEB_DISCOVERY_ENABLED:-true}
+      AUTO_PUBLISH_DISCOVERY: ${AUTO_PUBLISH_DISCOVERY:-false}
+      AI_RESEARCH_ENABLED: ${AI_RESEARCH_ENABLED:-false}
+      ANTHROPIC_RESEARCH_ENABLED: ${ANTHROPIC_RESEARCH_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "8000:8000"
     healthcheck:

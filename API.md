@@ -253,6 +253,40 @@ Phase 9 above) — no new admin routes were added for them.
 | GET | `/api/v1/monetization/entitlement` | Consumer-authenticated. Returns FREE/PRO tier, `should_show_ads`, and today's ATS-analysis/aptitude-test usage and remaining count (UTC calendar day, computed live from `AtsAnalysis`/`TestSession` — no reset job, no separate counter table). |
 | POST | `/api/v1/monetization/rewards/claim` | Consumer-authenticated. Body: `{reward_type, reference_id, source}`. Idempotent on `reference_id` (database `UniqueConstraint`) — a duplicated claim for the same ad-watch returns the existing reward, never a second one. 409 if another user already claimed that exact `reference_id`. The mobile client must only call this from the AdMob SDK's real earned-reward callback — see MONETIZATION.md §9 for why this is documented as a "mock verifier" pending real AdMob server-side verification. |
 
+## Implemented endpoints (Live Opportunity & Company Intelligence Engine)
+
+Admin routes require an `admin_users` token: reads for REVIEWER+, writes for EDITOR+, trust/
+auto-publish/ownership changes and source deletion for ADMIN/SUPER_ADMIN. Design: **DISCOVERY_ENGINE.md**.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/v1/admin/sources` | Sources with health (last check/success/failure, backoff, item counts, last run, adapter availability). |
+| POST / PUT / DELETE | `/api/v1/admin/sources[/{id}]` | Create/update/delete. Adapter config accepts public identifiers only; URLs validated. |
+| POST | `/api/v1/admin/sources/{id}/run` | **202**: enqueue a discovery run (reuses an open run for the source). |
+| POST | `/api/v1/admin/sources/{id}/pause` \| `/resume` | Pause/resume polling and manual runs. |
+| GET | `/api/v1/admin/sources/{id}/runs` | Run history (found/new/updated/duplicates/invalid/removed, duration, error code). |
+| GET | `/api/v1/admin/discovery` | Review queue (defaults to NEW/NEEDS_REVIEW/VERIFIED). Filters: `item_type`, `status`, `source_id`, `company_id`, `country`, `min_trust`, `duplicates=only\|exclude`, `discovered_after`, `search`. |
+| GET | `/api/v1/admin/discovery/metrics` | Operational metrics and flag state. |
+| GET | `/api/v1/admin/discovery/runs` | Recent runs across sources. |
+| POST | `/api/v1/admin/discovery/run-due` \| `/verify` | 202: enqueue due sources / start re-verification. |
+| GET | `/api/v1/admin/discovery/changes` | Change history (`entity_type`, `entity_id`, `status`). |
+| POST | `/api/v1/admin/discovery/changes/{id}/apply` \| `/dismiss` | Resolve a detected change (audited). |
+| POST | `/api/v1/admin/discovery/records/{JOB\|SCHOLARSHIP}/{id}/source-state` | `{confirm: true}` expires a removed/closed listing (kept for history); `false` restores it. |
+| GET | `/api/v1/admin/discovery/{id}/review` | Evidence, extracted record, raw payload, existing record, pending changes, duplicate, publish blockers. |
+| POST | `/api/v1/admin/discovery/{id}/create-draft` \| `/publish` | Optional edits (`title`, `company_id`, `summary`, `description`, `location`, `country`, `application_url`, `deadline`, `category`, `career_relevance`); re-validated. Publish notifies followers. |
+| POST | `/api/v1/admin/discovery/{id}/create-company` | Create the proposed company (admin-confirmed fields only). |
+
+Public API changes: job and scholarship cards/details add `availability` (`ACTIVE`/`EXPIRED`/`CLOSED`/
+`UNAVAILABLE`), `is_official_source` and `last_verified_at`; jobs add `opportunity_type`
+(`JOB`/`INTERNSHIP`/`GRADUATE_PROGRAM`), programme facts and education/experience requirements;
+scholarships add `award_type` and `opening_date`; intelligence details add `source_name`. Feeds only
+list listings active at their source; details of expired/removed listings return 200 (were 404) so
+saved items and applications keep working, while drafts and archived rows still 404. New filters:
+`GET /jobs?opportunity_type=&posted_within_days=` (search also matches location and skills);
+`GET /scholarships?award_type=&field_of_study=&deadline_within_days=` (search also matches country and
+fields). `employment_type`, `work_mode` and `funding_type` may be `UNSPECIFIED` when a source didn't
+state them.
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```
