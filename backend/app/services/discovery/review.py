@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -17,6 +17,7 @@ from app.ingestion.adapters.registry import (
     adapter_enabled,
     adapter_for,
 )
+from app.ingestion.http_client import DiscoveryHttpClient
 from app.ingestion.text import normalize_title
 from app.ingestion.url_safety import host_of
 from app.models.admin_ops import (
@@ -32,9 +33,10 @@ from app.models.admin_ops import (
     DiscoveryRunStatus,
     DiscoveryRunType,
     ItemVerificationStatus,
+    VerificationStatus,
 )
 from app.models.company import Company
-from app.models.job import ContentStatus, Job, SourceState
+from app.models.job import LISTED_SOURCE_STATES, ContentStatus, Job, SourceState
 from app.models.scholarship import Scholarship
 from app.schemas.admin_ops import (
     CompanyProposalIn,
@@ -48,6 +50,7 @@ from app.schemas.admin_ops import (
     DiscoveryMetricsOut,
     DiscoveryReviewOut,
     SourceHealthOut,
+    SourceTestOut,
 )
 from app.services import audit_service
 from app.services.discovery import publishing
@@ -59,6 +62,19 @@ QUEUE_DEFAULT_STATUSES = (DiscoveredItemStatus.NEW, DiscoveredItemStatus.NEEDS_R
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def source_health(source: ContentSource, last_run_status: DiscoveryRunStatus | None) -> str:
+    """HEALTHY / DEGRADED / FAILING / PAUSED / UNKNOWN for the source registry and dashboard."""
+    if not source.is_active:
+        return "PAUSED"
+    if source.last_checked_at is None:
+        return "UNKNOWN"
+    if (source.consecutive_failures or 0) >= 3 or source.verification_status == VerificationStatus.FAILING:
+        return "FAILING"
+    if (source.consecutive_failures or 0) > 0 or last_run_status in (DiscoveryRunStatus.PARTIAL, DiscoveryRunStatus.RATE_LIMITED, DiscoveryRunStatus.FAILED):
+        return "DEGRADED"
+    return "HEALTHY"
 
 
 def _not_found(what: str) -> HTTPException:
@@ -119,6 +135,19 @@ class ContentSourceService:
 
     async def health(self) -> list[SourceHealthOut]:
         sources = await self.list_all()
+        latest = (
+            select(DiscoveryRun.source_id, func.max(DiscoveryRun.queued_at).label("queued_at"))
+            .where(DiscoveryRun.run_type == DiscoveryRunType.SOURCE_DISCOVERY).group_by(DiscoveryRun.source_id).subquery()
+        )
+        last_runs = {
+            run.source_id: run
+            for run in (await self.db.execute(
+                select(DiscoveryRun).join(latest, (DiscoveryRun.source_id == latest.c.source_id) & (DiscoveryRun.queued_at == latest.c.queued_at))
+            )).scalars()
+        }
+        company_names = dict((await self.db.execute(
+            select(Company.id, Company.name).where(Company.id.in_({s.company_id for s in sources if s.company_id}))
+        )).all()) if any(s.company_id for s in sources) else {}
         counts = dict((await self.db.execute(select(DiscoveredItem.source_id, func.count()).group_by(DiscoveredItem.source_id))).all())
         awaiting = dict((await self.db.execute(
             select(DiscoveredItem.source_id, func.count()).where(DiscoveredItem.status.in_(QUEUE_DEFAULT_STATUSES)).group_by(DiscoveredItem.source_id)
@@ -128,20 +157,51 @@ class ContentSourceService:
         )).all())
         out = []
         for source in sources:
-            last_run = (await self.db.execute(
-                select(DiscoveryRun).where(DiscoveryRun.source_id == source.id).order_by(DiscoveryRun.queued_at.desc()).limit(1)
-            )).scalar_one_or_none()
+            last_run = last_runs.get(source.id)
             adapter = adapter_for(snapshot_of(source, None))
+            data = ContentSourceOut.model_validate(source).model_dump()
+            data.pop("requires_review", None)
             out.append(SourceHealthOut(
-                **ContentSourceOut.model_validate(source).model_dump(),
+                **data,
                 items_discovered=counts.get(source.id, 0),
                 items_awaiting_review=awaiting.get(source.id, 0),
                 items_published=published.get(source.id, 0),
                 last_run_status=last_run.status if last_run else None,
                 last_run_at=(last_run.finished_at or last_run.queued_at) if last_run else None,
+                last_run_new=last_run.items_new if last_run else None,
+                last_run_updated=last_run.items_updated if last_run else None,
+                last_run_duplicates=last_run.items_duplicate if last_run else None,
+                last_run_removed=last_run.items_removed if last_run else None,
                 adapter_available=adapter is not None and adapter_enabled(adapter, self.settings),
+                adapter_name=adapter.name if adapter else None,
+                company_name=company_names.get(source.company_id),
+                health=source_health(source, last_run.status if last_run else None),
             ))
         return out
+
+    async def test_connection(self, source_id: str, *, http_client_factory=None) -> SourceTestOut:
+        """A bounded live fetch through the source's adapter. Nothing is stored."""
+        source = await self.get_or_404(source_id)
+        company = await self.db.get(Company, source.company_id) if source.company_id else None
+        snapshot = snapshot_of(source, company)
+        adapter = adapter_for(snapshot)
+        if adapter is None:
+            return SourceTestOut(ok=False, error_code="NO_ADAPTER", error="This source is tracked manually; there is nothing to fetch.")
+        s = self.settings
+        client = http_client_factory() if http_client_factory else DiscoveryHttpClient(
+            user_agent=s.discovery_user_agent, timeout_seconds=s.discovery_request_timeout_seconds,
+            max_response_bytes=s.discovery_max_response_bytes, max_requests=15,
+            min_interval_seconds=s.discovery_min_request_interval_seconds, use_system_trust_store=s.outbound_tls_trust_store == "system",
+        )
+        try:
+            check = await adapter.health_check(snapshot, client, max_items=5)
+        finally:
+            await client.aclose()
+        return SourceTestOut(
+            ok=check.ok, adapter=adapter.name, found=check.found, complete=check.complete, sample_titles=[t for t in check.sample_titles if t],
+            warnings=check.warnings, error_code=check.error_code, error=check.error, http_status=client.stats.get("last_status"),
+            requests=client.stats.get("requests", 0),
+        )
 
     async def runs(self, source_id: str, *, limit: int = 20) -> list[DiscoveryRun]:
         await self.get_or_404(source_id)
@@ -451,7 +511,37 @@ class DiscoveryService:
         runs_24h = (await self.db.execute(select(DiscoveryRun).where(DiscoveryRun.queued_at >= day_ago, DiscoveryRun.run_type == DiscoveryRunType.SOURCE_DISCOVERY))).scalars().all()
         durations = [r.duration_ms for r in runs_24h if r.duration_ms is not None]
         expired_actions = await count(AuditLog, AuditLog.action == "content_expired", AuditLog.created_at >= week_ago)
+        sources = await ContentSourceService(self.db, settings=s).list_all()
+        latest_status = dict((await self.db.execute(
+            select(DiscoveryRun.source_id, DiscoveryRun.status)
+            .join(
+                select(DiscoveryRun.source_id.label("sid"), func.max(DiscoveryRun.queued_at).label("q"))
+                .where(DiscoveryRun.run_type == DiscoveryRunType.SOURCE_DISCOVERY).group_by(DiscoveryRun.source_id).subquery(),
+                (DiscoveryRun.source_id == literal_column("sid")) & (DiscoveryRun.queued_at == literal_column("q")),
+            )
+        )).all())
+        readiness: dict[str, int] = {}
+        for source in sources:
+            readiness[source.readiness.value] = readiness.get(source.readiness.value, 0) + 1
+        listed = (Job.status == ContentStatus.PUBLISHED, Job.is_active.is_(True), Job.source_state.in_(LISTED_SOURCE_STATES))
+        by_country = (await self.db.execute(
+            select(Job.country, func.count()).where(*listed, Job.country.isnot(None)).group_by(Job.country).order_by(func.count().desc()).limit(12)
+        )).all()
+        industry = func.coalesce(Job.industry, Company.industry)
+        by_industry = (await self.db.execute(
+            select(industry, func.count()).join(Company, Company.id == Job.company_id).where(*listed, industry.isnot(None))
+            .group_by(industry).order_by(func.count().desc()).limit(12)
+        )).all()
+        finished = [r.finished_at or r.queued_at for r in runs_24h]
         return DiscoveryMetricsOut(
+            healthy_sources=sum(1 for src in sources if source_health(src, latest_status.get(src.id)) == "HEALTHY"),
+            sources_by_readiness=readiness,
+            last_run_at=max(finished) if finished else None,
+            items_new_24h=sum(r.items_new for r in runs_24h),
+            items_updated_24h=sum(r.items_updated for r in runs_24h),
+            possibly_removed=await count(Job, Job.source_state == SourceState.POSSIBLY_REMOVED, Job.status == ContentStatus.PUBLISHED),
+            jobs_by_country=[{"country": c, "count": n} for c, n in by_country],
+            jobs_by_industry=[{"industry": i, "count": n} for i, n in by_industry],
             active_sources=await count(ContentSource, ContentSource.is_active.is_(True)),
             polling_sources=await count(ContentSource, ContentSource.is_active.is_(True), ContentSource.polling_enabled.is_(True)),
             failing_sources=await count(ContentSource, ContentSource.consecutive_failures >= 3),
@@ -471,6 +561,8 @@ class DiscoveryService:
             flags={
                 "web_discovery": s.web_discovery_enabled, "lever": s.lever_discovery_enabled, "greenhouse": s.greenhouse_discovery_enabled,
                 "ashby": s.ashby_discovery_enabled, "smartrecruiters": s.smartrecruiters_discovery_enabled, "workday": s.workday_discovery_enabled,
+                "oracle_recruiting": s.oracle_recruiting_discovery_enabled, "structured_ats": s.structured_ats_sync_enabled,
+                "html_sources": s.html_source_sync_enabled, "removal_confirmations": s.discovery_removal_confirmations,
                 "rss": s.rss_discovery_enabled, "structured_pages": s.structured_page_discovery_enabled, "ai_research": s.ai_research_enabled,
                 "anthropic_research": s.anthropic_research_enabled,
             },

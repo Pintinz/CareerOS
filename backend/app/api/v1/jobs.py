@@ -16,6 +16,7 @@ async def list_jobs(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     search: str | None = None,
+    # A country name or a region such as "Africa".
     country: str | None = None,
     location: str | None = None,
     industry: str | None = None,
@@ -26,6 +27,7 @@ async def list_jobs(
     company_id: str | None = None,
     opportunity_type: OpportunityType | None = None,
     posted_within_days: int | None = Query(default=None, ge=1, le=365),
+    job_function: str | None = Query(default=None, max_length=100),
     sort: str = Query(default="newest", pattern="^(newest|recommended|deadline)$"),
     db: AsyncSession = Depends(get_db),
     viewer: User | None = Depends(get_optional_current_user),
@@ -45,6 +47,7 @@ async def list_jobs(
         company_id=company_id,
         opportunity_type=opportunity_type,
         posted_within_days=posted_within_days,
+        job_function=job_function,
         sort=sort,
     )
     return JobListResponse(items=items, page=page, page_size=page_size, total=total)

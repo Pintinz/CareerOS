@@ -40,6 +40,7 @@ class JobCardOut(BaseModel):
     # ACTIVE | EXPIRED | CLOSED | UNAVAILABLE (app/services/availability.py)
     availability: str = "ACTIVE"
     is_official_source: bool = False
+    verification_status: str = "UNVERIFIED"
     last_verified_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -87,6 +88,7 @@ class JobDetailOut(BaseModel):
     is_saved: bool = False
     opportunity_type: OpportunityType = OpportunityType.JOB
     state_or_region: str | None = None
+    job_function: str | None = None
     education_requirements: list[str] | None = None
     experience_requirements: list[str] | None = None
     program_duration: str | None = None
@@ -95,6 +97,7 @@ class JobDetailOut(BaseModel):
     source_state: SourceState = SourceState.ACTIVE
     availability: str = "ACTIVE"
     is_official_source: bool = False
+    verification_status: str = "UNVERIFIED"
     last_verified_at: datetime | None = None
 
     model_config = {"from_attributes": True}

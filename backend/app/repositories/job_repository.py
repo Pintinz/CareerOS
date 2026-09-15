@@ -4,8 +4,9 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugify import slugify
+from app.ingestion.countries import region_countries
 from app.models.company import Company
-from app.models.job import ContentStatus, EmploymentType, Job, OpportunityType, SavedJob, SourceState
+from app.models.job import LISTED_SOURCE_STATES, ContentStatus, EmploymentType, Job, OpportunityType, SavedJob, SourceState
 
 
 class JobRepository:
@@ -48,6 +49,7 @@ class JobRepository:
         company_id: str | None = None,
         opportunity_type: str | None = None,
         posted_within_days: int | None = None,
+        job_function: str | None = None,
         sort: str = "newest",
     ) -> tuple[list[Job], int]:
         now = datetime.now(timezone.utc)
@@ -59,7 +61,7 @@ class JobRepository:
             or_(Job.expires_at.is_(None), Job.expires_at > now),
             or_(Job.application_deadline.is_(None), Job.application_deadline > now),
             # Listings whose source removed or closed them stay out of feeds (detail stays reachable).
-            Job.source_state == SourceState.ACTIVE,
+            Job.source_state.in_(LISTED_SOURCE_STATES),
         ]
 
         query = select(Job).join(Company, Job.company_id == Company.id)
@@ -77,15 +79,23 @@ class JobRepository:
                     func.lower(Job.title).like(pattern),
                     func.lower(Company.name).like(pattern),
                     func.lower(Job.location).like(pattern),
+                    func.lower(Job.country).like(pattern),
+                    func.lower(Job.job_function).like(pattern),
+                    func.lower(Company.industry).like(pattern),
                     func.lower(cast(Job.preferred_skills, String)).like(pattern),
                 )
             )
         if country:
-            filters.append(func.lower(Job.country) == country.lower())
+            region = region_countries(country)
+            # "Africa", "Europe"… select every country in the region; otherwise one country.
+            filters.append(Job.country.in_(sorted(region)) if region else func.lower(Job.country) == country.lower())
         if location:
             filters.append(func.lower(Job.location).like(f"%{location.lower()}%"))
         if industry:
-            filters.append(func.lower(Job.industry) == industry.lower())
+            # Imported vacancies usually carry the industry on the company, not the job.
+            filters.append(or_(func.lower(Job.industry) == industry.lower(), func.lower(Company.industry) == industry.lower()))
+        if job_function:
+            filters.append(func.lower(Job.job_function).like(f"%{job_function.lower()}%"))
         if employment_type:
             filters.append(Job.employment_type == employment_type)
         if work_mode:
@@ -98,7 +108,13 @@ class JobRepository:
             filters.append(Job.company_id == company_id)
         if opportunity_type == OpportunityType.INTERNSHIP or opportunity_type == "INTERNSHIP":
             # Manually authored internships predate opportunity_type and carry only the employment type.
-            filters.append(or_(Job.opportunity_type == OpportunityType.INTERNSHIP, Job.employment_type == EmploymentType.INTERNSHIP))
+            # Apprenticeships share the Internships feed; trainee programmes share Graduate Programs.
+            filters.append(or_(
+                Job.opportunity_type.in_((OpportunityType.INTERNSHIP, OpportunityType.APPRENTICESHIP)),
+                Job.employment_type == EmploymentType.INTERNSHIP,
+            ))
+        elif opportunity_type == OpportunityType.GRADUATE_PROGRAM or opportunity_type == "GRADUATE_PROGRAM":
+            filters.append(Job.opportunity_type.in_((OpportunityType.GRADUATE_PROGRAM, OpportunityType.TRAINEE_PROGRAM)))
         elif opportunity_type:
             filters.append(Job.opportunity_type == opportunity_type)
         if posted_within_days:

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from app.ingestion.url_safety import UnsafeUrlError, validate_public_url
 from app.models.admin_ops import (
@@ -14,6 +14,7 @@ from app.models.admin_ops import (
     ItemVerificationStatus,
     NotificationAudience,
     NotificationStatus,
+    SourceReadiness,
     SourceType,
     VerificationStatus,
 )
@@ -54,6 +55,8 @@ _CONTENT_TYPES = {t.value for t in DiscoveredItemType}
 _ALLOWED_ADAPTER_KEYS = {
     "company", "board_token", "board_name", "company_identifier", "tenant", "site", "region", "feed_url",
     "pages", "include_all", "search_queries", "allow_ats_domains", "listing_pages", "job_link_contains",
+    "country_filter", "removal_confirmations", "search_text", "max_pages", "max_detail_fetches", "site_number",
+    "sitemap_urls", "link_filters",
 }
 
 
@@ -90,6 +93,24 @@ def _validate_adapter_config(value: dict | None) -> dict | None:
         marker = value.get("job_link_contains")
         if not isinstance(marker, str) or not marker.strip() or len(marker) > 100:
             raise ValueError("adapter_config.job_link_contains must be a short path fragment such as /positions/")
+    scope = value.get("country_filter")
+    if scope is not None and (not isinstance(scope, list) or len(scope) > 60 or any(not isinstance(v, str) or len(v) > 60 for v in scope)):
+        raise ValueError("adapter_config.country_filter must be a list of country names or regions such as AFRICA")
+    for key, upper in (("removal_confirmations", 10), ("max_pages", 100), ("max_detail_fetches", 200)):
+        if key in value and (not isinstance(value[key], int) or not 1 <= value[key] <= upper):
+            raise ValueError(f"adapter_config.{key} must be an integer between 1 and {upper}")
+    for key in ("search_text", "site_number"):
+        if key in value and (not isinstance(value[key], str) or len(value[key]) > 100):
+            raise ValueError(f"adapter_config.{key} must be a short string")
+    sitemaps = value.get("sitemap_urls")
+    if sitemaps is not None:
+        if not isinstance(sitemaps, list) or not sitemaps or len(sitemaps) > 10:
+            raise ValueError("adapter_config.sitemap_urls must be a list of at most 10 URLs")
+        for page in sitemaps:
+            _validate_source_url(str(page))
+    link_filters = value.get("link_filters")
+    if link_filters is not None and (not isinstance(link_filters, list) or len(link_filters) > 30 or any(not isinstance(v, str) or len(v) > 80 for v in link_filters)):
+        raise ValueError("adapter_config.link_filters must be a list of short URL fragments")
     queries = value.get("search_queries")
     if queries is not None and (not isinstance(queries, list) or len(queries) > 5 or any(len(str(q)) > 200 for q in queries)):
         raise ValueError("adapter_config.search_queries must be at most 5 short queries")
@@ -133,9 +154,22 @@ class ContentSourceOut(BaseModel):
     last_error_code: str | None = None
     consecutive_failures: int = 0
     next_poll_after: datetime | None = None
+    job_search_url: str | None = None
+    ats_provider: str | None = None
+    readiness: SourceReadiness = SourceReadiness.UNVERIFIED
+    readiness_note: str | None = None
+    auto_create_draft: bool = False
+    last_http_status: int | None = None
+    items_last_found: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def requires_review(self) -> bool:
+        """Publishing needs an editor unless the source is explicitly allowed to auto-publish."""
+        return not self.auto_publish_allowed
 
 
 class SourceHealthOut(ContentSourceOut):
@@ -144,7 +178,37 @@ class SourceHealthOut(ContentSourceOut):
     items_published: int = 0
     last_run_status: DiscoveryRunStatus | None = None
     last_run_at: datetime | None = None
+    last_run_new: int | None = None
+    last_run_updated: int | None = None
+    last_run_duplicates: int | None = None
+    last_run_removed: int | None = None
     adapter_available: bool = True
+    adapter_name: str | None = None
+    company_name: str | None = None
+    # HEALTHY / DEGRADED / FAILING / PAUSED / UNKNOWN
+    health: str = "UNKNOWN"
+
+
+class SourceTestOut(BaseModel):
+    ok: bool
+    adapter: str | None = None
+    found: int = 0
+    complete: bool = False
+    sample_titles: list[str] = []
+    warnings: list[str] = []
+    error_code: str | None = None
+    error: str | None = None
+    http_status: int | None = None
+    requests: int = 0
+
+
+class SeedImportOut(BaseModel):
+    dry_run: bool
+    companies_created: int
+    sources_created: int
+    sources_updated: int
+    sources_unchanged: int
+    skipped: list[str] = []
 
 
 class ContentSourceCreate(BaseModel):
@@ -165,6 +229,13 @@ class ContentSourceCreate(BaseModel):
     polling_enabled: bool = False
     crawl_interval_minutes: int | None = Field(default=None, ge=60, le=10_080)
     auto_publish_allowed: bool = False
+    auto_create_draft: bool = False
+    job_search_url: str | None = Field(default=None, max_length=1024)
+    ats_provider: str | None = Field(default=None, max_length=40, pattern=r"^[A-Z0-9_]+$")
+    readiness: SourceReadiness = SourceReadiness.UNVERIFIED
+    readiness_note: str | None = Field(default=None, max_length=500)
+
+    _job_search = field_validator("job_search_url")(classmethod(lambda cls, v: _validate_source_url(v) if v else None))
 
     _url = field_validator("url")(classmethod(lambda cls, v: _validate_source_url(v)))
     _adapter = field_validator("adapter_config_json")(classmethod(lambda cls, v: _validate_adapter_config(v)))
@@ -189,6 +260,13 @@ class ContentSourceUpdate(BaseModel):
     crawl_interval_minutes: int | None = Field(default=None, ge=60, le=10_080)
     auto_publish_allowed: bool | None = None
     verification_status: VerificationStatus | None = None
+    auto_create_draft: bool | None = None
+    job_search_url: str | None = Field(default=None, max_length=1024)
+    ats_provider: str | None = Field(default=None, max_length=40, pattern=r"^[A-Z0-9_]+$")
+    readiness: SourceReadiness | None = None
+    readiness_note: str | None = Field(default=None, max_length=500)
+
+    _job_search = field_validator("job_search_url")(classmethod(lambda cls, v: _validate_source_url(v) if v else None))
 
     _url = field_validator("url")(classmethod(lambda cls, v: _validate_source_url(v)))
     _adapter = field_validator("adapter_config_json")(classmethod(lambda cls, v: _validate_adapter_config(v)))
@@ -339,6 +417,14 @@ class DiscoveryMetricsOut(BaseModel):
     auto_publish_enabled: bool
     ai_research_available: bool
     flags: dict
+    healthy_sources: int = 0
+    sources_by_readiness: dict[str, int] = {}
+    last_run_at: datetime | None = None
+    items_new_24h: int = 0
+    items_updated_24h: int = 0
+    possibly_removed: int = 0
+    jobs_by_country: list[dict] = []
+    jobs_by_industry: list[dict] = []
 
 
 class AdminNotificationOut(BaseModel):

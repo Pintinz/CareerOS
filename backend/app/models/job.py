@@ -69,6 +69,8 @@ class OpportunityType(str, enum.Enum):
     JOB = "JOB"
     INTERNSHIP = "INTERNSHIP"
     GRADUATE_PROGRAM = "GRADUATE_PROGRAM"
+    APPRENTICESHIP = "APPRENTICESHIP"
+    TRAINEE_PROGRAM = "TRAINEE_PROGRAM"
 
 
 class SourceState(str, enum.Enum):
@@ -77,11 +79,18 @@ class SourceState(str, enum.Enum):
     until an admin confirms, and is kept (never deleted) for users who saved or tracked it."""
 
     ACTIVE = "ACTIVE"
+    # Absent from a complete source listing, but not yet for enough consecutive syncs to treat as
+    # removed — still listed, flagged for admins (a single glitch never hides a vacancy).
+    POSSIBLY_REMOVED = "POSSIBLY_REMOVED"
     DEADLINE_PASSED = "DEADLINE_PASSED"
     CLOSED = "CLOSED"
     SOURCE_REMOVED = "SOURCE_REMOVED"
     EXPIRED = "EXPIRED"
     UNKNOWN_REQUIRES_REVIEW = "UNKNOWN_REQUIRES_REVIEW"
+
+
+# Source states in which a published listing still appears in feeds.
+LISTED_SOURCE_STATES = (SourceState.ACTIVE, SourceState.POSSIBLY_REMOVED)
 
 
 def string_enum(enum_cls: type[enum.Enum]) -> Enum:
@@ -158,6 +167,8 @@ class Job(TimestampMixin, Base):
     external_job_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     requisition_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     state_or_region: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Department / job family as the employer names it (e.g. "Engineering", "Finance").
+    job_function: Mapped[str | None] = mapped_column(String(255), nullable=True)
     education_requirements: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     experience_requirements: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     # Graduate programme / internship specifics — only what the source explicitly states.
@@ -171,6 +182,8 @@ class Job(TimestampMixin, Base):
         string_enum(SourceState), nullable=False, default=SourceState.ACTIVE,
         server_default=SourceState.ACTIVE.value, index=True,
     )
+    # Consecutive complete syncs in which the source no longer listed this vacancy.
+    source_missing_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

@@ -4,7 +4,7 @@ from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.slugify import slugify
-from app.models.job import ContentStatus, SourceState
+from app.models.job import LISTED_SOURCE_STATES, ContentStatus, SourceState
 from app.models.scholarship import SavedScholarship, Scholarship
 
 
@@ -49,7 +49,7 @@ class ScholarshipRepository:
         base_conditions = [
             Scholarship.status == ContentStatus.PUBLISHED,
             Scholarship.is_active.is_(True),
-            Scholarship.source_state == SourceState.ACTIVE,
+            Scholarship.source_state.in_(LISTED_SOURCE_STATES),
             or_(Scholarship.application_deadline.is_(None), Scholarship.application_deadline > now),
         ]
 

@@ -90,6 +90,17 @@ class DiscoveryMethod(str, enum.Enum):
     MANUAL = "MANUAL"  # tracked for editors; never fetched automatically
 
 
+class SourceReadiness(str, enum.Enum):
+    """Outcome of auditing a source's official careers infrastructure (CAREER_SOURCE_INTEGRATION.md)."""
+
+    READY_STRUCTURED = "READY_STRUCTURED"  # public ATS/JSON API or schema.org data, verified live
+    READY_HTML = "READY_HTML"  # official pages parsed deterministically, verified live
+    REQUIRES_CONFIGURATION = "REQUIRES_CONFIGURATION"  # adapter exists; tenant/site/filters still to set
+    MANUAL_ONLY = "MANUAL_ONLY"  # no reliable automated route; editors track it
+    BLOCKED = "BLOCKED"  # robots.txt, bot protection or login walls refuse automated access
+    UNVERIFIED = "UNVERIFIED"  # not yet audited
+
+
 class ContentSource(TimestampMixin, Base):
     """A registered place CareerOS pulls content from. Registration alone fetches nothing: a source
     is only polled when `is_active`, `polling_enabled`, the global WEB_DISCOVERY_ENABLED flag and
@@ -133,6 +144,18 @@ class ContentSource(TimestampMixin, Base):
     consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     # Set after a 429/Retry-After or repeated failures: the dispatcher won't poll before this.
     next_poll_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Career-feed integration: where people search the employer's jobs, which platform hosts them,
+    # whether automated sync is appropriate, and what the last sync saw.
+    job_search_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    ats_provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    readiness: Mapped[SourceReadiness] = mapped_column(
+        string_enum(SourceReadiness), nullable=False, default=SourceReadiness.UNVERIFIED, server_default=SourceReadiness.UNVERIFIED.value
+    )
+    readiness_note: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # New verified listings become DRAFT records automatically (still reviewed before publishing).
+    auto_create_draft: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="0")
+    last_http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    items_last_found: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_by_admin_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
     )
@@ -142,6 +165,8 @@ class DiscoveredItemType(str, enum.Enum):
     JOB = "JOB"
     INTERNSHIP = "INTERNSHIP"
     GRADUATE_PROGRAM = "GRADUATE_PROGRAM"
+    APPRENTICESHIP = "APPRENTICESHIP"
+    TRAINEE_PROGRAM = "TRAINEE_PROGRAM"
     SCHOLARSHIP = "SCHOLARSHIP"
     FELLOWSHIP = "FELLOWSHIP"
     INTELLIGENCE = "INTELLIGENCE"
@@ -274,6 +299,8 @@ class DiscoveredItem(TimestampMixin, Base):
     created_draft_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Consecutive complete syncs in which the listing was absent at its source (reset when seen).
+    missing_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     reviewed_by_admin_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
     )

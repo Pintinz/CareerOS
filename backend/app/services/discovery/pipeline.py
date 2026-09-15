@@ -25,6 +25,7 @@ from app.ingestion.http_client import DiscoveryHttpClient, FetchError, RateLimit
 from app.ingestion.research.anthropic_provider import AnthropicResearchProvider
 from app.ingestion.research.providers import ResearchBudget, ResearchOutcome, ResearchProvider, ResearchProviderError, WebResearchProvider
 from app.ingestion.schemas import record_canonical_url, record_deadline, record_published_at, record_title
+from app.ingestion.countries import location_matches
 from app.ingestion.url_safety import ATS_DOMAINS, canonicalize_url, is_aggregator_url, is_ats_url, registrable_domain
 from app.models.admin_ops import (
     ContentSource,
@@ -39,7 +40,7 @@ from app.models.admin_ops import (
     VerificationStatus,
 )
 from app.models.company import Company
-from app.models.job import ContentStatus, Job, SourceState
+from app.models.job import LISTED_SOURCE_STATES, ContentStatus, Job, SourceState
 from app.services import audit_service
 from app.services.discovery import publishing
 from app.services.discovery.matching import find_duplicates, match_company
@@ -68,7 +69,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def snapshot_of(source: ContentSource, company: Company | None) -> SourceSnapshot:
+def snapshot_of(source: ContentSource, company: Company | None, *, known_external_ids: frozenset[str] = frozenset()) -> SourceSnapshot:
     return SourceSnapshot(
         id=source.id,
         name=source.name,
@@ -80,6 +81,7 @@ def snapshot_of(source: ContentSource, company: Company | None) -> SourceSnapsho
         adapter_config=dict(source.adapter_config_json or {}),
         trust_level=source.trust_level,
         company_name=company.name if company else None,
+        known_external_ids=known_external_ids,
     )
 
 
@@ -93,6 +95,8 @@ class RunStats:
     removed: int = 0
     unchanged: int = 0
     auto_published: int = 0
+    drafts_created: int = 0
+    possibly_removed: int = 0
     changes_detected: int = 0
     warnings: list[str] = field(default_factory=list)
     ai: dict = field(default_factory=dict)
@@ -149,7 +153,10 @@ class DiscoveryPipeline:
             return await self._finish(run, source, DiscoveryRunStatus.SKIPPED, started, RunStats(), error=("SOURCE_PAUSED", "Source is paused"), touch_source=False)
 
         company = await self.db.get(Company, source.company_id) if source.company_id else None
-        snapshot = snapshot_of(source, company)
+        known = (await self.db.execute(
+            select(DiscoveredItem.external_id).where(DiscoveredItem.source_id == source.id, DiscoveredItem.external_id.isnot(None))
+        )).scalars().all()
+        snapshot = snapshot_of(source, company, known_external_ids=frozenset(known))
         adapter = adapter_for(snapshot)
         if adapter is None:
             return await self._finish(run, source, DiscoveryRunStatus.SKIPPED, started, RunStats(), error=("NO_ADAPTER", "This source is tracked manually"), touch_source=False)
@@ -164,17 +171,30 @@ class DiscoveryPipeline:
             except AdapterConfigurationError as exc:
                 return await self._finish(run, source, DiscoveryRunStatus.FAILED, started, stats, error=(exc.code, str(exc)))
             except RateLimitedError as exc:
-                return await self._finish(run, source, DiscoveryRunStatus.RATE_LIMITED, started, stats, error=(exc.code, "Rate limited by the source"), retry_after=exc.retry_after_seconds)
+                return await self._finish(
+                    run, source, DiscoveryRunStatus.RATE_LIMITED, started, stats, error=(exc.code, "Rate limited by the source"),
+                    retry_after=exc.retry_after_seconds, http_status=429,
+                )
             except FetchError as exc:
-                return await self._finish(run, source, DiscoveryRunStatus.FAILED, started, stats, error=(exc.code, str(exc)[:300]))
+                return await self._finish(
+                    run, source, DiscoveryRunStatus.FAILED, started, stats, error=(exc.code, str(exc)[:300]),
+                    http_status=getattr(exc, "status_code", None) or client.stats.get("last_status"),
+                )
 
             if result.unstructured_pages or (snapshot.discovery_method == "AI_RESEARCH" and snapshot.config("search_queries")):
                 await self._research_pages(snapshot, client, result, stats)
 
-            stats.found = len(result.listings)
+            scope = source.adapter_config_json.get("country_filter") if isinstance(source.adapter_config_json, dict) else None
+            listings = result.listings
+            if scope:
+                # Global employers list thousands of roles; a source can be scoped to the countries or
+                # regions CareerOS serves. Out-of-scope listings are counted, never queued.
+                listings = [l for l in listings if location_matches(scope, country=getattr(l.record, "country", None), location=getattr(l.record, "location", None))]
+                result.filtered_count += len(result.listings) - len(listings)
+            stats.found = len(listings)
             stats.invalid = result.invalid_count
             stats.warnings.extend(result.warnings)
-            for listing in result.listings:
+            for listing in listings:
                 await self._process_listing(run, source, listing, stats)
                 await self.db.commit()
 
@@ -194,11 +214,13 @@ class DiscoveryPipeline:
             "complete_listing": result.complete,
             "unchanged": stats.unchanged,
             "auto_published": stats.auto_published,
+            "drafts_created": stats.drafts_created,
+            "possibly_removed": stats.possibly_removed,
             "changes_detected": stats.changes_detected,
             "ai_research": stats.ai,
             "warnings": stats.warnings[:10],
         }
-        return await self._finish(run, source, final, started, stats)
+        return await self._finish(run, source, final, started, stats, http_status=client.stats.get("last_status"))
 
     # ------------------------------------------------------------------------------------------
     async def _research_pages(self, snapshot: SourceSnapshot, client: DiscoveryHttpClient, result: AdapterResult, stats: RunStats) -> None:
@@ -309,7 +331,9 @@ class DiscoveryPipeline:
             item.last_seen_at = now
             item.last_verified_at = now
             item.run_id = run.id
-            content_changed = item.content_hash != digest
+            item.missing_runs = 0
+            # A partial record (listing without a fresh detail fetch) never replaces stored facts.
+            content_changed = item.content_hash != digest and not listing.evidence.get("partial_record")
             if content_changed:
                 item.extracted_data_json = record_data
                 item.content_hash = digest
@@ -375,7 +399,14 @@ class DiscoveryPipeline:
         if entity is not None:
             item.matched_entity_type = item.matched_entity_type or entity_type
             item.matched_entity_id = item.matched_entity_id or entity.id
-            await self._compare_with_record(source, item, entity_type, entity, record, stats)
+            if getattr(entity, "source_state", None) == SourceState.POSSIBLY_REMOVED:
+                # Listed again before removal was confirmed: back to normal, nothing to review.
+                entity.source_state = SourceState.ACTIVE
+                entity.source_missing_runs = 0
+                audit_service.add(self.db, admin_id=None, action="source_listing_returned", entity_type=entity_type.lower(), entity_id=entity.id, metadata={"source_id": source.id})
+            if not listing.evidence.get("partial_record"):
+                # A thinner listing-only record would surface false "changes" (e.g. "2 Locations").
+                await self._compare_with_record(source, item, entity_type, entity, record, stats)
         elif dedup.same_item is not None:
             if content_changed:
                 stats.updated += 1  # still awaiting review: the queued item now holds the newer facts
@@ -389,6 +420,11 @@ class DiscoveryPipeline:
                 await publishing.notify_company_followers(self.db, published_type, published)
             else:
                 item.evidence_json = {**item.evidence_json, "auto_publish_blocked_by": reasons}
+                if source.auto_create_draft and item.status == DiscoveredItemStatus.VERIFIED:
+                    # Fast path for trusted official sources: a DRAFT is prepared automatically, and
+                    # an editor still reviews and publishes it.
+                    await publishing.materialize_item(self.db, item, publish=False, admin_id=None, company_id=item.company_id)
+                    stats.drafts_created += 1
 
     async def _compare_with_record(self, source: ContentSource, item: DiscoveredItem, entity_type: str, entity, record, stats: RunStats) -> None:
         changes = diff_record(entity_type, entity, record)
@@ -468,38 +504,76 @@ class DiscoveryPipeline:
         seen_urls = {canonicalize_url(record_canonical_url(l.record)) for l in result.listings}
         active_items = (await self.db.execute(
             select(DiscoveredItem).where(DiscoveredItem.source_id == source.id, DiscoveredItem.status.in_(ACTIVE_ITEM_STATUSES))
+            .execution_options(populate_existing=True)
         )).scalars().all()
         owned_jobs = (await self.db.execute(
-            select(Job).where(Job.content_source_id == source.id, Job.status == ContentStatus.PUBLISHED, Job.source_state == SourceState.ACTIVE, Job.external_job_id.isnot(None))
+            select(Job).where(
+                Job.content_source_id == source.id, Job.status == ContentStatus.PUBLISHED, Job.source_state.in_(LISTED_SOURCE_STATES),
+                Job.external_job_id.isnot(None),
+            )
         )).scalars().all()
         if not seen and len(active_items) + len(owned_jobs) >= EMPTY_RESULT_REMOVAL_GUARD:
             stats.warnings.append("source returned no listings; removal detection skipped this run")
             return
 
+        confirmations = self._removal_confirmations(source)
         handled_entities: set[str] = set()
+        handled_external_ids: set[str] = set()
         for item in active_items:
             key_present = (item.external_id in seen) if item.external_id else (item.canonical_url in seen_urls)
             if key_present:
                 continue
+            item.missing_runs = (item.missing_runs or 0) + 1
+            if item.external_id:
+                handled_external_ids.add(item.external_id)
             entity_type, entity = await publishing.linked_entity(self.db, item)
             if entity is not None:
-                await self._mark_entity_removed(source, entity_type, entity, item)
                 handled_entities.add(entity.id)
+                if hasattr(entity, "source_missing_runs"):
+                    entity.source_missing_runs = item.missing_runs
+            if item.missing_runs < confirmations:
+                if entity is not None:
+                    self._mark_possibly_removed(source, entity_type, entity)
+                stats.possibly_removed += 1
+                continue
+            if entity is not None:
+                await self._mark_entity_removed(source, entity_type, entity, item)
             item.status = DiscoveredItemStatus.SOURCE_REMOVED
             stats.removed += 1
         for job in owned_jobs:
-            if job.id in handled_entities or job.external_job_id in seen:
+            if job.id in handled_entities or job.external_job_id in handled_external_ids:
+                continue
+            if job.external_job_id in seen:
+                if job.source_state == SourceState.POSSIBLY_REMOVED:
+                    job.source_state, job.source_missing_runs = SourceState.ACTIVE, 0
+                continue
+            job.source_missing_runs = (job.source_missing_runs or 0) + 1
+            if job.source_missing_runs < confirmations:
+                self._mark_possibly_removed(source, ENTITY_JOB, job)
+                stats.possibly_removed += 1
                 continue
             await self._mark_entity_removed(source, ENTITY_JOB, job, None)
             stats.removed += 1
 
+    def _removal_confirmations(self, source: ContentSource) -> int:
+        configured = (source.adapter_config_json or {}).get("removal_confirmations")
+        if isinstance(configured, int) and 1 <= configured <= 10:
+            return configured
+        return self.settings.discovery_removal_confirmations
+
+    def _mark_possibly_removed(self, source: ContentSource, entity_type: str, entity) -> None:
+        if getattr(entity, "source_state", None) != SourceState.ACTIVE:
+            return
+        entity.source_state = SourceState.POSSIBLY_REMOVED
+        audit_service.add(self.db, admin_id=None, action="source_possibly_removed", entity_type=entity_type.lower(), entity_id=entity.id, metadata={"source_id": source.id})
+
     async def _mark_entity_removed(self, source: ContentSource, entity_type: str, entity, item: DiscoveredItem | None) -> None:
-        if getattr(entity, "source_state", SourceState.ACTIVE) != SourceState.ACTIVE:
+        if getattr(entity, "source_state", SourceState.ACTIVE) not in LISTED_SOURCE_STATES:
             return
         # Pending admin confirmation: hidden from active feeds, kept for history (spec §23, §67).
         await publishing.record_change(
             self.db, entity_type=entity_type, entity_id=entity.id, field="source_state",
-            old=SourceState.ACTIVE.value, new=SourceState.SOURCE_REMOVED.value, source_id=source.id, item_id=item.id if item else None,
+            old=entity.source_state.value, new=SourceState.SOURCE_REMOVED.value, source_id=source.id, item_id=item.id if item else None,
         )
         entity.source_state = SourceState.SOURCE_REMOVED
         audit_service.add(self.db, admin_id=None, action="source_removed", entity_type=entity_type.lower(), entity_id=entity.id, metadata={"source_id": source.id})
@@ -516,6 +590,7 @@ class DiscoveryPipeline:
         error: tuple[str, str] | None = None,
         retry_after: float | None = None,
         touch_source: bool = True,
+        http_status: int | None = None,
     ) -> DiscoveryRun:
         now = _now()
         run.status = status_value
@@ -532,8 +607,10 @@ class DiscoveryPipeline:
 
         if source is not None and touch_source:
             source.last_checked_at = now
+            source.last_http_status = http_status or source.last_http_status
             if status_value in (DiscoveryRunStatus.SUCCEEDED, DiscoveryRunStatus.PARTIAL):
                 source.last_successful_fetch_at = now
+                source.items_last_found = stats.found
                 source.consecutive_failures = 0
                 source.next_poll_after = None
                 if source.verification_status == VerificationStatus.FAILING:

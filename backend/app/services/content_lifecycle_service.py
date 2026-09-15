@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.intelligence_post import IntelligencePost
-from app.models.job import ContentStatus, Job, SourceState
+from app.models.job import LISTED_SOURCE_STATES, ContentStatus, Job, SourceState
 from app.services import audit_service
 from app.models.scholarship import Scholarship
 
@@ -61,7 +61,7 @@ async def expire_content(db: AsyncSession) -> int:
         else:
             continue
         job.status = ContentStatus.EXPIRED
-        if job.source_state == SourceState.ACTIVE:
+        if job.source_state in LISTED_SOURCE_STATES:
             job.source_state = state
         audit_service.add(db, admin_id=None, action="content_expired", entity_type="job", entity_id=job.id, metadata={"reason": state.value})
         expired += 1
@@ -71,7 +71,7 @@ async def expire_content(db: AsyncSession) -> int:
         if scholarship.status in (ContentStatus.EXPIRED, ContentStatus.ARCHIVED) or _as_aware_utc(scholarship.application_deadline) > now:
             continue
         scholarship.status = ContentStatus.EXPIRED
-        if scholarship.source_state == SourceState.ACTIVE:
+        if scholarship.source_state in LISTED_SOURCE_STATES:
             scholarship.source_state = SourceState.DEADLINE_PASSED
         audit_service.add(db, admin_id=None, action="content_expired", entity_type="scholarship", entity_id=scholarship.id, metadata={"reason": "DEADLINE_PASSED"})
         expired += 1

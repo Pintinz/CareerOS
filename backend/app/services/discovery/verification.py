@@ -32,7 +32,7 @@ from app.ingestion.http_client import AccessDeniedError, DiscoveryHttpClient, Fe
 from app.ingestion.text import html_to_text
 from app.ingestion.url_safety import registrable_domain
 from app.models.admin_ops import ContentSource, DiscoveryRun, DiscoveryRunStatus, DiscoveryRunTrigger, DiscoveryRunType
-from app.models.job import ContentStatus, Job, SourceState
+from app.models.job import LISTED_SOURCE_STATES, ContentStatus, Job, SourceState
 from app.models.scholarship import Scholarship
 from app.services import audit_service, content_lifecycle_service
 from app.services.discovery import publishing
@@ -102,7 +102,7 @@ async def _recheck_urls(db: AsyncSession, client: DiscoveryHttpClient, settings:
     for model, entity_type, url_attr in ((Job, ENTITY_JOB, "application_url"), (Scholarship, ENTITY_SCHOLARSHIP, "official_url")):
         rows = (await db.execute(
             select(model)
-            .where(model.status == ContentStatus.PUBLISHED, model.source_state == SourceState.ACTIVE, model.is_demo.is_(False),
+            .where(model.status == ContentStatus.PUBLISHED, model.source_state.in_(LISTED_SOURCE_STATES), model.is_demo.is_(False),
                    or_(getattr(model, url_attr).isnot(None), model.source_url.isnot(None)))
             .order_by(model.last_verified_at.asc().nulls_first())
             .limit(settings.verification_max_items_per_run)

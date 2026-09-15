@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from app.ingestion.schemas import ExtractedIntelligence, ExtractedJob, ExtractedRecord, ExtractedScholarship
+from app.ingestion.schemas import JOB_CONTENT_TYPES, ExtractedIntelligence, ExtractedJob, ExtractedRecord, ExtractedScholarship
 from app.ingestion.text import content_hash, normalize_title
 from app.ingestion.url_safety import canonicalize_url
 from app.models.admin_ops import ContentSource, DiscoveredItemType
@@ -54,7 +54,7 @@ SOURCE_QUALITY_LABELS = {
 
 def entity_type_for(item_type: DiscoveredItemType | str) -> str:
     value = item_type.value if isinstance(item_type, DiscoveredItemType) else str(item_type)
-    if value in ("JOB", "INTERNSHIP", "GRADUATE_PROGRAM"):
+    if value in JOB_CONTENT_TYPES:
         return ENTITY_JOB
     if value in ("SCHOLARSHIP", "FELLOWSHIP"):
         return ENTITY_SCHOLARSHIP
@@ -99,6 +99,7 @@ def job_fields(record: ExtractedJob) -> dict:
         "work_mode": _enum(WorkMode, record.work_mode, WorkMode.UNSPECIFIED),
         "experience_level": _enum(ExperienceLevel, record.experience_level, None),
         "industry": record.industry,
+        "job_function": record.department,
         "salary_min": record.salary_min,
         "salary_max": record.salary_max,
         "salary_currency": record.salary_currency,

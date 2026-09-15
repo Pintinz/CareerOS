@@ -9,7 +9,7 @@
 Feeds only return ACTIVE listings; detail pages stay reachable for saved items and applications.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.models.job import ContentStatus, SourceState, SourceType
 
@@ -50,6 +50,33 @@ def is_official_source(row) -> bool:
     """True only for listings whose recorded source is an official organization channel or its
     official ATS — used for a subtle "Official source" label, never inferred from the URL alone."""
     return getattr(row, "source_type", None) in OFFICIAL_SOURCE_TYPES and bool(getattr(row, "source_url", None))
+
+
+ATS_SOURCE_TYPES = {
+    SourceType.GREENHOUSE, SourceType.LEVER, SourceType.ASHBY, SourceType.SMARTRECRUITERS, SourceType.WORKDAY,
+    SourceType.SUCCESSFACTORS, SourceType.ORACLE,
+}
+# A listing not re-confirmed at its source for this long is labelled STALE rather than verified.
+STALE_AFTER = timedelta(days=7)
+
+
+def verification_status_of(row, *, now: datetime | None = None) -> str:
+    """Provenance label shown with a listing: OFFICIAL_ATS / OFFICIAL_SOURCE while recently confirmed
+    at an official source, STALE when that confirmation is old, SOURCE_REMOVED when the source no
+    longer lists it, VERIFIED for editor-verified entries, UNVERIFIED otherwise. Never claims a
+    verification CareerOS doesn't have evidence for."""
+    now = now or datetime.now(timezone.utc)
+    if getattr(row, "source_state", None) == SourceState.SOURCE_REMOVED:
+        return "SOURCE_REMOVED"
+    if is_official_source(row):
+        checked = getattr(row, "last_verified_at", None)
+        if checked is None:
+            return "VERIFIED" if getattr(row, "is_verified", False) else "UNVERIFIED"
+        checked = checked if checked.tzinfo else checked.replace(tzinfo=timezone.utc)
+        if now - checked > STALE_AFTER:
+            return "STALE"
+        return "OFFICIAL_ATS" if getattr(row, "source_type", None) in ATS_SOURCE_TYPES else "OFFICIAL_SOURCE"
+    return "VERIFIED" if getattr(row, "is_verified", False) else "UNVERIFIED"
 
 
 def publicly_listable(row) -> bool:

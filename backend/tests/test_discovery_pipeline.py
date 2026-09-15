@@ -301,10 +301,18 @@ async def test_listing_removed_at_source_is_kept_hidden_then_expired_on_confirma
     user = await user_headers(client)
     await client.post(f"/api/v1/jobs/{job_id}/save", headers=user)
 
-    run = await run_source(db_session, source["id"], lever_router([lever_posting("p2", "Instrument Technician")]))
-    assert run.items_removed >= 1
-
+    only_p2 = lever_router([lever_posting("p2", "Instrument Technician")])
+    # One complete sync without the listing only flags it: a single glitch never hides a vacancy.
+    run = await run_source(db_session, source["id"], only_p2)
+    assert (run.items_removed, run.stats_json["possibly_removed"]) == (0, 1)
     job = await db_session.get(Job, job_id)
+    await db_session.refresh(job)
+    assert (job.source_state, job.source_missing_runs) == (SourceState.POSSIBLY_REMOVED, 1)
+    assert (await client.get("/api/v1/jobs")).json()["total"] == 1
+
+    # A second consecutive complete sync (DISCOVERY_REMOVAL_CONFIRMATIONS=2) treats it as removed.
+    run = await run_source(db_session, source["id"], only_p2)
+    assert run.items_removed == 1
     await db_session.refresh(job)
     assert job.source_state == SourceState.SOURCE_REMOVED
     assert job.status == ContentStatus.PUBLISHED  # not destroyed or expired before confirmation
@@ -316,6 +324,24 @@ async def test_listing_removed_at_source_is_kept_hidden_then_expired_on_confirma
     confirmed = await client.post(f"/api/v1/admin/discovery/records/JOB/{job_id}/source-state", headers=headers, json={"confirm": True})
     assert confirmed.status_code == 200 and confirmed.json()["status"] == "EXPIRED"
     assert (await client.get(f"/api/v1/jobs/{job_id}", headers=user)).status_code == 200
+
+
+async def test_listing_that_reappears_before_confirmation_returns_to_active(client: AsyncClient, db_session: AsyncSession) -> None:
+    headers, _, source = await lever_setup(client, db_session)
+    both = lever_router([lever_posting("p1", "Process Technician"), lever_posting("p2", "Operator")])
+    await run_source(db_session, source["id"], both)
+    first = (await queue_items(db_session, source["id"]))[0]
+    job_id = (await client.post(f"/api/v1/admin/discovery/{first.id}/publish", headers=headers, json={})).json()["entity_id"]
+    await run_source(db_session, source["id"], lever_router([lever_posting("p2", "Operator")]))
+    run = await run_source(db_session, source["id"], both)
+    job = await db_session.get(Job, job_id)
+    await db_session.refresh(job)
+    assert (job.source_state, job.source_missing_runs, run.items_removed) == (SourceState.ACTIVE, 0, 0)
+    item = await db_session.get(DiscoveredItem, first.id)
+    await db_session.refresh(item)
+    assert item.missing_runs == 0
+    pending = (await db_session.execute(select(ContentChange).where(ContentChange.entity_id == job_id, ContentChange.field == "source_state"))).scalars().all()
+    assert pending == []  # nothing for an editor to confirm
 
 
 async def test_false_removal_can_be_dismissed_and_listing_returns(client: AsyncClient, db_session: AsyncSession) -> None:

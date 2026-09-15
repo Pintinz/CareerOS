@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -9,11 +10,14 @@ from app.schemas.admin_ops import (
     ContentSourceOut,
     ContentSourceUpdate,
     DiscoveryRunOut,
+    SeedImportOut,
     SourceHealthOut,
+    SourceTestOut,
 )
 from app.security.admin_dependencies import require_admin_role
 from app.services import audit_service
 from app.services.discovery.review import ContentSourceService
+from app.services.discovery.source_seed import import_career_sources, load_seed
 from app.services.discovery.worker import DiscoveryTaskRunner, enqueue_source_run, get_discovery_task_runner
 
 router = APIRouter()
@@ -30,6 +34,34 @@ _TRUST_FIELDS = {"trust_level", "auto_publish_allowed", "verification_status"}
 async def list_sources(db: AsyncSession = Depends(get_db)) -> list[SourceHealthOut]:
     """Every registered source with its health: last check/success/failure, item counts, last run."""
     return await ContentSourceService(db).health()
+
+
+class SeedImportIn(BaseModel):
+    dry_run: bool = False
+
+
+@router.post("/import-seed", response_model=SeedImportOut)
+async def import_seed(payload: SeedImportIn, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(_CAN_MANAGE)) -> SeedImportOut:
+    """Applies the bundled career-source pack (idempotent; never overrides admins' operational choices)."""
+    result = await import_career_sources(db, load_seed(), admin_id=admin.id, dry_run=payload.dry_run)
+    if not payload.dry_run:
+        await audit_service.record(
+            db, admin_id=admin.id, action="career_sources_imported", entity_type="content_source", entity_id=None,
+            metadata={"created": result.sources_created, "updated": result.sources_updated, "companies_created": result.companies_created},
+        )
+    return SeedImportOut(**result.__dict__)
+
+
+@router.post("/{source_id}/test", response_model=SourceTestOut)
+async def test_source(source_id: str, db: AsyncSession = Depends(get_db), admin: AdminUser = Depends(_CAN_WRITE)) -> SourceTestOut:
+    """Test connection: a bounded live fetch (at most 15 requests, 5 listings) through the source's
+    adapter. Nothing is stored; use Run discovery to sync."""
+    outcome = await ContentSourceService(db).test_connection(source_id)
+    await audit_service.record(
+        db, admin_id=admin.id, action="source_tested", entity_type="content_source", entity_id=source_id,
+        metadata={"ok": outcome.ok, "found": outcome.found, "error_code": outcome.error_code},
+    )
+    return outcome
 
 
 @router.get("/{source_id}", response_model=ContentSourceOut, dependencies=[Depends(_CAN_READ)])

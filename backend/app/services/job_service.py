@@ -7,7 +7,7 @@ from app.models.job import ContentStatus, Job
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.job_repository import JobRepository
 from app.schemas.company import CompanyOut
-from app.services.availability import availability_of, is_official_source, publicly_listable, publicly_viewable
+from app.services.availability import availability_of, is_official_source, publicly_listable, publicly_viewable, verification_status_of
 from app.schemas.job import (
     JobAdminOut,
     JobCardOut,
@@ -44,7 +44,7 @@ class JobService:
 
     @staticmethod
     def _derived(job: Job) -> dict:
-        return {"availability": availability_of(job), "is_official_source": is_official_source(job)}
+        return {"availability": availability_of(job), "is_official_source": is_official_source(job), "verification_status": verification_status_of(job)}
 
     def _card_from_job(self, job: Job, company) -> JobCardOut:
         data = self._job_fields(job, exclude={"company_id", "created_by_admin_id"})
