@@ -502,7 +502,7 @@ LISTING = """<html><body>
 def flair_source():
     return snapshot(
         "OFFICIAL_CAREER_PAGE", "https://acme.careers.flair.hr/", discovery_method="STRUCTURED_DATA",
-        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/"], "job_link_contains": "/positions/"},
+        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/"], "job_link_contains": "/positions/", "listing_complete": True},
     )
 
 
@@ -574,7 +574,7 @@ async def test_company_careers_page_can_list_openings_hosted_on_its_board() -> N
     )
     source = snapshot(
         "OFFICIAL_CAREER_PAGE", "https://acme.careers.flair.hr/", discovery_method="STRUCTURED_DATA",
-        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/", "https://acme-energy.com/careers"], "job_link_contains": "/positions/"},
+        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/", "https://acme-energy.com/careers"], "job_link_contains": "/positions/", "listing_complete": True},
     )
     async with make_client(router) as client:
         result = await StructuredPageAdapter().discover(source, client, max_items=10)
@@ -709,3 +709,59 @@ async def test_structured_page_follows_newest_openings_from_a_sitemap_with_link_
     assert [listing.record.title for listing in result.listings] == ["Field Operator", "Process Engineer"]  # newest first
     assert result.complete is True
     assert not any("houston" in str(r.url) or "evil.example" in str(r.url) for r in router.requests)
+
+
+async def test_search_result_listing_pages_never_count_as_complete() -> None:
+    router = (
+        Router()
+        .add("GET", "https://acme.careers.flair.hr/", httpx.Response(200, text=LISTING))
+        .add("GET", "https://acme.careers.flair.hr/positions/A1", httpx.Response(200, text=flair_position("A1", "Operations Technician")))
+        .add("GET", "https://acme.careers.flair.hr/positions/A2", httpx.Response(200, text=flair_position("A2", "Pipeline Engineer")))
+    )
+    source = snapshot(
+        "OFFICIAL_CAREER_PAGE", "https://acme.careers.flair.hr/", discovery_method="STRUCTURED_DATA",
+        adapter_config={"listing_pages": ["https://acme.careers.flair.hr/"], "job_link_contains": "/positions/"},
+    )
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(source, client, max_items=10)
+    assert len(result.listings) == 2 and result.complete is False  # a first results page may not show every opening
+
+
+async def test_greenhouse_board_too_large_for_descriptions_falls_back_to_the_list() -> None:
+    board = "https://boards-api.greenhouse.io/v1/boards/acme/jobs"
+
+    def listing(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("content") == "true":
+            return httpx.Response(200, content=b"x" * 2048, headers={"content-length": "999999999"})
+        return httpx.Response(200, json={"jobs": [
+            {"id": 1, "title": "Field Engineer", "location": {"name": "Lagos, Nigeria"}, "absolute_url": "https://boards.greenhouse.io/acme/jobs/1"},
+            {"id": 2, "title": "Account Executive", "location": {"name": "Berlin, Germany"}, "absolute_url": "https://boards.greenhouse.io/acme/jobs/2"},
+            {"id": 3, "title": "Operator", "location": {"name": "Abuja, Nigeria"}, "absolute_url": "https://boards.greenhouse.io/acme/jobs/3"},
+        ]})
+
+    details = []
+
+    def detail(request: httpx.Request) -> httpx.Response:
+        details.append(request.url.path.rsplit("/", 1)[-1])
+        return httpx.Response(200, json={"content": "&lt;p&gt;Keep the site running.&lt;/p&gt;"})
+
+    router = Router().add("GET", board, listing).add("GET", f"{board}/", detail)
+    source = snapshot("GREENHOUSE", "https://boards.greenhouse.io/acme", adapter_config={"country_filter": ["Nigeria"]}, known_external_ids=frozenset({"3"}))
+    async with make_client(router) as client:
+        result = await GreenhouseAdapter().discover(source, client, max_items=10)
+
+    assert result.complete is True and len(result.listings) == 2 and result.filtered_count == 1
+    assert result.seen_ids >= {"1", "2", "3"}  # the out-of-scope Berlin role is still known to be listed
+    assert details == ["1"]  # only the new, in-scope posting; Berlin and the known Abuja role aren't fetched
+    engineer, operator = result.listings
+    assert "Keep the site running" in (engineer.record.description or "") and engineer.evidence["partial_record"] is False
+    assert operator.evidence["partial_record"] is True
+
+
+async def test_microdata_address_with_postcode_keeps_the_country() -> None:
+    page = CSB_JOB.replace('content="Lagos, NG"', 'content="Lagos, NG, 101001"')
+    router = Router().add("GET", "https://careers.acme.com/acme/job/1/", httpx.Response(200, text=page))
+    source = snapshot("OFFICIAL_CAREER_PAGE", "https://careers.acme.com/acme/", discovery_method="STRUCTURED_DATA", adapter_config={"pages": ["https://careers.acme.com/acme/job/1/"]})
+    async with make_client(router) as client:
+        result = await StructuredPageAdapter().discover(source, client, max_items=10)
+    assert result.listings[0].record.country == "Nigeria"

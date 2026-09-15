@@ -56,7 +56,7 @@ _ALLOWED_ADAPTER_KEYS = {
     "company", "board_token", "board_name", "company_identifier", "tenant", "site", "region", "feed_url",
     "pages", "include_all", "search_queries", "allow_ats_domains", "listing_pages", "job_link_contains",
     "country_filter", "removal_confirmations", "search_text", "max_pages", "max_detail_fetches", "site_number",
-    "sitemap_urls", "link_filters",
+    "sitemap_urls", "link_filters", "listing_complete",
 }
 
 
@@ -93,6 +93,8 @@ def _validate_adapter_config(value: dict | None) -> dict | None:
         marker = value.get("job_link_contains")
         if not isinstance(marker, str) or not marker.strip() or len(marker) > 100:
             raise ValueError("adapter_config.job_link_contains must be a short path fragment such as /positions/")
+    if "listing_complete" in value and not isinstance(value["listing_complete"], bool):
+        raise ValueError("adapter_config.listing_complete must be true or false")
     scope = value.get("country_filter")
     if scope is not None and (not isinstance(scope, list) or len(scope) > 60 or any(not isinstance(v, str) or len(v) > 60 for v in scope)):
         raise ValueError("adapter_config.country_filter must be a list of country names or regions such as AFRICA")
@@ -300,7 +302,9 @@ class DiscoveredItemOut(BaseModel):
     id: str
     source_id: str
     source_name: str | None = None
+    source_type: SourceType | None = None
     item_type: DiscoveredItemType
+    external_id: str | None = None
     detected_title: str
     detected_company_name: str | None = None
     company_id: str | None = None
@@ -320,6 +324,7 @@ class DiscoveredItemOut(BaseModel):
     created_draft_id: str | None = None
     pending_changes: int = 0
     flags: list[str] = []
+    missing_runs: int = 0
     created_at: datetime
     last_seen_at: datetime | None = None
 

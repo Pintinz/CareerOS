@@ -235,13 +235,16 @@ class DiscoveryService:
     async def to_out(self, items: list[DiscoveredItem]) -> list[DiscoveredItemOut]:
         pending = await self._pending_counts(items)
         source_ids = {i.source_id for i in items}
-        names = dict((await self.db.execute(select(ContentSource.id, ContentSource.name).where(ContentSource.id.in_(source_ids)))).all()) if source_ids else {}
+        rows = (await self.db.execute(select(ContentSource.id, ContentSource.name, ContentSource.source_type).where(ContentSource.id.in_(source_ids)))).all() if source_ids else []
+        names = {row.id: (row.name, row.source_type) for row in rows}
         out = []
         for item in items:
             model = DiscoveredItemOut.model_validate(item)
             model.pending_changes = pending.get(item.id, 0)
-            model.source_name = names.get(item.source_id)
-            model.flags = list((item.evidence_json or {}).get("flags") or [])
+            model.source_name, model.source_type = names.get(item.source_id, (None, None))
+            if item.missing_runs:
+                model.flags = ["POSSIBLY_REMOVED"]
+            model.flags = list(model.flags) + list((item.evidence_json or {}).get("flags") or [])
             out.append(model)
         return out
 

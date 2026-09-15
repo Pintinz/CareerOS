@@ -385,8 +385,10 @@ class StructuredPageAdapter(SourceAdapter):
                 if parts.scheme in ("http", "https") and parts.hostname in hosts and marker in parts.path and absolute not in links:
                     links.append(absolute)
         links = self._filtered(source, links)
-        complete = len(links) <= self.max_linked_pages
-        if not complete:
+        # A listing page is only known to show *every* opening when the source says so (e.g. a board that
+        # lists all roles on one page). Paginated search results never are, so removal detection stays off.
+        complete = bool(source.config("listing_complete", False)) and len(links) <= self.max_linked_pages
+        if len(links) > self.max_linked_pages:
             result.warnings.append(f"followed the first {self.max_linked_pages} openings only")
         return links[: self.max_linked_pages], complete
 
@@ -471,8 +473,10 @@ class StructuredPageAdapter(SourceAdapter):
         location = ", ".join(p for p in (city, region, country) if p) or None
         street = _text(address.get("streetAddress"))
         if location is None and street:
-            # "Lagos, NG": a trailing ISO code is the country.
+            # "Lagos, NG" / "Lagos, NG, 101001": a trailing ISO code (before any postcode) is the country.
             parts = [p.strip() for p in street.split(",") if p.strip()]
+            while len(parts) > 2 and re.fullmatch(r"[A-Z0-9 -]{3,10}", parts[-1]) and any(ch.isdigit() for ch in parts[-1]):
+                parts.pop()
             if len(parts) >= 2 and len(parts[-1]) == 2 and parts[-1].isalpha():
                 location = ", ".join(parts[:-1] + [country_name(parts[-1])])
             else:

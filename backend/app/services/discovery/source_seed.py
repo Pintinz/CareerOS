@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ingestion.adapters.registry import DEFAULT_DISCOVERY_METHOD
 from app.models.admin_ops import ContentSource, DiscoveryMethod, SourceReadiness
 from app.models.company import Company
 from app.models.job import SourceType
@@ -127,6 +128,9 @@ async def import_career_sources(db: AsyncSession, pack: SeedPack, *, admin_id: s
             "readiness": entry.readiness, "readiness_note": entry.readiness_note, "ats_provider": entry.ats_provider,
             "job_search_url": entry.job_search_url, "adapter_config_json": {**(existing.adapter_config_json or {}), **config},
         }
+        if entry.automated and existing.discovery_method == DiscoveryMethod.MANUAL:
+            # Audited as fetchable: give it the method its adapter needs (explicit or the type default).
+            refreshed["discovery_method"] = entry.discovery_method or DiscoveryMethod(DEFAULT_DISCOVERY_METHOD.get(entry.source_type.value, "STRUCTURED_DATA"))
         changed = [k for k, v in refreshed.items() if getattr(existing, k) != v]
         if company is not None and existing.company_id is None:
             refreshed["company_id"] = company.id

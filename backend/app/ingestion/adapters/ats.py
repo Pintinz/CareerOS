@@ -32,8 +32,8 @@ from app.ingestion.classification import (
     normalize_work_mode,
     split_location,
 )
-from app.ingestion.countries import country_name
-from app.ingestion.http_client import DiscoveryHttpClient
+from app.ingestion.countries import country_name, location_matches
+from app.ingestion.http_client import DiscoveryHttpClient, FetchError, ResponseTooLargeError
 from app.ingestion.text import clean_text, html_list_items, html_to_text, parse_datetime, text_lines_as_list
 
 
@@ -66,7 +66,7 @@ class _AtsAdapter(SourceAdapter):
     method = "STRUCTURED_API"
     api_label = "ats"
 
-    def _listing(self, result: AdapterResult, *, source: SourceSnapshot, raw: dict, data: dict, external_id: str | None) -> None:
+    def _listing(self, result: AdapterResult, *, source: SourceSnapshot, raw: dict, data: dict, external_id: str | None, partial: bool = False) -> None:
         employment = data.get("employment_type")
         kind = classify_job_content_type(data.get("title") or "", employment_type=employment)
         if external_id:
@@ -81,7 +81,7 @@ class _AtsAdapter(SourceAdapter):
                 record=record,
                 raw=trim_raw(raw),
                 method=self.method,
-                evidence={"api": self.api_label, "external_id": external_id, "source_quality": "OFFICIAL_ATS"},
+                evidence={"api": self.api_label, "external_id": external_id, "source_quality": "OFFICIAL_ATS", "partial_record": partial},
             )
         )
 
@@ -170,23 +170,61 @@ class GreenhouseAdapter(_AtsAdapter):
     def is_enabled(self, settings: Settings) -> bool:
         return settings.structured_ats_sync_enabled and settings.greenhouse_discovery_enabled
 
+    max_detail_fetches = 40
+
+    def validate_source(self, source: SourceSnapshot) -> None:
+        _identifier(source, config_key="board_token", hosts=("greenhouse.io",), api_prefix=("v1", "boards"))
+
     async def discover(self, source: SourceSnapshot, client: DiscoveryHttpClient, *, max_items: int) -> AdapterResult:
         token = _identifier(source, config_key="board_token", hosts=("greenhouse.io",), api_prefix=("v1", "boards"))
-        payload = await client.get_json(f"https://boards-api.greenhouse.io/v1/boards/{quote(token)}/jobs", params={"content": "true"})
+        base = f"https://boards-api.greenhouse.io/v1/boards/{quote(token)}/jobs"
         result = AdapterResult(pages=1)
+        try:
+            payload = await client.get_json(base, params={"content": "true"})
+            with_content = True
+        except ResponseTooLargeError:
+            # Large boards exceed the response cap with every description inlined: read the
+            # lightweight list and fetch descriptions only for in-scope postings not seen before.
+            payload = await client.get_json(base)
+            result.pages += 1
+            with_content = False
+            result.warnings.append("board too large to fetch with descriptions; details fetched for new in-scope postings")
         jobs = payload.get("jobs") if isinstance(payload, dict) else None
         if not isinstance(jobs, list):
             result.warnings.append("unexpected Greenhouse response shape")
             return result
+        scope = source.config("country_filter") or []
+        budget = source.config("max_detail_fetches") or self.max_detail_fetches
         for job in jobs:
+            partial = False
+            if not with_content and isinstance(job, dict):
+                job_id = str(job.get("id") or "")
+                location = (job.get("location") or {}).get("name")
+                in_scope = not scope or location_matches(scope, country=split_location(location)[2], location=location)
+                if not in_scope:
+                    # Still listed at the source (never mistaken for a removal), just outside this source's scope.
+                    if job_id:
+                        result.seen_ids.add(job_id)
+                    result.filtered_count += 1
+                    continue
             if len(result.listings) + result.invalid_count >= max_items:
                 result.warnings.append(f"stopped at max_items={max_items}")
                 return result
-            self._map(result, source, job)
+            if not with_content and isinstance(job, dict):
+                if job_id and job_id not in source.known_external_ids and in_scope and budget > 0:
+                    budget -= 1
+                    try:
+                        detail = await client.get_json(f"{base}/{quote(job_id)}")
+                        job = {**job, **(detail if isinstance(detail, dict) else {})}
+                    except FetchError:
+                        partial = True
+                else:
+                    partial = True
+            self._map(result, source, job, partial=partial)
         result.complete = True  # the job board endpoint returns every open job in one response
         return result
 
-    def _map(self, result: AdapterResult, source: SourceSnapshot, job: dict) -> None:
+    def _map(self, result: AdapterResult, source: SourceSnapshot, job: dict, *, partial: bool = False) -> None:
         if not isinstance(job, dict):
             result.add_invalid(external_id=None, error=ValueError("job is not an object"))
             return
@@ -215,7 +253,7 @@ class GreenhouseAdapter(_AtsAdapter):
             "source_url": job.get("absolute_url"),
             "confidence": 0.9,
         }
-        self._listing(result, source=source, raw=job, data=data, external_id=str(job.get("id")) if job.get("id") else None)
+        self._listing(result, source=source, raw=job, data=data, external_id=str(job.get("id")) if job.get("id") else None, partial=partial)
 
 
 class AshbyAdapter(_AtsAdapter):
