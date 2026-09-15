@@ -10,6 +10,7 @@ import 'dart:ui' as ui;
 
 import 'package:careeros/core/app_providers.dart';
 import 'package:careeros/core/design/design.dart';
+import 'package:careeros/core/widgets/widgets.dart';
 import 'package:careeros/core/monetization/monetization_models.dart';
 import 'package:careeros/core/monetization/monetization_providers.dart';
 import 'package:careeros/core/network/api_client.dart';
@@ -614,6 +615,25 @@ final _screens = <_Screen>[
   _Screen('17d_smart_tracking', () => const SmartTrackingSettingsScreen()),
   _Screen('17e_recruitment_updates', () => const RecruitmentEventsScreen()),
   _Screen('18_email_update', () => const RecruitmentEventDetailScreen(eventId: 'event-1')),
+  _Screen(
+    '19_states',
+    () => Scaffold(
+      body: SafeArea(
+        child: ListView(
+          children: [
+            EmptyState(
+              icon: Icons.bookmark_border_rounded,
+              title: 'No saved opportunities yet',
+              message: 'Save jobs, scholarships and programmes you want to revisit later.',
+              actionLabel: 'Explore Opportunities',
+              onAction: () {},
+            ),
+            ErrorState(message: 'Please check your connection and try again.', onRetry: () {}),
+          ],
+        ),
+      ),
+    ),
+  ),
 ];
 
 Future<void> _pumpScreen(

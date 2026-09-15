@@ -224,7 +224,7 @@ function DiscoveryQueue() {
 
       <div className="overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full min-w-[1080px] text-left text-sm">
-          <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+          <thead className="border-b border-line text-xs text-muted">
             <tr>
               <th className="px-4 py-3">Item</th>
               <th className="px-4 py-3">Source</th>
@@ -247,7 +247,7 @@ function DiscoveryQueue() {
             {data?.items.map((item) => (
               <tr key={item.id} className="border-b border-line align-top last:border-0">
                 <td className="max-w-sm px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-brand">{CONTENT_TYPE_LABELS[item.item_type]}</p>
+                  <p className="text-xs font-semibold text-brand">{CONTENT_TYPE_LABELS[item.item_type]}</p>
                   <Link href={`/discovery/${item.id}`} className="font-semibold text-ink hover:text-brand">
                     {item.detected_title}
                   </Link>

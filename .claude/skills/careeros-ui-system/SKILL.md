@@ -55,7 +55,8 @@ solution → components reused → functional risk. Then:
    `--dart-define=UI_AUDIT_ONLY=<name part>` to run a subset). Images decode asynchronously, so a
    brand logo can be missing from the first capture of a run — check the next screen before calling it a bug.
 
-Screen quality questions are in `references/ux-rules.md` — go through them before calling a screen done.
+Screen quality questions are in `references/ux-rules.md` and visual polish rules in
+`references/visual-quality.md` — go through both before calling a screen done.
 
 ## Reference map
 
@@ -68,6 +69,7 @@ Screen quality questions are in `references/ux-rules.md` — go through them bef
 | Touch targets, semantics, contrast, text scaling, color-independence | `references/accessibility.md` |
 | Admin portal shell, tables, forms, badges, brand | `references/admin-design.md` |
 | Truthfulness, CTA hierarchy, empty/error/loading copy, progressive disclosure, ads, QA checklist | `references/ux-rules.md` |
+| Text hierarchy, copy casing, card family, metrics, progress, chips, empty/error visuals, admin stats | `references/visual-quality.md` |
 
 Brand files: `assets/brand-reference/` (brand board + generated symbol/wordmark/app-icon masters). Visual north star:
 `assets/ui-reference/careeros-mockup-board.png` — read `assets/ui-reference/README.md` first for what

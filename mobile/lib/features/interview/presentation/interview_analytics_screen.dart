@@ -92,20 +92,24 @@ class InterviewAnalyticsScreen extends ConsumerWidget {
                     StatCard(
                       label: "STAR Stories Ready",
                       value: "${analytics.starStoriesReady} / ${analytics.starStoriesCreated}",
+                      caption: "Complete / written",
+                      progress: analytics.starStoriesCreated == 0 ? null : analytics.starStoriesReady / analytics.starStoriesCreated,
                       icon: AppIcons.starStory,
                       tone: AppTone.success,
                     ),
                     StatCard(
                       label: "Avg. Self-Rating",
                       value: analytics.averageSelfRating?.toStringAsFixed(1),
+                      caption: analytics.averageSelfRating == null ? "No ratings yet" : "Your own rating, out of 5",
+                      progress: analytics.averageSelfRating == null ? null : analytics.averageSelfRating! / 5,
                       icon: Icons.star_outline_rounded,
                       tone: AppTone.purple,
                     ),
                   ),
                   if (analytics.byCategory.isNotEmpty) ...[
                     Gap.xl,
+                    const SectionHeader(title: "By Category", subtitle: "Questions practised in each area"),
                     CareerListGroup(
-                      title: "By Category",
                       children: [
                         for (final entry in analytics.byCategory.entries)
                           CareerListRow(
@@ -143,7 +147,7 @@ class _ReadinessRow extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(label, style: context.text.bodyMedium?.copyWith(color: context.colors.textPrimary))),
-              Text(value != null ? "${value!.round()}%" : "N/A", style: context.text.labelMedium),
+              Text(value != null ? "${value!.round()}%" : "—", style: context.text.labelMedium),
             ],
           ),
           Gap.xxs,

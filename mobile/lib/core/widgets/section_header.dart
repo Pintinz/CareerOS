@@ -2,7 +2,7 @@ import "package:flutter/material.dart";
 
 import "../design/design.dart";
 
-/// Section title with an optional subtitle and trailing action ("See all").
+/// Section title with an optional one-line description and a quiet trailing action ("View all").
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
@@ -10,6 +10,8 @@ class SectionHeader extends StatelessWidget {
     this.subtitle,
     this.actionLabel,
     this.onAction,
+    this.icon,
+    this.actionNavigates = true,
     this.padding = const EdgeInsets.only(bottom: AppSpacing.sm),
   });
 
@@ -17,15 +19,27 @@ class SectionHeader extends StatelessWidget {
   final String? subtitle;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final bool actionNavigates;
+
+  /// Optional small leading glyph, for sections that benefit from a visual anchor.
+  final IconData? icon;
   final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Padding(
       padding: padding,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: subtitle == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         children: [
+          if (icon != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(icon, size: 20, color: colors.primary),
+            ),
+            Gap.xs,
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,7 +53,24 @@ class SectionHeader extends StatelessWidget {
             ),
           ),
           if (actionLabel != null && onAction != null)
-            TextButton(onPressed: onAction, child: Text(actionLabel!)),
+            TextButton(
+              onPressed: onAction,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.only(left: AppSpacing.sm, right: AppSpacing.xxs),
+                textStyle: context.text.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(actionLabel!),
+                  // Navigation actions ("View all") get a chevron; in-place actions ("Edit") don't.
+                  if (actionNavigates) ...[
+                    const SizedBox(width: 2),
+                    const Icon(AppIcons.chevron, size: 18),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );

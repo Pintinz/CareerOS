@@ -193,7 +193,7 @@ class _OverviewTab extends StatelessWidget {
       children: [
         if (coverage.isNotEmpty)
           DetailSection(
-            title: "Funding coverage",
+            title: "Funding Coverage",
             child: CareerCard(
               variant: CareerCardVariant.outlined,
               child: Column(
@@ -218,7 +218,7 @@ class _OverviewTab extends StatelessWidget {
           ),
         if (scholarship.fieldsOfStudy?.isNotEmpty ?? false)
           DetailSection(
-            title: "Fields of study",
+            title: "Fields of Study",
             child: Wrap(
               spacing: AppSpacing.xs,
               runSpacing: AppSpacing.xs,
@@ -226,7 +226,7 @@ class _OverviewTab extends StatelessWidget {
             ),
           ),
         if (about != null)
-          DetailSection(title: "About this scholarship", child: Text(about, style: context.text.bodyLarge))
+          DetailSection(title: "About This Scholarship", child: Text(about, style: context.text.bodyLarge))
         else if (coverage.isEmpty)
           const EmptyState(
             compact: true,
@@ -267,7 +267,7 @@ class _EligibilityTab extends StatelessWidget {
         Gap.xl,
         for (final row in rows) DetailSection(title: row.$1, icon: row.$2, child: BulletList(items: row.$3!)),
         if (scholarship.ageRequirement != null)
-          DetailSection(title: "Age requirement", icon: Icons.cake_outlined, child: Text(scholarship.ageRequirement!, style: context.text.bodyLarge)),
+          DetailSection(title: "Age Requirement", icon: Icons.cake_outlined, child: Text(scholarship.ageRequirement!, style: context.text.bodyLarge)),
         if (rows.isEmpty && scholarship.ageRequirement == null)
           const EmptyState(
             compact: true,
@@ -297,7 +297,7 @@ class _DocumentsTab extends StatelessWidget {
       );
     }
     return CareerListGroup(
-      title: "Required documents",
+      title: "Required Documents",
       children: [
         for (final doc in documents) CareerListRow(icon: AppIcons.cv, title: doc, tone: AppTone.purple),
       ],

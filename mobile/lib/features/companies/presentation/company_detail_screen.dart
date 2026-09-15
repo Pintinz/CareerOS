@@ -172,7 +172,7 @@ class _OverviewTab extends StatelessWidget {
         if (company.description != null) DetailSection(title: "About", child: Text(company.description!, style: context.text.bodyLarge)),
         if (hasFacts)
           DetailSection(
-            title: "Company facts",
+            title: "Company Facts",
             child: Column(
               children: [
                 if (company.industry != null) FactRow(icon: AppIcons.company, label: "Industry", value: company.industry!),

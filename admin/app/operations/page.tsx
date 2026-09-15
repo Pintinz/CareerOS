@@ -96,7 +96,7 @@ export default function OperationsPage() {
           <h2 className="mb-3 mt-8 text-lg font-semibold text-navy">Background Jobs</h2>
           <div className="overflow-x-auto rounded-2xl bg-card shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-line text-xs uppercase text-muted">
+              <thead className="border-b border-line text-xs text-muted">
                 <tr>
                   <th className="px-4 py-3">Job</th>
                   <th className="px-4 py-3">Last Run</th>

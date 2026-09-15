@@ -225,9 +225,14 @@ class _AptitudeProgress extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: "Aptitude progress", actionLabel: "See all", onAction: () => context.push("/prepare/aptitude/analytics")),
+          SectionHeader(
+            title: "Aptitude Progress",
+            subtitle: "From your completed practice tests",
+            actionLabel: "View all",
+            onAction: () => context.push("/prepare/aptitude/analytics"),
+          ),
           analyticsAsync.when(
-            loading: () => const Column(children: [LoadingSkeleton(height: 72, radius: AppRadius.card), Gap.sm, LoadingSkeleton(height: 72, radius: AppRadius.card)]),
+            loading: () => const Column(children: [LoadingSkeleton(height: 88, radius: AppRadius.card), Gap.sm, LoadingSkeleton(height: 88, radius: AppRadius.card)]),
             error: (_, __) => const ErrorState(compact: true, message: "We couldn't load your aptitude progress right now."),
             data: (analytics) => Column(
               children: [
@@ -236,16 +241,26 @@ class _AptitudeProgress extends ConsumerWidget {
                   StatCard(
                     label: "Average Score",
                     value: analytics.averageScore != null ? "${analytics.averageScore!.round()}%" : "—",
+                    caption: analytics.averageScore == null ? "No scored tests yet" : null,
+                    progress: analytics.averageScore == null ? null : analytics.averageScore! / 100,
                     icon: Icons.insights_rounded,
                     tone: AppTone.success,
                   ),
                 ),
                 Gap.sm,
                 _statPair(
-                  StatCard(label: "Questions Practiced", value: "${analytics.questionsAnswered}", icon: AppIcons.aptitude, tone: AppTone.purple),
+                  StatCard(
+                    label: "Questions Practiced",
+                    value: "${analytics.questionsAnswered}",
+                    caption: "Across every section",
+                    icon: AppIcons.aptitude,
+                    tone: AppTone.purple,
+                  ),
                   StatCard(
                     label: "Best Score",
                     value: analytics.bestScore != null ? "${analytics.bestScore!.round()}%" : "—",
+                    caption: analytics.bestScore == null ? "No scored tests yet" : null,
+                    progress: analytics.bestScore == null ? null : analytics.bestScore! / 100,
                     icon: Icons.emoji_events_outlined,
                     tone: AppTone.warning,
                   ),
@@ -268,22 +283,41 @@ class _InterviewProgress extends ConsumerWidget {
     final readiness = ref.watch(interviewReadinessProvider(null));
     final a = analytics.valueOrNull;
     final r = readiness.valueOrNull;
-    final readinessLabel = r == null ? null : (r.insufficientData || r.overall == null ? "—" : "${r.overall!.round()}%");
+    final hasReadiness = r != null && !r.insufficientData && r.overall != null;
+    final readinessLabel = r == null ? null : (hasReadiness ? "${r.overall!.round()}%" : "—");
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.section),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: "Interview progress", actionLabel: "See all", onAction: () => context.push("/prepare/interview/analytics")),
+          SectionHeader(
+            title: "Interview Progress",
+            subtitle: "From practice sessions and STAR stories",
+            actionLabel: "View all",
+            onAction: () => context.push("/prepare/interview/analytics"),
+          ),
           _statPair(
-            StatCard(label: "Interview Sessions", value: a?.sessionsCompleted.toString(), icon: AppIcons.interview, tone: AppTone.warning),
-            StatCard(label: "Interview Readiness", value: readinessLabel, icon: Icons.speed_rounded, tone: AppTone.success),
+            StatCard(label: "Practice Sessions", value: a?.sessionsCompleted.toString(), icon: AppIcons.interview, tone: AppTone.warning),
+            StatCard(
+              label: "Interview Readiness",
+              value: readinessLabel,
+              caption: r != null && !hasReadiness ? "Not enough data yet" : null,
+              progress: hasReadiness ? r.overall! / 100 : null,
+              icon: Icons.speed_rounded,
+              tone: AppTone.success,
+            ),
           ),
           Gap.sm,
           _statPair(
-            StatCard(label: "Interview Questions Practiced", value: a?.questionsPracticed.toString(), icon: Icons.forum_outlined),
-            StatCard(label: "STAR Stories Ready", value: a?.starStoriesReady.toString(), icon: AppIcons.starStory, tone: AppTone.purple),
+            StatCard(label: "Questions Practiced", value: a?.questionsPracticed.toString(), caption: "In interview practice", icon: Icons.forum_outlined),
+            StatCard(
+              label: "STAR Stories Ready",
+              value: a?.starStoriesReady.toString(),
+              caption: a == null ? null : "of ${a.starStoriesCreated} written",
+              icon: AppIcons.starStory,
+              tone: AppTone.purple,
+            ),
           ),
         ],
       ),
@@ -303,7 +337,7 @@ class _RecentTests extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionHeader(title: "Recent tests"),
+          const SectionHeader(title: "Recent Tests"),
           historyAsync.when(
             loading: () => const SkeletonCard(),
             error: (_, __) => const ErrorState(compact: true, message: "We couldn't load your recent tests."),

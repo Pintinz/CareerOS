@@ -62,6 +62,7 @@ class AptitudeAnalyticsScreen extends ConsumerWidget {
                   StatCard(
                     label: "Average Score",
                     value: analytics.averageScore != null ? "${analytics.averageScore!.round()}%" : "—",
+                    progress: analytics.averageScore == null ? null : analytics.averageScore! / 100,
                     icon: Icons.insights_rounded,
                     tone: AppTone.success,
                   ),
@@ -72,6 +73,7 @@ class AptitudeAnalyticsScreen extends ConsumerWidget {
                   StatCard(
                     label: "Best Score",
                     value: analytics.bestScore != null ? "${analytics.bestScore!.round()}%" : "—",
+                    progress: analytics.bestScore == null ? null : analytics.bestScore! / 100,
                     icon: Icons.emoji_events_outlined,
                     tone: AppTone.warning,
                   ),

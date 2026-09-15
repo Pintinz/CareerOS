@@ -37,8 +37,9 @@ abstract final class AppTypography {
       headlineLarge: style(28, FontWeight.w700, c.textPrimary, height: 1.2, spacing: -0.4),
       headlineMedium: style(26, FontWeight.w700, c.textPrimary, height: 1.2, spacing: -0.3),
       headlineSmall: style(22, FontWeight.w700, c.textPrimary, height: 1.25, spacing: -0.2),
-      // Section / card titles
-      titleLarge: style(19, FontWeight.w700, c.textPrimary, height: 1.3, spacing: -0.1),
+      // Section / card titles. Section headers stay quieter than page titles so a screen with
+      // several sections doesn't read as a stack of headlines.
+      titleLarge: style(18, FontWeight.w700, c.textPrimary, height: 1.3, spacing: -0.2),
       titleMedium: style(16, FontWeight.w600, c.textPrimary, height: 1.35),
       titleSmall: style(14, FontWeight.w600, c.textPrimary, height: 1.35),
       // Body
@@ -47,7 +48,8 @@ abstract final class AppTypography {
       bodySmall: style(12.5, FontWeight.w400, c.textSecondary, height: 1.4),
       // Labels
       labelLarge: style(15, FontWeight.w600, c.textPrimary, height: 1.2),
-      labelMedium: style(13, FontWeight.w600, c.textSecondary, height: 1.2),
+      // Supporting labels are medium weight so bold stays reserved for titles and values.
+      labelMedium: style(13, FontWeight.w500, c.textSecondary, height: 1.25),
       labelSmall: style(11, FontWeight.w600, c.textSecondary, height: 1.2, spacing: 0.2),
     );
   }

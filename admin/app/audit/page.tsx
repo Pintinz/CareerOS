@@ -41,7 +41,7 @@ export default function AuditPage() {
 
       <div className="mt-6 overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-line text-xs uppercase text-muted">
+          <thead className="border-b border-line text-xs text-muted">
             <tr>
               <th className="px-4 py-3">When</th>
               <th className="px-4 py-3">Admin</th>

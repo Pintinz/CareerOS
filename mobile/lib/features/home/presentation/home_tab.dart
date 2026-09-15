@@ -805,7 +805,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: title, subtitle: subtitle, actionLabel: onSeeAll == null ? null : "See all", onAction: onSeeAll),
+          SectionHeader(title: title, subtitle: subtitle, actionLabel: onSeeAll == null ? null : "View all", onAction: onSeeAll),
           child,
         ],
       ),
@@ -822,13 +822,14 @@ class _LatestJobsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_latestJobsProvider);
     if (async.isLoading && !async.hasValue) {
-      return const _Section(title: "Latest opportunities", child: Column(children: [SkeletonCard(), Gap.sm, SkeletonCard()]));
+      return const _Section(title: "Latest Opportunities", child: Column(children: [SkeletonCard(), Gap.sm, SkeletonCard()]));
     }
     final jobs = async.valueOrNull ?? const <JobCard>[];
     if (jobs.isEmpty) return const SizedBox.shrink();
 
     return _Section(
-      title: "Latest opportunities",
+      title: "Latest Opportunities",
+      subtitle: "The newest roles published on CareerOS",
       onSeeAll: onSeeAll,
       child: Column(
         children: [
@@ -853,7 +854,8 @@ class _RecentApplicationsSection extends ConsumerWidget {
     final colors = context.colors;
 
     return _Section(
-      title: "Recent applications",
+      title: "Recent Applications",
+      subtitle: "Where your tracked roles stand",
       onSeeAll: () => context.push("/applications"),
       child: Material(
         color: colors.surface,
@@ -915,8 +917,8 @@ class _ScholarshipsSection extends ConsumerWidget {
     if (open.isEmpty) return const SizedBox.shrink();
 
     return _Section(
-      title: "Scholarships closing soon",
-      subtitle: page == null ? null : "${page.total} open now",
+      title: "Scholarships Closing Soon",
+      subtitle: page == null ? "Soonest deadlines first" : "${page.total} open · soonest deadlines first",
       onSeeAll: onSeeAll,
       child: Column(
         children: [
@@ -959,8 +961,20 @@ class _IntelligenceSection extends ConsumerWidget {
 
     return Column(
       children: [
-        if (followed.isNotEmpty) _Section(title: "From companies you follow", onSeeAll: onSeeAll, child: list(followed)),
-        if (latest.isNotEmpty) _Section(title: "Company intelligence", onSeeAll: onSeeAll, child: list(latest)),
+        if (followed.isNotEmpty)
+          _Section(
+            title: "From Companies You Follow",
+            subtitle: "Recent updates from companies you follow",
+            onSeeAll: onSeeAll,
+            child: list(followed),
+          ),
+        if (latest.isNotEmpty)
+          _Section(
+            title: "Company Intelligence",
+            subtitle: "Company moves that can shape your next opportunity",
+            onSeeAll: onSeeAll,
+            child: list(latest),
+          ),
       ],
     );
   }

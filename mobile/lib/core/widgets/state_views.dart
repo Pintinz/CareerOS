@@ -26,7 +26,6 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
@@ -35,18 +34,10 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ExcludeSemantics(
-                child: Container(
-                  width: compact ? 56 : 72,
-                  height: compact ? 56 : 72,
-                  decoration: BoxDecoration(color: colors.tint(colors.primary), shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Icon(icon, size: compact ? 26 : 32, color: colors.primary),
-                ),
-              ),
-              Gap.md,
+              _StateIllustration(icon: icon, tone: AppTone.primary, compact: compact),
+              Gap.lg,
               Text(title, textAlign: TextAlign.center, style: context.text.titleMedium),
-              Gap.xs,
+              const SizedBox(height: 6),
               Text(message, textAlign: TextAlign.center, style: context.text.bodyMedium),
               if (actionLabel != null && onAction != null) ...[
                 Gap.lg,
@@ -60,11 +51,54 @@ class EmptyState extends StatelessWidget {
   }
 }
 
+/// Soft concentric halo around a state icon — calm and branded, never a cartoon.
+class _StateIllustration extends StatelessWidget {
+  const _StateIllustration({required this.icon, required this.tone, required this.compact});
+
+  final IconData icon;
+  final AppTone tone;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = tone.color(context);
+    final isDark = context.colors.isDark;
+    final outer = compact ? 76.0 : 104.0;
+    final inner = compact ? 52.0 : 68.0;
+    return ExcludeSemantics(
+      child: Container(
+        width: outer,
+        height: outer,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withValues(alpha: isDark ? 0.08 : 0.05),
+          border: Border.all(color: color.withValues(alpha: isDark ? 0.14 : 0.08)),
+        ),
+        alignment: Alignment.center,
+        child: Container(
+          width: inner,
+          height: inner,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [color.withValues(alpha: isDark ? 0.26 : 0.16), color.withValues(alpha: isDark ? 0.14 : 0.08)],
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, size: compact ? 24 : 30, color: color),
+        ),
+      ),
+    );
+  }
+}
+
 /// Friendly, recoverable error. Pass an already user-safe [message] (see `userMessage`).
 class ErrorState extends StatelessWidget {
   const ErrorState({
     super.key,
-    this.title = "Something went wrong",
+    this.title = "We couldn't load this section",
     required this.message,
     this.onRetry,
     this.compact = false,
@@ -85,18 +119,11 @@ class ErrorState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ExcludeSemantics(
-                child: Container(
-                  width: compact ? 56 : 72,
-                  height: compact ? 56 : 72,
-                  decoration: BoxDecoration(color: AppTone.danger.tint(context), shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Icon(Icons.wifi_tethering_error_rounded, size: compact ? 26 : 32, color: AppColors.error),
-                ),
-              ),
-              Gap.md,
+              // Warning rather than red: a failed load is recoverable, not an alarm.
+              _StateIllustration(icon: Icons.cloud_off_rounded, tone: AppTone.warning, compact: compact),
+              Gap.lg,
               Text(title, textAlign: TextAlign.center, style: context.text.titleMedium),
-              Gap.xs,
+              const SizedBox(height: 6),
               Text(message, textAlign: TextAlign.center, style: context.text.bodyMedium),
               if (onRetry != null) ...[
                 Gap.lg,

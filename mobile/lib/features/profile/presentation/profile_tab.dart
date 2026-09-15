@@ -238,7 +238,12 @@ class _ProfessionalDetails extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionHeader(title: "Professional details", actionLabel: "Edit", onAction: () => showEditProfileSheet(context, profile)),
+        SectionHeader(
+          title: "Professional Details",
+          actionLabel: "Edit",
+          actionNavigates: false,
+          onAction: () => showEditProfileSheet(context, profile),
+        ),
         if (facts.isEmpty)
           CareerCard(
             variant: CareerCardVariant.muted,

@@ -196,7 +196,7 @@ export default function DiscoveryReviewPage() {
         {/* ------------------------------------------------------------------ SOURCE EVIDENCE */}
         <section aria-labelledby="evidence-title" className="space-y-4">
           <div className="rounded-2xl bg-card p-6 shadow-sm">
-            <h2 id="evidence-title" className="text-xs font-semibold uppercase tracking-wider text-muted">Source evidence</h2>
+            <h2 id="evidence-title" className="text-sm font-semibold text-navy">Source evidence</h2>
             <dl className="mt-4 grid grid-cols-[10rem_1fr] gap-x-4 gap-y-3 text-sm">
               <dt className="text-muted">Source quality</dt>
               <dd className="font-semibold text-ink">{evidence.source_quality ?? humanize(source.source_type)}</dd>
@@ -254,7 +254,7 @@ export default function DiscoveryReviewPage() {
           </div>
 
           <div className="rounded-2xl bg-card p-6 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Why this was accepted</h3>
+            <h3 className="text-sm font-semibold text-navy">Why this was accepted</h3>
             <ul className="mt-3 space-y-2 text-sm">
               {(evidence.checks ?? []).map((check) => (
                 <li key={check} className="flex gap-2"><span className="text-success" aria-hidden>✓</span>{check}</li>
@@ -285,7 +285,7 @@ export default function DiscoveryReviewPage() {
 
           {review.duplicate_of && (
             <div className="rounded-2xl bg-card p-6 text-sm shadow-sm">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Duplicate of</h3>
+              <h3 className="text-sm font-semibold text-navy">Duplicate of</h3>
               <Link href={`/discovery/${review.duplicate_of.id}`} className="mt-2 block font-semibold text-brand">
                 {review.duplicate_of.detected_title}
               </Link>
@@ -299,7 +299,7 @@ export default function DiscoveryReviewPage() {
           {current && (
             <div className="rounded-2xl bg-card p-6 shadow-sm">
               <div className="flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Existing CareerOS record</h2>
+                <h2 className="text-sm font-semibold text-navy">Existing CareerOS record</h2>
                 <StatusBadge status={String(current.status)} />
               </div>
               <p className="mt-2 text-lg font-semibold text-navy">{text(current.title ?? current.name ?? current.headline)}</p>
@@ -316,7 +316,7 @@ export default function DiscoveryReviewPage() {
               </dl>
               {review.pending_changes.length > 0 && (
                 <div className="mt-5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[#b9770e]">Changes detected at the source</h3>
+                  <h3 className="text-sm font-semibold text-[#b9770e]">Changes detected at the source</h3>
                   <ul className="mt-2 space-y-3">
                     {review.pending_changes.map((change) => (
                       <li key={change.id} className="rounded-xl border border-warning/40 bg-warning/5 p-3 text-sm">
@@ -343,7 +343,7 @@ export default function DiscoveryReviewPage() {
 
           {!current && (
             <div className="rounded-2xl bg-card p-6 shadow-sm">
-              <h2 id="record-title" className="text-xs font-semibold uppercase tracking-wider text-muted">CareerOS record</h2>
+              <h2 id="record-title" className="text-sm font-semibold text-navy">CareerOS record</h2>
               <p className="mt-1 text-xs text-muted">Prefilled from the validated source facts. Only fields you change override them; empty facts stay empty.</p>
               <div className="mt-4 grid gap-4">
                 <EditField label={isIntelligence ? "Headline" : kind === "SCHOLARSHIP" || kind === "FELLOWSHIP" ? "Name" : "Title"} changed={"title" in edits}>
@@ -431,7 +431,7 @@ function ExtractedFacts({ extracted }: { extracted: Record<string, unknown> }) {
   if (facts.length === 0) return null;
   return (
     <div className="mt-6 border-t border-line pt-4">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Other facts stated by the source</h3>
+      <h3 className="text-sm font-semibold text-navy">Other facts stated by the source</h3>
       <dl className="mt-3 grid grid-cols-[10rem_1fr] gap-x-4 gap-y-2 text-sm">
         {facts.map(([key, value]) => (
           <div key={key} className="contents">

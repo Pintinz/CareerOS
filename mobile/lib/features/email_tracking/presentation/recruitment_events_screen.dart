@@ -43,12 +43,12 @@ class RecruitmentEventsScreen extends ConsumerWidget {
               padding: AppSpacing.page,
               children: [
                 if (needsReview.isNotEmpty) ...[
-                  SectionHeader(title: "Needs review", subtitle: "${needsReview.length} waiting for your confirmation"),
+                  SectionHeader(title: "Needs Review", subtitle: "${needsReview.length} waiting for your confirmation"),
                   _EventGroup(events: needsReview),
                 ],
                 if (reviewed.isNotEmpty) ...[
                   if (needsReview.isNotEmpty) Gap.section,
-                  const SectionHeader(title: "Recently reviewed"),
+                  const SectionHeader(title: "Recently Reviewed"),
                   _EventGroup(events: reviewed),
                 ],
               ],

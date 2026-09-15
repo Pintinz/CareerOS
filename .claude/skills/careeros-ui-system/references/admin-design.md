@@ -28,8 +28,10 @@ ui-sans-serif, system-ui` (no runtime Google Fonts fetch).
   footer with Cancel (outline) + Save (primary).
 - **Status badges**: pill, 12 px semibold text on 10% tint of the semantic color; always text.
   Draft neutral · Published success · Scheduled info · Archived neutral · Failing error · Verified success.
-- **Analytics cards**: compact stat tiles (label, value, optional delta only if real) in a
-  4-column grid.
+- **Analytics cards**: `OverviewCard` — label + icon on top, large tabular value, optional truthful
+  `hint` derived from the value ("Needs attention" / "All clear"), in a 4–5 column grid. Group them under
+  `SectionTitle` (title + one-line description), not uppercase labels. Tables use sentence-case headers.
+  See `visual-quality.md`.
 - **Side panels / modals** for quick edits and confirmations; destructive confirms in error color.
 - **Empty/error states** follow the same copy rules as mobile (`ux-rules.md`).
 

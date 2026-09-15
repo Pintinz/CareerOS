@@ -6,9 +6,9 @@
 | `CareerOSMark`, `CareerOSWordmark`, `CareerOSLogo` | `careeros_logo.dart` | Only brand rendering |
 | `PrimaryButton`, `SecondaryButton`, `AppOutlineButton`, `DangerButton`, `AppTextButton` | `app_buttons.dart` | `isLoading`, `icon`, `expand` |
 | `CareerCard` | `career_card.dart` | Surface + border + radius; `variant: standard/feature/muted/outlined`, optional `onTap` |
-| `SectionHeader` | `section_header.dart` | Title, optional subtitle and "See all"-style action |
+| `SectionHeader` | `section_header.dart` | Title Case title, optional one-line description, "View all ›" action (`actionNavigates: false` for in-place actions) |
 | `StatCard`, `MetricTile` | `stat_card.dart` | Real values only; `null` renders "—" (also use "—", never "N/A", for not-enough-data). StatCard: value first, small icon top-right, full-width label |
-| `InsightCard` | `insight_card.dart` | Tone accent bar + icon + title + body + action (alerts, next action) |
+| `InsightCard` | `insight_card.dart` | Card surface + tone icon circle + title + body + "Action →" link (alerts, next action); no edge rail |
 | `StatusChip`, `AppFilterChip`, `TagChip` | `chips.dart` | Status always has text (+icon), never color alone |
 | `AppSearchField` | `app_search_field.dart` | Debounce in the caller |
 | `EmptyState`, `ErrorState`, `LoadingSkeleton`, `SkeletonList` | `state_views.dart` | See ux-rules copy |
@@ -19,7 +19,7 @@
 | `CareerPillTabBar` | `career_pill_tab_bar.dart` | Filled-blue segmented pills for peer views (Opportunities, Saved) |
 | `FeedToolbar`, `FilterOptionGroup` | `feed_toolbar.dart` | Search + quick filters + "Filters · n" sheet entry |
 | `DetailScaffold`, `DetailSection`, `BulletList`, `FactRow`, `DetailSkeleton`, `DetailError` | `detail_layout.dart` | Collapsing banner hero, overlapping logo, pinned tabs, fully scrolling tab bodies; `showBanner: false` for records |
-| `CareerListGroup`, `CareerListRow` | `career_list.dart` | Settings/profile/secondary navigation rows in one surface |
+| `CareerListGroup`, `CareerListRow` | `career_list.dart` | Settings/profile/secondary navigation rows in one surface; sentence-case group label |
 | `IconTile` | `icon_tile.dart` | Tinted icon square/circle |
 | `CareerNavigationBar` | `career_navigation_bar.dart` | Five-hub bottom nav; labels scale down instead of wrapping |
 | `OpportunityAvailability`, `AvailabilityNotice`, `SourceProvenance`, `isStatedValue` | `opportunity_availability.dart` | Listing state from the backend (ACTIVE/EXPIRED/CLOSED/UNAVAILABLE): notice above the title, never an Apply button unless active; quiet "Official source · Last verified" line; hide UNSPECIFIED enum facts |
@@ -47,7 +47,7 @@ when present) → quick actions (max 4: Find Opportunities, Analyze CV, Prepare,
 → one compact career setup card (progress ring, next unfinished step, Start; hides when complete)
 → latest jobs → recent applications → scholarships closing soon (open total as the section subtitle)
 → company intelligence (3) → nothing else. No endless feed; every
-section has "See all" into its hub. Readiness scores appear only when the backend computes one.
+section has "View all" into its hub. Readiness scores appear only when the backend computes one.
 
 ## Discovered content (DISCOVERY_ENGINE.md)
 Feeds only receive listings that are active at their source. Detail screens can still be opened from

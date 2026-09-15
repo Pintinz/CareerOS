@@ -39,14 +39,14 @@
     outline: none;
   }
 
-  /* Operational tables: quiet uppercase headers, generous rows, subtle hover. */
+  /* Operational tables: quiet sentence-case headers, generous rows, subtle hover. */
   table thead th {
     background-color: #f6f8fc;
     color: #66758c;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
     white-space: nowrap;
   }
 

@@ -4,6 +4,9 @@ import "package:flutter/material.dart";
 
 import "../design/design.dart";
 
+/// The light end of a progress gradient: the same hue, a step brighter.
+Color _lighten(Color color) => Color.lerp(color, Colors.white, 0.35)!;
+
 /// Rounded linear progress with an accessible label. [value] is 0–1.
 class CareerProgressBar extends StatelessWidget {
   const CareerProgressBar({
@@ -26,20 +29,31 @@ class CareerProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clamped = value.clamp(0.0, 1.0);
+    final color = tone.color(context);
     return Semantics(
       label: semanticLabel,
       value: semanticValue ?? "${(clamped * 100).round()}%",
       child: ClipRRect(
         borderRadius: AppRadius.pillAll,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: clamped),
-          duration: AppMotion.of(context),
-          curve: AppMotion.curve,
-          builder: (context, animated, _) => LinearProgressIndicator(
-            value: animated,
-            minHeight: height,
-            backgroundColor: trackColor ?? tone.tint(context),
-            valueColor: AlwaysStoppedAnimation(tone.color(context)),
+        child: Container(
+          height: height,
+          color: trackColor ?? tone.tint(context),
+          alignment: Alignment.centerLeft,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: clamped),
+            duration: AppMotion.of(context),
+            curve: AppMotion.curve,
+            builder: (context, animated, _) => FractionallySizedBox(
+              widthFactor: animated,
+              heightFactor: 1,
+              // A soft same-hue gradient reads as a crafted brand bar rather than a stock indicator.
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.pillAll,
+                  gradient: LinearGradient(colors: [_lighten(color), color]),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -120,12 +134,18 @@ class _RingPainter extends CustomPainter {
       ..color = trackColor;
     canvas.drawArc(rect, 0, math.pi * 2, false, track);
     if (value <= 0) return;
+    final sweep = math.pi * 2 * value;
     final progress = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round
-      ..color = color;
-    canvas.drawArc(rect, -math.pi / 2, math.pi * 2 * value, false, progress);
+      ..shader = SweepGradient(
+        startAngle: 0,
+        endAngle: math.max(sweep, 0.01),
+        colors: [_lighten(color), color],
+        transform: const GradientRotation(-math.pi / 2),
+      ).createShader(rect);
+    canvas.drawArc(rect, -math.pi / 2, sweep, false, progress);
   }
 
   @override

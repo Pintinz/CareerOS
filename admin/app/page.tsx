@@ -16,7 +16,7 @@ import {
   IconUsers,
   IconPulse,
 } from "@/components/icons";
-import { OverviewCard } from "@/components/OverviewCard";
+import { OverviewCard, SectionTitle } from "@/components/OverviewCard";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { api, ApiError } from "@/lib/apiClient";
 import { getBackendHealth, HealthStatus } from "@/lib/api";
@@ -82,7 +82,7 @@ export default function DashboardPage() {
       {!data && !error && (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4" aria-label="Loading">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="h-[84px] animate-pulse rounded-2xl bg-white shadow-sm" />
+            <div key={i} className="h-[112px] animate-pulse rounded-2xl bg-white shadow-sm" />
           ))}
         </div>
       )}
@@ -90,13 +90,11 @@ export default function DashboardPage() {
       {data && (
         <>
           <section aria-labelledby="platform">
-            <h2 id="platform" className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
-              Platform
-            </h2>
+            <SectionTitle id="platform" title="Platform" description="People, published opportunities and question banks." />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <OverviewCard label="Users" value={data.users} icon={<IconUsers />} />
               <OverviewCard label="Applications tracked" value={data.applications_tracked} icon={<IconPulse />} tone="success" />
-              <OverviewCard label="Published jobs" value={data.published_jobs} icon={<IconBriefcase />} />
+              <OverviewCard label="Published opportunities" value={data.published_jobs} icon={<IconBriefcase />} hint="Jobs, internships & programmes" />
               <OverviewCard label="Published scholarships" value={data.published_scholarships} icon={<IconGraduation />} tone="violet" />
               <OverviewCard label="Companies" value={data.companies} icon={<IconBuilding />} tone="info" />
               <OverviewCard label="Intelligence posts" value={data.intelligence_posts} icon={<IconInsights />} tone="info" />
@@ -106,9 +104,7 @@ export default function DashboardPage() {
           </section>
 
           <section aria-labelledby="operations" className="mt-10">
-            <h2 id="operations" className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
-              Email tracking & discovery
-            </h2>
+            <SectionTitle id="operations" title="Email Tracking & Discovery" description="Mailbox connections, sync health and items waiting for a reviewer." />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <OverviewCard label="Gmail connections" value={data.gmail_connections} icon={<IconMail />} />
               <OverviewCard label="Outlook connections" value={data.outlook_connections} icon={<IconMail />} />
@@ -117,28 +113,34 @@ export default function DashboardPage() {
                 value={data.connections_requiring_reauth}
                 icon={<IconShield />}
                 tone={data.connections_requiring_reauth > 0 ? "warning" : "success"}
+                hint={data.connections_requiring_reauth > 0 ? "Users must reconnect" : "All connected"}
               />
               <OverviewCard
                 label="Failed syncs"
                 value={data.failed_email_syncs}
                 icon={<IconPulse />}
                 tone={data.failed_email_syncs > 0 ? "danger" : "success"}
+                hint={data.failed_email_syncs > 0 ? "Needs attention" : "All clear"}
               />
-              <OverviewCard label="Awaiting review" value={data.discovery_items_awaiting_review} icon={<IconSearch />} tone="warning" />
+              <OverviewCard
+                label="Pending reviews"
+                value={data.discovery_items_awaiting_review}
+                icon={<IconSearch />}
+                tone={data.discovery_items_awaiting_review > 0 ? "warning" : "success"}
+                hint={data.discovery_items_awaiting_review > 0 ? "In the discovery queue" : "Queue is clear"}
+              />
             </div>
           </section>
 
           <section aria-labelledby="content-status" className="mt-10">
-            <h2 id="content-status" className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted">
-              Content status
-            </h2>
+            <SectionTitle id="content-status" title="Content Status" description="Where each content type sits in the publishing workflow." />
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {Object.entries(data.content_status).map(([entity, breakdown]) => (
                 <div key={entity} className="rounded-2xl bg-card p-5 shadow-sm">
                   <p className="mb-3 text-sm font-semibold capitalize text-navy">{entity}</p>
-                  <ul className="space-y-2">
+                  <ul className="divide-y divide-line">
                     {Object.entries(breakdown).map(([status, count]) => (
-                      <li key={status} className="flex items-center justify-between text-sm">
+                      <li key={status} className="flex items-center justify-between py-2 text-sm first:pt-0 last:pb-0">
                         <StatusBadge status={status} />
                         <span className="font-semibold tabular-nums text-ink">{count}</span>
                       </li>

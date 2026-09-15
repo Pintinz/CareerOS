@@ -159,7 +159,7 @@ class DangerButton extends StatelessWidget {
   }
 }
 
-/// Tertiary, inline action ("See all", "Review").
+/// Tertiary, inline action ("View all", "Review").
 class AppTextButton extends StatelessWidget {
   const AppTextButton({super.key, required this.label, required this.onPressed, this.icon, this.tone});
 

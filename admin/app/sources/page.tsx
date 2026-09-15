@@ -234,7 +234,7 @@ export default function SourcesPage() {
 
       <div className="overflow-x-auto rounded-2xl bg-card shadow-sm">
         <table className="w-full min-w-[1180px] text-left text-sm">
-          <thead className="border-b border-line text-xs uppercase tracking-wide text-muted">
+          <thead className="border-b border-line text-xs text-muted">
             <tr>
               <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Readiness</th>

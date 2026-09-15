@@ -22,7 +22,8 @@ class CareerListGroup extends StatelessWidget {
             padding: const EdgeInsets.only(left: AppSpacing.xxs, bottom: AppSpacing.xs),
             child: Semantics(
               header: true,
-              child: Text(title!.toUpperCase(), style: context.text.labelSmall?.copyWith(letterSpacing: 0.8)),
+              // Sentence case rather than all caps: calmer, and easier to read at small sizes.
+              child: Text(title!, style: context.text.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
             ),
           ),
         Material(

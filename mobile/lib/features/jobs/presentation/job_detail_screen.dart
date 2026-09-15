@@ -289,7 +289,7 @@ class _OverviewTab extends StatelessWidget {
       children: [
         if (salary != null || job.industry != null || job.country != null)
           DetailSection(
-            title: "Key details",
+            title: "Key Details",
             child: Column(
               children: [
                 if (salary != null) FactRow(icon: Icons.payments_outlined, label: "Salary", value: salary),
@@ -300,7 +300,7 @@ class _OverviewTab extends StatelessWidget {
           ),
         if (job.shortSummary != null || job.description != null)
           DetailSection(
-            title: "About the role",
+            title: "About the Role",
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -312,7 +312,7 @@ class _OverviewTab extends StatelessWidget {
           ),
         if (_hasProgrammeFacts)
           DetailSection(
-            title: "Programme details",
+            title: "Programme Details",
             icon: AppIcons.graduateProgram,
             child: Column(
               children: [
@@ -327,7 +327,7 @@ class _OverviewTab extends StatelessWidget {
           DetailSection(title: "Responsibilities", child: BulletList(items: job.responsibilities!)),
         if (hasHowToApply)
           DetailSection(
-            title: "How to apply",
+            title: "How to Apply",
             icon: Icons.assignment_outlined,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -390,7 +390,7 @@ class _RequirementsTab extends StatelessWidget {
           DetailSection(title: "Experience", child: BulletList(items: job.experienceRequirements!)),
         if (job.preferredSkills?.isNotEmpty ?? false)
           DetailSection(
-            title: "Preferred skills",
+            title: "Preferred Skills",
             child: Wrap(
               spacing: AppSpacing.xs,
               runSpacing: AppSpacing.xs,
