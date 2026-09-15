@@ -23,6 +23,7 @@ class JobCard {
     this.availability = "ACTIVE",
     this.isOfficialSource = false,
     this.lastVerifiedAt,
+    this.verificationStatus = "UNVERIFIED",
   });
 
   final String id;
@@ -43,13 +44,16 @@ class JobCard {
   final DateTime? publishedAt;
   final DateTime? applicationDeadline;
 
-  /// JOB | INTERNSHIP | GRADUATE_PROGRAM
+  /// JOB | INTERNSHIP | GRADUATE_PROGRAM | APPRENTICESHIP | TRAINEE_PROGRAM
   final String opportunityType;
 
   /// ACTIVE | EXPIRED | CLOSED | UNAVAILABLE — see [OpportunityAvailability].
   final String availability;
   final bool isOfficialSource;
   final DateTime? lastVerifiedAt;
+
+  /// OFFICIAL_ATS | OFFICIAL_SOURCE | VERIFIED | UNVERIFIED | STALE | SOURCE_REMOVED
+  final String verificationStatus;
 
   factory JobCard.fromJson(Map<String, dynamic> json) => JobCard(
         id: json["id"] as String,
@@ -74,6 +78,7 @@ class JobCard {
         availability: json["availability"] as String? ?? "ACTIVE",
         isOfficialSource: json["is_official_source"] as bool? ?? false,
         lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
+        verificationStatus: json["verification_status"] as String? ?? "UNVERIFIED",
       );
 
   JobCard copyWith({bool? isSaved}) => JobCard(
@@ -98,6 +103,7 @@ class JobCard {
         availability: availability,
         isOfficialSource: isOfficialSource,
         lastVerifiedAt: lastVerifiedAt,
+        verificationStatus: verificationStatus,
       );
 }
 
@@ -146,6 +152,8 @@ class JobDetail {
     this.programDuration,
     this.programStartDate,
     this.eligibility = const {},
+    this.verificationStatus = "UNVERIFIED",
+    this.jobFunction,
   });
 
   final String id;
@@ -193,6 +201,12 @@ class JobDetail {
   final String? programDuration;
   final DateTime? programStartDate;
   final Map<String, dynamic> eligibility;
+
+  /// OFFICIAL_ATS | OFFICIAL_SOURCE | VERIFIED | UNVERIFIED | STALE | SOURCE_REMOVED
+  final String verificationStatus;
+
+  /// Department or job family as the employer names it.
+  final String? jobFunction;
 
   static List<String>? _stringList(dynamic value) =>
       value == null ? null : (value as List).map((e) => e as String).toList();
@@ -242,5 +256,7 @@ class JobDetail {
         programDuration: json["program_duration"] as String?,
         programStartDate: json["program_start_date"] != null ? DateTime.parse(json["program_start_date"] as String) : null,
         eligibility: (json["eligibility_json"] as Map<String, dynamic>?) ?? const {},
+        verificationStatus: json["verification_status"] as String? ?? "UNVERIFIED",
+        jobFunction: json["job_function"] as String?,
       );
 }

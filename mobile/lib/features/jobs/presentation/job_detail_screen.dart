@@ -98,7 +98,12 @@ class _JobDetailView extends ConsumerWidget {
                 ? AppOutlineButton(label: "View source", icon: AppIcons.external, onPressed: () => openExternalUrl(context, sourceLink))
                 : const PrimaryButton(label: "No longer accepting applications", onPressed: null))
             : hasApplyLink
-                ? PrimaryButton(label: "Apply", icon: AppIcons.external, onPressed: () => openExternalUrl(context, job.applicationUrl))
+                // Always the employer's own application page — CareerOS never stands in for the employer.
+                ? PrimaryButton(
+                    label: job.isOfficialSource ? "Apply on official site" : "Apply",
+                    icon: AppIcons.external,
+                    onPressed: () => openExternalUrl(context, job.applicationUrl),
+                  )
                 : PrimaryButton(label: "How to Apply", onPressed: () => tabController.animateTo(0)),
       ),
     );
@@ -166,11 +171,14 @@ class _JobHeader extends StatelessWidget {
           runSpacing: AppSpacing.xs,
           children: [
             if (job.opportunityType == "GRADUATE_PROGRAM") const TagChip(label: "Graduate programme", tone: AppTone.purple),
+            if (job.opportunityType == "TRAINEE_PROGRAM") const TagChip(label: "Trainee programme", tone: AppTone.purple),
+            if (job.opportunityType == "APPRENTICESHIP") const TagChip(label: "Apprenticeship", tone: AppTone.info),
             if (job.opportunityType == "INTERNSHIP" && job.employmentType != "INTERNSHIP") const TagChip(label: "Internship", tone: AppTone.info),
             if (job.location != null) TagChip(label: job.location!, icon: AppIcons.location),
             if (isStatedValue(job.employmentType)) TagChip(label: humanizeEnum(job.employmentType)),
             if (isStatedValue(job.workMode)) TagChip(label: humanizeEnum(job.workMode)),
             if (job.experienceLevel != null) TagChip(label: humanizeEnum(job.experienceLevel!)),
+            if (job.jobFunction != null) TagChip(label: job.jobFunction!),
             if (job.isDemo) const TagChip(label: "DEMO"),
           ],
         ),
@@ -192,7 +200,7 @@ class _JobHeader extends StatelessWidget {
         ),
         if (job.isOfficialSource) ...[
           Gap.xs,
-          SourceProvenance(isOfficialSource: job.isOfficialSource, lastVerifiedAt: job.lastVerifiedAt),
+          SourceProvenance(isOfficialSource: job.isOfficialSource, lastVerifiedAt: job.lastVerifiedAt, verificationStatus: job.verificationStatus),
         ],
         Gap.md,
         Row(

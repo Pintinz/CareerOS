@@ -7,13 +7,27 @@ export const SOURCE_TYPES = [
 ] as const;
 export type SourceType = (typeof SOURCE_TYPES)[number];
 
-export const CONTENT_TYPES = ["JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "SCHOLARSHIP", "FELLOWSHIP", "INTELLIGENCE"] as const;
+export const CONTENT_TYPES = [
+  "JOB", "INTERNSHIP", "GRADUATE_PROGRAM", "APPRENTICESHIP", "TRAINEE_PROGRAM", "SCHOLARSHIP", "FELLOWSHIP", "INTELLIGENCE",
+] as const;
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
 export const DISCOVERY_METHODS = ["STRUCTURED_API", "RSS", "STRUCTURED_DATA", "AI_RESEARCH", "MANUAL"] as const;
 export type DiscoveryMethod = (typeof DISCOVERY_METHODS)[number];
 
 export type RunStatus = "QUEUED" | "RUNNING" | "SUCCEEDED" | "PARTIAL" | "FAILED" | "RATE_LIMITED" | "SKIPPED";
+
+export const READINESS = ["READY_STRUCTURED", "READY_HTML", "REQUIRES_CONFIGURATION", "MANUAL_ONLY", "BLOCKED", "UNVERIFIED"] as const;
+export type Readiness = (typeof READINESS)[number];
+export const READINESS_LABELS: Record<Readiness, string> = {
+  READY_STRUCTURED: "Ready · structured",
+  READY_HTML: "Ready · official pages",
+  REQUIRES_CONFIGURATION: "Needs configuration",
+  MANUAL_ONLY: "Manual only",
+  BLOCKED: "Blocked",
+  UNVERIFIED: "Not audited",
+};
+export type SourceHealthLabel = "HEALTHY" | "DEGRADED" | "FAILING" | "PAUSED" | "UNKNOWN";
 
 export interface SourceHealth {
   id: string;
@@ -42,6 +56,14 @@ export interface SourceHealth {
   last_error_code: string | null;
   consecutive_failures: number;
   next_poll_after: string | null;
+  job_search_url: string | null;
+  ats_provider: string | null;
+  readiness: Readiness;
+  readiness_note: string | null;
+  auto_create_draft: boolean;
+  last_http_status: number | null;
+  items_last_found: number | null;
+  requires_review: boolean;
   created_at: string;
   items_discovered?: number;
   items_awaiting_review?: number;
@@ -49,6 +71,34 @@ export interface SourceHealth {
   last_run_status?: RunStatus | null;
   last_run_at?: string | null;
   adapter_available?: boolean;
+  adapter_name?: string | null;
+  company_name?: string | null;
+  last_run_new?: number | null;
+  last_run_updated?: number | null;
+  last_run_duplicates?: number | null;
+  last_run_removed?: number | null;
+  health?: SourceHealthLabel;
+}
+
+export interface SourceTest {
+  ok: boolean;
+  adapter: string | null;
+  found: number;
+  complete: boolean;
+  sample_titles: string[];
+  warnings: string[];
+  error_code: string | null;
+  error: string | null;
+  http_status: number | null;
+  requests: number;
+}
+
+export interface SeedImport {
+  dry_run: boolean;
+  companies_created: number;
+  sources_created: number;
+  sources_updated: number;
+  sources_unchanged: number;
 }
 
 export interface DiscoveryRun {
@@ -79,7 +129,9 @@ export interface DiscoveredItem {
   id: string;
   source_id: string;
   source_name: string | null;
+  source_type: SourceType | null;
   item_type: ContentType;
+  external_id: string | null;
   detected_title: string;
   detected_company_name: string | null;
   company_id: string | null;
@@ -99,6 +151,7 @@ export interface DiscoveredItem {
   created_draft_id: string | null;
   pending_changes: number;
   flags: string[];
+  missing_runs: number;
   created_at: string;
   last_seen_at: string | null;
 }
@@ -171,13 +224,23 @@ export interface DiscoveryMetrics {
   average_run_ms_24h: number | null;
   auto_publish_enabled: boolean;
   ai_research_available: boolean;
-  flags: Record<string, boolean>;
+  flags: Record<string, boolean | number>;
+  healthy_sources: number;
+  sources_by_readiness: Record<string, number>;
+  last_run_at: string | null;
+  items_new_24h: number;
+  items_updated_24h: number;
+  possibly_removed: number;
+  jobs_by_country: { country: string; count: number }[];
+  jobs_by_industry: { industry: string; count: number }[];
 }
 
 export const CONTENT_TYPE_LABELS: Record<ContentType, string> = {
   JOB: "Job",
   INTERNSHIP: "Internship",
   GRADUATE_PROGRAM: "Graduate programme",
+  APPRENTICESHIP: "Apprenticeship",
+  TRAINEE_PROGRAM: "Trainee programme",
   SCHOLARSHIP: "Scholarship",
   FELLOWSHIP: "Fellowship",
   INTELLIGENCE: "Intelligence",

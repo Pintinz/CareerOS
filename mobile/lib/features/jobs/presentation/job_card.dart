@@ -51,6 +51,10 @@ class JobCardTile extends StatelessWidget {
           if (!_availability.isActive) TagChip(label: _availability.shortLabel, tone: _availability.tone),
           if (job.opportunityType == "GRADUATE_PROGRAM")
             const TagChip(label: "Graduate programme", tone: AppTone.purple)
+          else if (job.opportunityType == "TRAINEE_PROGRAM")
+            const TagChip(label: "Trainee programme", tone: AppTone.purple)
+          else if (job.opportunityType == "APPRENTICESHIP")
+            const TagChip(label: "Apprenticeship", tone: AppTone.info)
           else if (job.opportunityType == "INTERNSHIP" && job.employmentType != "INTERNSHIP")
             const TagChip(label: "Internship", tone: AppTone.info),
           if (isStatedValue(job.employmentType)) TagChip(label: humanizeEnum(job.employmentType)),

@@ -17,6 +17,8 @@ import "job_providers.dart";
 
 const _employmentTypes = ["FULL_TIME", "PART_TIME", "CONTRACT", "INTERNSHIP", "TEMPORARY"];
 const _workModes = ["REMOTE", "HYBRID", "ON_SITE"];
+// Country names or regions the API understands ("Africa" selects every African country).
+const _locations = ["Nigeria", "Africa", "United Kingdom", "Germany", "Netherlands", "France", "Canada", "United States", "United Arab Emirates", "Saudi Arabia"];
 const _experienceLevels = ["ENTRY", "JUNIOR", "MID", "SENIOR", "LEAD", "EXECUTIVE"];
 
 /// A job-backed Opportunities feed (Jobs, Internships or Graduate Programs — see [JobFeed]).
@@ -82,6 +84,12 @@ class _JobListTabState extends ConsumerState<JobListTab> with AutomaticKeepAlive
                   selected: filters.sort,
                   labelFor: (v) => v == "newest" ? "Latest" : "Closing soon",
                   onChanged: (v) => update(filters.copyWith(sort: v.isEmpty ? "newest" : v)),
+                ),
+                FilterOptionGroup(
+                  title: "Location",
+                  options: _locations,
+                  selected: filters.country,
+                  onChanged: (v) => update(filters.copyWith(country: v)),
                 ),
                 FilterOptionGroup(
                   title: "Work mode",

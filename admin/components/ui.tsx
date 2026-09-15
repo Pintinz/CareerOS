@@ -78,6 +78,17 @@ const STATUS_TONES: Record<string, Tone> = {
   CLOSED: "danger",
   DEADLINE_PASSED: "neutral",
   UNKNOWN_REQUIRES_REVIEW: "warning",
+  POSSIBLY_REMOVED: "warning",
+  // Career source registry
+  HEALTHY: "success",
+  DEGRADED: "warning",
+  PAUSED: "neutral",
+  UNKNOWN: "neutral",
+  READY_STRUCTURED: "success",
+  READY_HTML: "success",
+  REQUIRES_CONFIGURATION: "warning",
+  MANUAL_ONLY: "neutral",
+  BLOCKED: "danger",
 };
 
 function humanize(value: string) {

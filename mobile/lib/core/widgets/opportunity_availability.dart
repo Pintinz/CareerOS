@@ -99,20 +99,29 @@ class AvailabilityNotice extends StatelessWidget {
 /// A quiet provenance line for detail screens: "Official source · Last verified 2d ago". Shows
 /// nothing unless the backend marked the listing as coming from an official organization channel.
 class SourceProvenance extends StatelessWidget {
-  const SourceProvenance({super.key, required this.isOfficialSource, this.lastVerifiedAt});
+  const SourceProvenance({super.key, required this.isOfficialSource, this.lastVerifiedAt, this.verificationStatus});
 
   final bool isOfficialSource;
   final DateTime? lastVerifiedAt;
 
+  /// Server-computed label; STALE means the official source hasn't been re-checked recently.
+  final String? verificationStatus;
+
   @override
   Widget build(BuildContext context) {
-    if (!isOfficialSource) return const SizedBox.shrink();
+    if (!isOfficialSource || verificationStatus == "SOURCE_REMOVED") return const SizedBox.shrink();
     final verified = lastVerifiedAt;
-    final label = verified == null ? "Official source" : "Official source · Last verified ${DateLabels.published(verified).toLowerCase()}";
+    // Never claim a verification CareerOS can't currently back up.
+    final stale = verificationStatus == "STALE";
+    final label = verified == null
+        ? "Official source"
+        : stale
+            ? "Official source · Last checked ${DateLabels.published(verified).toLowerCase()}"
+            : "Official source · Last verified ${DateLabels.published(verified).toLowerCase()}";
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(AppIcons.verified, size: 14, color: AppColors.success),
+        Icon(stale ? AppIcons.time : AppIcons.verified, size: 14, color: stale ? context.colors.textSecondary : AppColors.success),
         const SizedBox(width: 4),
         Flexible(child: Text(label, style: context.text.bodySmall)),
       ],

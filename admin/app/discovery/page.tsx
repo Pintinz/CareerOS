@@ -27,6 +27,8 @@ const TABS: { key: ContentType | "ALL"; label: string }[] = [
   { key: "SCHOLARSHIP", label: "Scholarships" },
   { key: "INTERNSHIP", label: "Internships" },
   { key: "GRADUATE_PROGRAM", label: "Graduate Programs" },
+  { key: "TRAINEE_PROGRAM", label: "Trainee Programmes" },
+  { key: "APPRENTICESHIP", label: "Apprenticeships" },
   { key: "FELLOWSHIP", label: "Fellowships" },
   { key: "INTELLIGENCE", label: "Intelligence" },
 ];
@@ -100,9 +102,10 @@ function DiscoveryQueue() {
 
   useEffect(() => setPage(1), [tab, status, sourceId, companyId, country, minTrust, duplicates, since, search]);
 
-  async function decide(item: DiscoveredItem, action: "ignore" | "reject") {
+  async function decide(item: DiscoveredItem, action: "ignore" | "reject" | "create-draft") {
     try {
-      await api.post(`/admin/discovery/${item.id}/${action}`);
+      await api.post(`/admin/discovery/${item.id}/${action}`, action === "create-draft" ? {} : undefined);
+      if (action === "create-draft") setNotice(`Draft created for “${item.detected_title}”. Review and publish it from the item page.`);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Action failed.");
@@ -146,12 +149,26 @@ function DiscoveryQueue() {
       />
 
       {metrics && (
-        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <OverviewCard label="Awaiting review" value={metrics.awaiting_review} tone="warning" />
-          <OverviewCard label="Source-verified in queue" value={metrics.items_verified} tone="success" />
-          <OverviewCard label="Pending source changes" value={metrics.pending_changes + metrics.source_removed_pending} tone="info" />
-          <OverviewCard label="Found in the last 24h" value={`${metrics.items_found_24h} · ${metrics.duplicates_24h} dup.`} tone="primary" />
-        </section>
+        <>
+          <section className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <OverviewCard label="Awaiting review" value={metrics.awaiting_review} tone="warning" />
+            <OverviewCard label="New · updated (24h)" value={`${metrics.items_new_24h} · ${metrics.items_updated_24h}`} tone="primary" />
+            <OverviewCard label="Pending source changes" value={metrics.pending_changes + metrics.source_removed_pending} tone="info" />
+            <OverviewCard label="Duplicates (24h)" value={metrics.duplicates_24h} tone="info" />
+          </section>
+          <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <OverviewCard label="Healthy sources" value={`${metrics.healthy_sources} / ${metrics.active_sources}`} tone="success" />
+            <OverviewCard label="Failed sources" value={metrics.failing_sources} tone={metrics.failing_sources ? "danger" : "success"} />
+            <OverviewCard label="Possibly removed · expired (7d)" value={`${metrics.possibly_removed} · ${metrics.opportunities_expired_7d}`} tone="warning" />
+            <OverviewCard label="Last sync" value={metrics.last_run_at ? formatDate(metrics.last_run_at, true) : "—"} tone="info" />
+          </section>
+          {(metrics.jobs_by_country.length > 0 || metrics.jobs_by_industry.length > 0) && (
+            <section className="mb-6 grid gap-4 md:grid-cols-2">
+              <Breakdown title="Live jobs by country" rows={metrics.jobs_by_country.map((r) => [r.country, r.count])} />
+              <Breakdown title="Live jobs by industry" rows={metrics.jobs_by_industry.map((r) => [r.industry, r.count])} />
+            </section>
+          )}
+        </>
       )}
 
       <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Content type">
@@ -211,7 +228,7 @@ function DiscoveryQueue() {
             <tr>
               <th className="px-4 py-3">Item</th>
               <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3">Published</th>
+              <th className="px-4 py-3">Dates</th>
               <th className="px-4 py-3">Deadline</th>
               <th className="px-4 py-3">Trust · confidence</th>
               <th className="px-4 py-3">Verification</th>
@@ -237,15 +254,22 @@ function DiscoveryQueue() {
                   <p className="text-xs text-muted">
                     {item.detected_company_name ?? "Organization not matched"}
                     {item.location ? ` · ${item.location}` : ""}
+                    {item.country && !(item.location ?? "").includes(item.country) ? ` · ${item.country}` : ""}
                   </p>
-                  {item.canonical_url && (
-                    <a href={item.canonical_url} target="_blank" rel="noreferrer noopener" className="block truncate text-xs text-brand">
-                      {item.canonical_url}
-                    </a>
+                  {item.external_id && (
+                    <p className="truncate text-xs text-muted" title={item.external_id}>
+                      Job ID {item.external_id}
+                    </p>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted">{item.source_name ?? sourceName[item.source_id] ?? "—"}</td>
-                <td className="px-4 py-3 text-muted">{formatDate(item.published_at)}</td>
+                <td className="px-4 py-3 text-muted">
+                  <p>{item.source_name ?? sourceName[item.source_id] ?? "—"}</p>
+                  {item.source_type && <p className="text-xs">{humanize(item.source_type)}</p>}
+                </td>
+                <td className="px-4 py-3 text-xs text-muted">
+                  <p>Posted {formatDate(item.published_at)}</p>
+                  <p>Found {formatDate(item.created_at)}</p>
+                </td>
                 <td className="px-4 py-3 text-muted">{formatDate(item.deadline)}</td>
                 <td className="px-4 py-3">
                   <p className="font-semibold text-navy">{item.trust_level ?? "—"}/5</p>
@@ -262,13 +286,22 @@ function DiscoveryQueue() {
                   {item.duplicate_of_id && <p>Duplicate of another source&rsquo;s item</p>}
                   {item.matched_entity_id && <p>Matches an existing {humanize(item.matched_entity_type)} record</p>}
                   {item.pending_changes > 0 && <p className="font-semibold text-[#b9770e]">{item.pending_changes} detected change(s)</p>}
+                  {item.missing_runs > 0 && <p className="font-semibold text-[#b9770e]">Missing from source in {item.missing_runs} sync(s)</p>}
                   {!item.duplicate_of_id && !item.matched_entity_id && <p>New</p>}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col items-end gap-2">
                     <Link href={`/discovery/${item.id}`} className="btn-primary px-3 py-1.5 text-xs">Review</Link>
+                    <a href={item.canonical_url ?? item.original_url} target="_blank" rel="noreferrer noopener" className="text-xs text-brand">
+                      View original
+                    </a>
                     {["NEW", "NEEDS_REVIEW", "VERIFIED", "DUPLICATE"].includes(item.status) && (
                       <div className="flex gap-3 text-xs">
+                        {item.status !== "DUPLICATE" && (
+                          <button onClick={() => decide(item, "create-draft")} className="text-brand">
+                            Create draft
+                          </button>
+                        )}
                         <button onClick={() => decide(item, "ignore")} className="text-muted hover:text-ink">Ignore</button>
                         <button onClick={() => decide(item, "reject")} className="text-danger">Reject</button>
                       </div>
@@ -297,6 +330,28 @@ function DiscoveryQueue() {
 }
 
 const RECORD_ROUTES: Record<string, string> = { JOB: "jobs", SCHOLARSHIP: "scholarships", INTELLIGENCE: "intelligence" };
+
+function Breakdown({ title, rows }: { title: string; rows: [string, number][] }) {
+  const max = Math.max(1, ...rows.map(([, n]) => n));
+  return (
+    <div className="rounded-2xl bg-card p-4 shadow-sm">
+      <p className="mb-3 text-sm font-semibold text-navy">{title}</p>
+      <ul className="space-y-1.5">
+        {rows.map(([label, count]) => (
+          <li key={label} className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-2 text-xs">
+            <span className="truncate text-ink" title={label}>
+              {label}
+            </span>
+            <span className="h-2 rounded-full bg-brand/15">
+              <span className="block h-2 rounded-full bg-brand" style={{ width: `${(count / max) * 100}%` }} />
+            </span>
+            <span className="text-muted">{count}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function valueText(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
