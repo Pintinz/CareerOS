@@ -74,7 +74,12 @@ class _EventGroup extends StatelessWidget {
             icon: event.needsReview ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
             tone: event.needsReview ? AppTone.primary : AppTone.neutral,
             title: event.detectedStage != null ? "Possible ${event.detectedStage!.label} update" : "Recruitment email",
-            subtitle: "${event.senderDomain} · ${DateLabels.shortDate(event.receivedAt)} · ${_statusLabel(event.status)}",
+            // In "Needs Review" the status is the section itself, so only reviewed items repeat it.
+            subtitle: [
+              event.senderDomain,
+              DateLabels.shortDate(event.receivedAt),
+              if (!event.needsReview || event.status == RecruitmentEventStatus.ambiguous) _statusLabel(event.status),
+            ].join(" · "),
             trailing: event.confidenceLabel != null ? _ConfidenceBadge(label: event.confidenceLabel!) : null,
             onTap: () => context.push("/settings/tracking/events/${event.id}"),
           ),
@@ -109,6 +114,11 @@ class _ConfidenceBadge extends StatelessWidget {
       "MEDIUM" => "Medium",
       _ => "Low",
     };
-    return StatusChip(label: text, tone: tone, dense: true);
+    // Short label keeps the row readable; the gauge icon and semantics carry "confidence".
+    return Semantics(
+      label: "$text confidence",
+      excludeSemantics: true,
+      child: StatusChip(label: text, tone: tone, icon: Icons.speed_rounded, dense: true),
+    );
   }
 }

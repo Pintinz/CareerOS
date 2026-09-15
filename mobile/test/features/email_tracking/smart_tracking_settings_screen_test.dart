@@ -27,7 +27,7 @@ void main() {
     expect(find.text('Manual Tracking'), findsOneWidget);
   });
 
-  testWidgets('Unavailable providers show "In Development" and no working Connect button', (tester) async {
+  testWidgets('Unavailable providers show "Coming soon" and no Connect button', (tester) async {
     useLargeTestViewport(tester);
     final repo = FakeEmailTrackingRepository()
       ..availability = const ProviderAvailability(gmailAvailable: false, outlookAvailable: false, forwardEmailAvailable: false);
@@ -35,9 +35,21 @@ void main() {
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    expect(find.text('In Development'), findsNWidgets(3)); // Gmail, Outlook, Forward Email.
-    final connectGmailButton = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Connect Gmail'));
-    expect(connectGmailButton.onPressed, isNull);
+    expect(find.text('Coming soon'), findsNWidgets(3)); // Gmail, Outlook, Forward Email.
+    expect(find.widgetWithText(OutlinedButton, 'Connect'), findsNothing);
+  });
+
+  testWidgets('An available provider without a connection offers Connect', (tester) async {
+    useLargeTestViewport(tester);
+    final repo = FakeEmailTrackingRepository()
+      ..availability = const ProviderAvailability(gmailAvailable: true, outlookAvailable: false, forwardEmailAvailable: false);
+
+    await tester.pumpWidget(_wrap(repo));
+    await tester.pumpAndSettle();
+
+    final connect = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Connect'));
+    expect(connect.onPressed, isNotNull);
+    expect(find.text('Coming soon'), findsNWidgets(2)); // Outlook, Forward Email.
   });
 
   testWidgets('An active connection shows the connected email and a Disconnect action', (tester) async {

@@ -32,29 +32,21 @@ class SmartTrackingSettingsScreen extends ConsumerWidget {
         child: ListView(
           padding: AppSpacing.page,
           children: [
-            Text(
-              "CareerOS can detect recruitment updates such as aptitude tests, interviews and offers.",
-              style: context.text.bodyLarge,
-            ),
-            Gap.md,
-            const InsightCard(
-              icon: Icons.verified_user_outlined,
-              tone: AppTone.success,
-              title: "CareerOS will never change an application stage without your confirmation.",
-            ),
-            Gap.xl,
+            const _TrackingIntro(),
+            Gap.section,
+            const SectionHeader(title: "Connect a Mailbox", subtitle: "Read-only access · disconnect any time"),
             connectionsAsync.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              loading: () => const Column(children: [SkeletonCard(), Gap.sm, SkeletonCard()]),
+              error: (e, _) => ErrorState(compact: true, message: e.userMessage, onRetry: () => ref.invalidate(emailConnectionsProvider)),
               data: (connections) {
                 final gmail = connections.where((c) => c.provider == EmailProvider.gmail).toList();
                 final outlook = connections.where((c) => c.provider == EmailProvider.outlook).toList();
                 return availabilityAsync.when(
                   loading: () => const Column(children: [SkeletonCard(), Gap.sm, SkeletonCard()]),
                   error: (e, _) => ErrorState(compact: true, message: e.userMessage, onRetry: () => ref.invalidate(providerAvailabilityProvider)),
-                  data: (availability) => Column(
+                  data: (availability) => CareerListGroup(
                     children: [
-                      _ProviderCard(
+                      _ProviderRow(
                         icon: Icons.mail_outline,
                         title: "Gmail",
                         available: availability.gmailAvailable,
@@ -62,8 +54,7 @@ class SmartTrackingSettingsScreen extends ConsumerWidget {
                         onConnect: () => _connect(context, ref, EmailProvider.gmail),
                         onDisconnect: (id) => _disconnect(context, ref, id),
                       ),
-                      Gap.sm,
-                      _ProviderCard(
+                      _ProviderRow(
                         icon: Icons.alternate_email,
                         title: "Outlook",
                         available: availability.outlookAvailable,
@@ -71,29 +62,43 @@ class SmartTrackingSettingsScreen extends ConsumerWidget {
                         onConnect: () => _connect(context, ref, EmailProvider.outlook),
                         onDisconnect: (id) => _disconnect(context, ref, id),
                       ),
-                      Gap.sm,
-                      _ForwardEmailCard(availability: availability),
-                      Gap.sm,
-                      const _ManualTrackingCard(),
+                      _ForwardEmailRow(availability: availability),
                     ],
                   ),
                 );
               },
             ),
-            Gap.xxl,
-            Center(
-              child: TextButton.icon(
-                style: TextButton.styleFrom(foregroundColor: AppColors.error),
-                onPressed: () => _confirmDeleteTrackingData(context, ref),
-                icon: const Icon(AppIcons.delete),
-                label: const Text("Delete Recruitment Email Data"),
-              ),
+            Gap.section,
+            CareerListGroup(
+              title: "Always available",
+              children: [
+                CareerListRow(
+                  icon: Icons.mark_email_unread_outlined,
+                  title: "Application Updates",
+                  subtitle: "Review suggested stage changes",
+                  onTap: () => context.push("/settings/tracking/events"),
+                ),
+                CareerListRow(
+                  icon: Icons.edit_note_outlined,
+                  tone: AppTone.success,
+                  title: "Manual Tracking",
+                  subtitle: "Update your application stages yourself, any time",
+                  onTap: () => context.push("/applications"),
+                ),
+              ],
             ),
-            Text(
-              "This deletes stored CareerOS email-tracking metadata and suggestions. Confirmed "
-              "application timeline stages remain unless you separately edit the application.",
-              style: context.text.bodySmall,
-              textAlign: TextAlign.center,
+            Gap.section,
+            CareerListGroup(
+              title: "Your data",
+              children: [
+                CareerListRow(
+                  icon: AppIcons.delete,
+                  title: "Delete Recruitment Email Data",
+                  subtitle: "Removes stored email-tracking metadata and suggestions. Confirmed application stages stay.",
+                  destructive: true,
+                  onTap: () => _confirmDeleteTrackingData(context, ref),
+                ),
+              ],
             ),
           ],
         ),
@@ -167,8 +172,68 @@ class SmartTrackingSettingsScreen extends ConsumerWidget {
   }
 }
 
-class _ProviderCard extends StatelessWidget {
-  const _ProviderCard({
+/// What Smart Tracking does and the two promises that make it safe, in one calm surface.
+class _TrackingIntro extends StatelessWidget {
+  const _TrackingIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    return CareerCard(
+      variant: CareerCardVariant.feature,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const IconTile(icon: Icons.mark_email_unread_outlined, size: 48),
+          Gap.md,
+          Semantics(
+            header: true,
+            child: Text("Let CareerOS spot recruitment updates", style: context.text.titleLarge),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "CareerOS can detect recruitment updates such as aptitude tests, interviews and offers, and suggest the "
+            "matching stage for applications you track.",
+            style: context.text.bodyMedium,
+          ),
+          Gap.md,
+          const _Promise(
+            icon: Icons.verified_user_outlined,
+            text: "CareerOS will never change an application stage without your confirmation.",
+          ),
+          Gap.xs,
+          const _Promise(icon: Icons.visibility_outlined, text: "Read-only access. Email bodies are never shown in the app."),
+        ],
+      ),
+    );
+  }
+}
+
+class _Promise extends StatelessWidget {
+  const _Promise({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 18, color: AppTone.success.onTint(context)),
+        ),
+        Gap.xs,
+        Expanded(child: Text(text, style: context.text.bodySmall?.copyWith(color: context.colors.textPrimary))),
+      ],
+    );
+  }
+}
+
+/// One mailbox provider inside the "Connect a Mailbox" group: not yet available, ready to connect,
+/// or connected (with sync state and Reconnect/Disconnect).
+class _ProviderRow extends StatelessWidget {
+  const _ProviderRow({
     required this.icon,
     required this.title,
     required this.available,
@@ -186,53 +251,69 @@ class _ProviderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CareerCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final connection = this.connection;
+    final Widget? statusChip = connection == null
+        ? (available ? null : const StatusChip(label: "Coming soon", dense: true))
+        : switch (connection.status) {
+            EmailConnectionStatus.active => const StatusChip(label: "Connected", tone: AppTone.success, icon: AppIcons.check, dense: true),
+            EmailConnectionStatus.reauthorizationRequired =>
+              const StatusChip(label: "Reauthorization Required", tone: AppTone.warning, icon: Icons.warning_amber_rounded, dense: true),
+            _ => const StatusChip(label: "Error", tone: AppTone.danger, icon: AppIcons.error, dense: true),
+          };
+
+    // The status chip already says whether it's available, so the subtitle describes the access.
+    final subtitle = connection != null ? null : "Read-only access to recruitment emails";
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: connection == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconTile(icon: icon, size: 40),
-              Gap.sm,
-              Expanded(child: Text(title, style: context.text.titleMedium)),
-              if (connection == null && !available) const StatusChip(label: "In Development"),
-            ],
-          ),
-          Gap.sm,
-          if (connection != null) ...[
-            Text(connection!.providerEmail, style: context.text.titleSmall),
-            Gap.xxs,
-            if (connection!.status == EmailConnectionStatus.active) ...[
-              const StatusChip(label: "Connected", tone: AppTone.success, icon: AppIcons.check),
-              if (connection!.lastSyncAt != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                  child: Text("Last synced: ${DateLabels.dateTime(connection!.lastSyncAt!)}", style: context.text.bodySmall),
-                ),
-            ] else if (connection!.status == EmailConnectionStatus.reauthorizationRequired)
-              const StatusChip(label: "Reauthorization Required", tone: AppTone.warning, icon: Icons.warning_amber_rounded)
-            else
-              const StatusChip(label: "Error", tone: AppTone.danger, icon: AppIcons.error),
-            Gap.sm,
-            Row(
+          IconTile(icon: icon, tone: available || connection != null ? AppTone.primary : AppTone.neutral, size: 38),
+          Gap.md,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (connection!.status != EmailConnectionStatus.active)
-                  AppOutlineButton(label: "Reconnect", expand: false, onPressed: onConnect),
-                const Spacer(),
-                TextButton(
-                  style: TextButton.styleFrom(foregroundColor: AppColors.error),
-                  onPressed: () => onDisconnect(connection!.id),
-                  child: const Text("Disconnect"),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xxs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(title, style: context.text.titleSmall),
+                    if (statusChip != null) statusChip,
+                  ],
                 ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: context.text.bodySmall),
+                ],
+                if (connection != null) ...[
+                  const SizedBox(height: 2),
+                  Text(connection.providerEmail, style: context.text.bodyMedium?.copyWith(color: context.colors.textPrimary)),
+                  if (connection.status == EmailConnectionStatus.active && connection.lastSyncAt != null)
+                    Text("Last synced ${DateLabels.dateTime(connection.lastSyncAt!)}", style: context.text.bodySmall),
+                  Gap.xs,
+                  Row(
+                    children: [
+                      if (connection.status != EmailConnectionStatus.active) ...[
+                        AppOutlineButton(label: "Reconnect", expand: false, onPressed: onConnect),
+                        Gap.xs,
+                      ],
+                      TextButton(
+                        style: TextButton.styleFrom(foregroundColor: AppColors.error, padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs)),
+                        onPressed: () => onDisconnect(connection.id),
+                        child: const Text("Disconnect"),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
-          ] else ...[
-            Text(
-              "CareerOS uses read-only access to detect recruitment updates. Nothing changes without your confirmation.",
-              style: context.text.bodySmall,
-            ),
-            Gap.sm,
-            SizedBox(width: double.infinity, child: OutlinedButton(onPressed: available ? onConnect : null, child: Text("Connect $title"))),
+          ),
+          if (connection == null && available) ...[
+            Gap.xs,
+            AppOutlineButton(label: "Connect", expand: false, onPressed: onConnect),
           ],
         ],
       ),
@@ -240,79 +321,68 @@ class _ProviderCard extends StatelessWidget {
   }
 }
 
-class _ForwardEmailCard extends StatelessWidget {
-  const _ForwardEmailCard({required this.availability});
+class _ForwardEmailRow extends StatelessWidget {
+  const _ForwardEmailRow({required this.availability});
 
   final ProviderAvailability availability;
 
   @override
   Widget build(BuildContext context) {
-    return CareerCard(
-      child: Column(
+    final alias = availability.forwardEmailAvailable ? availability.forwardEmailAlias : null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.md),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const IconTile(icon: Icons.forward_to_inbox_outlined, tone: AppTone.purple, size: 40),
-              Gap.sm,
-              Expanded(child: Text("Forward Recruitment Email", style: context.text.titleMedium)),
-              if (!availability.forwardEmailAvailable) const StatusChip(label: "In Development"),
-            ],
+          IconTile(
+            icon: Icons.forward_to_inbox_outlined,
+            tone: availability.forwardEmailAvailable ? AppTone.purple : AppTone.neutral,
+            size: 38,
           ),
-          Gap.sm,
-          Text(
-            "The most private option — no account connection at all. Forward a recruitment email to your "
-            "personal CareerOS address and we'll suggest an update.",
-            style: context.text.bodySmall,
-          ),
-          if (availability.forwardEmailAvailable && availability.forwardEmailAlias != null) ...[
-            Gap.sm,
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.only(left: AppSpacing.sm),
-              decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: AppRadius.mdAll),
-              child: Row(
-                children: [
-                  Expanded(child: SelectableText(availability.forwardEmailAlias!, style: context.text.bodyMedium?.copyWith(fontFamily: "monospace"))),
-                  IconButton(
-                    tooltip: "Copy address",
-                    icon: const Icon(Icons.copy_rounded, size: 18),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: availability.forwardEmailAlias!));
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias copied.")));
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _ManualTrackingCard extends StatelessWidget {
-  const _ManualTrackingCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return CareerCard(
-      child: Row(
-        children: [
-          const IconTile(icon: Icons.edit_note_outlined, tone: AppTone.success, size: 40),
-          Gap.sm,
+          Gap.md,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Manual Tracking", style: context.text.titleMedium),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xxs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text("Forward Recruitment Email", style: context.text.titleSmall),
+                    if (!availability.forwardEmailAvailable) const StatusChip(label: "Coming soon", dense: true),
+                  ],
+                ),
                 const SizedBox(height: 2),
-                Text("Always available — update your application stages yourself, any time.", style: context.text.bodySmall),
+                Text(
+                  "The most private option — no account connection at all. Forward a recruitment email to your "
+                  "personal CareerOS address and we'll suggest an update.",
+                  style: context.text.bodySmall,
+                ),
+                if (alias != null) ...[
+                  Gap.xs,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.only(left: AppSpacing.sm),
+                    decoration: BoxDecoration(color: context.colors.surfaceMuted, borderRadius: AppRadius.mdAll),
+                    child: Row(
+                      children: [
+                        Expanded(child: SelectableText(alias, style: context.text.bodyMedium?.copyWith(fontFamily: "monospace"))),
+                        IconButton(
+                          tooltip: "Copy address",
+                          icon: const Icon(Icons.copy_rounded, size: 18),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: alias));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Alias copied.")));
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-          TextButton(onPressed: () => context.push("/applications"), child: const Text("Open")),
         ],
       ),
     );

@@ -37,6 +37,8 @@ import 'package:careeros/features/companies/data/company_models.dart';
 import 'package:careeros/features/companies/data/company_repository.dart';
 import 'package:careeros/features/companies/presentation/company_detail_screen.dart';
 import 'package:careeros/features/companies/presentation/company_providers.dart';
+import 'package:careeros/features/email_tracking/data/email_tracking_models.dart';
+import 'package:careeros/features/email_tracking/presentation/connect_consent_screen.dart';
 import 'package:careeros/features/email_tracking/presentation/recruitment_events_screen.dart';
 import 'package:careeros/features/email_tracking/presentation/smart_tracking_settings_screen.dart';
 import 'package:careeros/features/intelligence/presentation/intelligence_detail_screen.dart';
@@ -614,6 +616,7 @@ final _screens = <_Screen>[
   _Screen('17c_pro', () => const ProScreen()),
   _Screen('17d_smart_tracking', () => const SmartTrackingSettingsScreen()),
   _Screen('17e_recruitment_updates', () => const RecruitmentEventsScreen()),
+  _Screen('17f_connect_consent', () => ConnectConsentScreen(provider: EmailProvider.gmail, onContinue: (_) async {})),
   _Screen('18_email_update', () => const RecruitmentEventDetailScreen(eventId: 'event-1')),
   _Screen(
     '19_states',

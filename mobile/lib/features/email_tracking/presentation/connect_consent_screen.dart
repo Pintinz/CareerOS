@@ -40,16 +40,19 @@ class ConnectConsentScreen extends StatelessWidget {
       body: ListView(
         padding: AppSpacing.page,
         children: [
-          IconTile(icon: provider == EmailProvider.gmail ? Icons.mail_outline : Icons.alternate_email, size: 64),
-          Gap.xl,
-          Text(
-            "CareerOS uses authorized email access only\n"
-            "to identify recruitment-related messages\n"
-            "and suggest updates to applications you track.",
-            style: context.text.titleMedium?.copyWith(height: 1.45),
-          ),
+          Gap.md,
+          Center(child: IconTile(icon: provider == EmailProvider.gmail ? Icons.mail_outline : Icons.alternate_email, size: 72, circle: true)),
           Gap.lg,
+          // Required consent copy (spec §3) — wording unchanged; it wraps naturally instead of at fixed line breaks.
+          Text(
+            "CareerOS uses authorized email access only to identify recruitment-related messages and suggest "
+            "updates to applications you track.",
+            textAlign: TextAlign.center,
+            style: context.text.bodyLarge?.copyWith(fontWeight: FontWeight.w500, height: 1.5),
+          ),
+          Gap.xl,
           const CareerListGroup(
+            title: "Your inbox stays yours",
             children: [
               CareerListRow(icon: Icons.block_outlined, tone: AppTone.success, title: "We do not use your inbox for advertising."),
               CareerListRow(icon: Icons.verified_user_outlined, tone: AppTone.success, title: "No application stage changes automatically."),
