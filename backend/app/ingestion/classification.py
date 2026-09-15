@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 
+from app.ingestion.countries import match_country
+
 _GRADUATE_MARKERS = re.compile(
     r"\b(graduate\s+(programme|program|scheme|trainee(ship)?|development\s+programme|development\s+program|intake|rotation)"
     r"|management\s+trainee(\s+programme|\s+program)?|early[\s-]careers?\s+(programme|program)"
@@ -109,17 +111,56 @@ def normalize_salary_period(value: str | None) -> str | None:
     return _SALARY_PERIOD_MAP.get(str(value).strip().lower())
 
 
+_WORK_MODE_PREFIX = re.compile(r"^\s*(remote|hybrid|home[\s-]based|anywhere)\b[\s:,\-–]*", re.IGNORECASE)
+_ALTERNATIVES = re.compile(r";|\||\s+(?:or|and|&)\s+", re.IGNORECASE)
+_UNBOUNDED = re.compile(r"\blocations?\s*:|\bmultiple\b|\bvarious\b|\bflexible\b|\banywhere\b", re.IGNORECASE)
+
+
+def location_work_mode(location: str | None) -> str:
+    """REMOTE/HYBRID only when the location string itself leads with it ("Remote, Nigeria",
+    "Home based - EMEA"); otherwise UNSPECIFIED (an office city doesn't prove on-site work)."""
+    match = _WORK_MODE_PREFIX.match(location or "")
+    if not match:
+        return "UNSPECIFIED"
+    return "HYBRID" if match.group(1).lower() == "hybrid" else "REMOTE"
+
+
 def split_location(location: str | None) -> tuple[str | None, str | None, str | None]:
-    """'Lagos, Lagos State, Nigeria' → (city, region, country). Only splits comma-separated
-    values; a single token is kept as the location only (not assumed to be a country)."""
+    """'Lagos, Lagos State, Nigeria' → (city, region, country).
+
+    A country is only returned when the text names a recognized country — never a placeholder
+    ("City, Country") or free text. A listing spanning several places ("Lagos, Nigeria or
+    Nairobi, Kenya", "Remote locations: Ghana, Kenya, …") gets no city, and a country only when
+    every place named is in that same country.
+    """
     if not location:
         return None, None, None
-    parts = [p.strip() for p in location.split(",") if p.strip()]
+    text = _WORK_MODE_PREFIX.sub("", location).strip(" .,;:-–")
+    if not text or _UNBOUNDED.search(text):
+        return None, None, None
+    groups = [g.strip(" .,") for g in _ALTERNATIVES.split(text) if g and g.strip(" .,")]
+    if len(groups) > 1:
+        # "Kano, Nigeria or Gombe, Nigeria" → Nigeria; any group naming no country or another one → none.
+        group_countries = [match_country(g.split(",")[-1]) for g in groups]
+        same = group_countries[0] if all(c and c == group_countries[0] for c in group_countries) else None
+        return None, None, same
+    parts = [p.strip(" .") for p in text.split(",") if p.strip(" .")]
+    if len({c for c in (match_country(p) for p in parts) if c}) > 1:  # "Kenya, Rwanda, Malawi"
+        return None, None, None
+    if "/" in parts[0]:  # "Goma/Bukavu/Kinshasa, DRC": several cities in one country
+        parts = parts[1:] or parts
+        city_known = False
+    else:
+        city_known = True
+    country = match_country(parts[-1]) if parts else None
+    if country:
+        places = parts[:-1]
+        city = places[0] if places and city_known else None
+        region = places[1] if len(places) >= 2 else None
+        return city, region, country
     if len(parts) >= 3:
-        return parts[0], parts[1], parts[-1]
+        return parts[0], parts[1], None
     if len(parts) == 2:
-        # "Austin, TX": a two-letter code is a region, not a country.
-        if len(parts[1]) == 2 and parts[1].isupper():
-            return parts[0], parts[1], None
-        return parts[0], None, parts[1]
+        # "Austin, TX": a two-letter code is a region; anything unrecognized isn't stored as a country.
+        return parts[0], parts[1] if len(parts[1]) == 2 and parts[1].isupper() else None, None
     return None, None, None

@@ -284,6 +284,25 @@ Individual sources are paused with `is_active=false` or stop polling with `polli
   production client with robots.txt honoured, validated with 0 invalid items. SmartRecruiters'
   API was refused by our client because its robots.txt disallows us — correct behaviour, hence off
   by default.
-- **Not tested against the real web:** Workday, RSS feeds, JSON-LD career pages, re-verification
-  of real listings, and the full queue → publish flow with a real source. The Anthropic provider was
-  never called for real (no API key in this environment).
+- **Real web, persisted to the local dev database (2026-09-15):** 11 official ATS boards (Greenhouse:
+  Moniepoint, Jumia, One Acre Fund, GiveDirectly, Teach For All, Canonical, Ozow, Luno, Acumen;
+  Ashby: M-KOPA, Andela — 678 listings, 0 invalid) and 8 RSS feeds (Ubuntu blog, Acumen, GiveDirectly,
+  One Acre Fund, TechCabal, Techpoint Africa, WeeTracker, TechInAfrica) ran through the full
+  pipeline into the review queue; a second run exercised the update path (items refreshed, none
+  duplicated). An editorial pass then published 177 jobs, 18 news items (editor-written summaries
+  and hedged relevance) and 5 scholarships whose facts were confirmed on the providers' official
+  pages; the rest stays in the queue. Only local-QA deviation: TLS verification used the Windows
+  certificate store (antivirus TLS interception on the test machine).
+- **Defects found by that run and fixed:** multi-place locations ("Lagos, Nigeria or Nairobi, Kenya",
+  "Remote locations: …") took the last country and placeholders ("City, Country") were stored as a
+  country, while a bare "Nigeria" got none; "Remote, Nigeria" wasn't marked remote; boards that link
+  jobs to the employer's own site (oneacrefund.org/vacancies/?gh_jid=…) were flagged off-domain;
+  refreshed queue items kept stale location/country columns; feed summaries kept WordPress "The post
+  … appeared first on" boilerplate. Regression tests cover each.
+- **Known limit seen live:** Canonical's Greenhouse board (~300 jobs with descriptions) exceeds the
+  3 MB `DISCOVERY_MAX_RESPONSE_BYTES` default and fails with `RESPONSE_TOO_LARGE`; it was fetched with a
+  15 MB cap. Raise the setting for very large boards. Title-based classification found no
+  `GRADUATE_PROGRAM` listings on these boards ("Graduate Software Engineer" stays an entry-level job).
+- **Not tested against the real web:** Workday, JSON-LD career pages, re-verification of real
+  listings over time, and polling via the scheduler (sources were run manually). The Anthropic
+  provider was never called for real (no API key in this environment).

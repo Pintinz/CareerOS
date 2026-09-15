@@ -35,6 +35,7 @@ from tests.discovery_support import (
     create_company,
     create_source,
     discovery_settings,
+    greenhouse_job,
     job_posting_page,
     lever_posting,
     make_client,
@@ -156,6 +157,33 @@ async def test_rerunning_an_unchanged_source_creates_nothing_new(client: AsyncCl
     assert (second.items_found, second.items_new, second.items_duplicate) == (2, 0, 0)
     assert second.stats_json["unchanged"] == 2
     assert len(await queue_items(db_session, source["id"])) == 2
+
+
+async def test_board_embedded_in_company_website_is_verified_and_queue_refreshes_location(client: AsyncClient, db_session: AsyncSession) -> None:
+    """Real boards (One Acre Fund, Teach For All) link each job to the employer's own site."""
+    await create_admin(db_session)
+    headers = await admin_headers(client)
+    company_id = await create_company(client, headers, name="Acme Energy", website_url="https://acme-energy.com")
+    source = await create_source(
+        client, headers, name="Acme on Greenhouse", organization="Acme Energy", url="https://boards.greenhouse.io/acme",
+        source_type="GREENHOUSE", company_id=company_id,
+    )
+    board = "https://boards-api.greenhouse.io/v1/boards/acme/jobs"
+    jobs = [
+        greenhouse_job(1, "Field Officer", absolute_url="https://www.acme-energy.com/vacancies/?gh_jid=1", location={"name": "Lagos, Nigeria or Nairobi, Kenya"}),
+        greenhouse_job(2, "Data Analyst", absolute_url="https://unrelated-jobs.example/acme/2"),
+    ]
+    await run_source(db_session, source["id"], Router().json("GET", board, {"jobs": jobs}))
+    embedded, elsewhere = await queue_items(db_session, source["id"])
+    assert (embedded.status, embedded.verification_status.value) == (DiscoveredItemStatus.VERIFIED, "SOURCE_VERIFIED")
+    assert embedded.country is None  # two countries named: not guessed
+    assert elsewhere.status == DiscoveredItemStatus.NEEDS_REVIEW and "LISTING_OFF_SOURCE_DOMAIN" in elsewhere.evidence_json["flags"]
+
+    jobs[0]["location"] = {"name": "Kano, Nigeria"}
+    second = await run_source(db_session, source["id"], Router().json("GET", board, {"jobs": jobs}))
+    assert second.items_updated == 1
+    await db_session.refresh(embedded)
+    assert (embedded.location, embedded.country, embedded.extracted_data_json["country"]) == ("Kano, Nigeria", "Nigeria", "Nigeria")
 
 
 # --------------------------------------------------------------------------------------------------

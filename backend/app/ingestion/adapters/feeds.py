@@ -53,6 +53,17 @@ _CATEGORY_RULES: list[tuple[str, re.Pattern]] = [
 ]
 
 
+# WordPress/CMS feed boilerplate that isn't part of the entry's summary.
+_FEED_BOILERPLATE = re.compile(r"\s*The post .{0,300}? appeared first on.*$|\s*\[(?:\.\.\.|…|&hellip;)\]\s*$", re.IGNORECASE | re.DOTALL)
+
+
+def feed_summary(markup: str | None) -> str | None:
+    text = html_to_text(markup, max_length=2_000)
+    if not text:
+        return None
+    return clean_text(_FEED_BOILERPLATE.sub("", text), max_length=500)
+
+
 def categorize(text: str) -> str | None:
     for category, pattern in _CATEGORY_RULES:
         if pattern.search(text):
@@ -139,7 +150,7 @@ class RssAdapter(SourceAdapter):
         if link:
             link = urljoin(feed_url, link)
         external_id = (entry.get("id") or link or title or "")[:255] or None
-        summary = html_to_text(entry.get("summary"), max_length=500)
+        summary = feed_summary(entry.get("summary"))
         text_for_rules = f"{title or ''} {summary or ''} {' '.join(entry.get('categories') or [])}"
         try:
             if kind == "INTELLIGENCE":

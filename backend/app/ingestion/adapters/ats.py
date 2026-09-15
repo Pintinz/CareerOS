@@ -26,6 +26,7 @@ from app.ingestion.adapters.base import (
 from app.ingestion.classification import (
     classify_job_content_type,
     experience_level_from_title,
+    location_work_mode,
     normalize_employment_type,
     normalize_salary_period,
     normalize_work_mode,
@@ -195,7 +196,7 @@ class GreenhouseAdapter(_AtsAdapter):
         content_html = job.get("content")
         description = html_to_text(content_html)
         departments = [d.get("name") for d in job.get("departments") or [] if isinstance(d, dict) and d.get("name")]
-        work_mode = normalize_work_mode(location) if location and location.strip().lower() in ("remote", "hybrid") else "UNSPECIFIED"
+        work_mode = location_work_mode(location)
         data = {
             "title": title,
             "company": source.organization_name,

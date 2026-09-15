@@ -5,9 +5,9 @@ import pytest
 
 from app.ingestion.adapters.ats import AshbyAdapter, GreenhouseAdapter, LeverAdapter, SmartRecruitersAdapter
 from app.ingestion.adapters.base import AdapterConfigurationError, SourceSnapshot
-from app.ingestion.adapters.feeds import RssAdapter, StructuredPageAdapter, parse_feed
+from app.ingestion.adapters.feeds import RssAdapter, StructuredPageAdapter, feed_summary, parse_feed
 from app.ingestion.adapters.workday import WorkdayAdapter
-from app.ingestion.classification import classify_job_content_type, normalize_work_mode
+from app.ingestion.classification import classify_job_content_type, location_work_mode, normalize_work_mode, split_location
 from app.ingestion.http_client import (
     InvalidResponseError,
     NetworkError,
@@ -363,3 +363,48 @@ async def test_unclear_work_mode_stays_unspecified() -> None:
     assert normalize_work_mode(None) == "UNSPECIFIED"
     assert normalize_work_mode("flexible") == "UNSPECIFIED"
     assert normalize_work_mode("On-site") == "ON_SITE"
+
+
+# Location strings as real Greenhouse boards publish them (observed during live QA, 2026-09-15).
+@pytest.mark.parametrize(
+    "location, expected",
+    [
+        ("Lagos, Lagos State, Nigeria", ("Lagos", "Lagos State", "Nigeria")),
+        ("Kampala, Uganda", ("Kampala", None, "Uganda")),
+        ("Nigeria", (None, None, "Nigeria")),
+        ("Austin, TX", ("Austin", "TX", None)),
+        ("Remote, Nigeria", (None, None, "Nigeria")),
+        ("Remote USA", (None, None, "United States")),
+        ("Goma/Bukavu/Kinshasa, DRC", (None, None, "Democratic Republic of the Congo")),
+        ("Jinja, Kampala Uganda", ("Jinja", None, "Uganda")),
+        ("Kano, Nigeria or Jigawa, Nigeria or Gombe, Nigeria", (None, None, "Nigeria")),
+        # Several places: no single city, and no country unless they all share one.
+        ("Lagos, Nigeria or Nairobi, Kenya", (None, None, None)),
+        ("Kenya, Rwanda, Malawi, Zambia, Tanzania", (None, None, None)),
+        ("Remote locations: Australia, Bangladesh, Ghana, Kenya, Zambia", (None, None, None)),
+        ("Home based - EMEA; Office Based - London, UK", (None, None, None)),
+        ("Kigali,Rwanda Kigali, Rwanda, or flexible based on existing work authorization", (None, None, None)),
+        # Placeholders and unknown text are never stored as a country.
+        ("City, Country", ("City", None, None)),
+        ("Program Country", (None, None, None)),
+        ("Kinshasa, Democratic Republic of Congo.", ("Kinshasa", None, "Democratic Republic of the Congo")),
+    ],
+)
+async def test_split_location_only_returns_recognized_single_countries(location, expected) -> None:
+    assert split_location(location) == expected
+
+
+async def test_location_work_mode_requires_explicit_prefix() -> None:
+    assert location_work_mode("Remote, Nigeria") == "REMOTE"
+    assert location_work_mode("Home based - EMEA") == "REMOTE"
+    assert location_work_mode("Hybrid - Cape Town") == "HYBRID"
+    assert location_work_mode("Cape Town") == "UNSPECIFIED"
+    assert location_work_mode(None) == "UNSPECIFIED"
+
+
+async def test_feed_summary_drops_cms_boilerplate() -> None:
+    # As published by WordPress newsroom feeds (observed during live QA, 2026-09-15).
+    raw = "<p>Investment supports a women-led agribusiness.</p><p>The post Acme invests in Pullus appeared first on Acme.</p>"
+    assert feed_summary(raw) == "Investment supports a women-led agribusiness."
+    assert feed_summary("Canonical announces certified images for the new board [&#8230;]") == "Canonical announces certified images for the new board"
+    assert feed_summary(None) is None

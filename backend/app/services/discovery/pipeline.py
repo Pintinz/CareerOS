@@ -275,7 +275,7 @@ class DiscoveryPipeline:
             self.db, source=source, record=record, company=company_match.company,
             item_types=tuple(t.value for t in DiscoveredItemType if entity_type_for(t) == entity_type),
         )
-        verification, checks, flags = self._verify(source, listing)
+        verification, checks, flags = self._verify(source, listing, company=company_match.company)
         record_data = record.model_dump(mode="json")
         digest = record_hash(record)
         canonical_url = canonicalize_url(record_canonical_url(record))
@@ -313,10 +313,18 @@ class DiscoveryPipeline:
                 item.extracted_data_json = record_data
                 item.content_hash = digest
                 item.detected_title = record_title(record)[:500]
+                item.normalized_title = normalized(record_title(record))[:500]
+                item.canonical_url = canonical_url
+                item.location = getattr(record, "location", None)
+                item.country = getattr(record, "country", None)
+                item.published_at = record_published_at(record)
                 item.deadline = record_deadline(record)
                 item.evidence_json = evidence
                 item.verification_status = verification
                 item.confidence = record.confidence
+                verified_now = verification == ItemVerificationStatus.SOURCE_VERIFIED and company_match.company is not None and not evidence["flags"]
+                if item.status in (DiscoveredItemStatus.NEW, DiscoveredItemStatus.NEEDS_REVIEW, DiscoveredItemStatus.VERIFIED):
+                    item.status = DiscoveredItemStatus.VERIFIED if verified_now else DiscoveredItemStatus.NEEDS_REVIEW
             if item.status == DiscoveredItemStatus.SOURCE_REMOVED:
                 item.status = DiscoveredItemStatus.NEEDS_REVIEW
             if entity is None and (item.created_draft_id or item.matched_entity_id):
@@ -420,20 +428,25 @@ class DiscoveryPipeline:
             query = query.where(ContentChange.field == field)
         return (await self.db.execute(query)).scalars().all()
 
-    def _verify(self, source: ContentSource, listing: DiscoveredListing) -> tuple[ItemVerificationStatus, list[str], list[str]]:
+    def _verify(
+        self, source: ContentSource, listing: DiscoveredListing, *, company: Company | None = None
+    ) -> tuple[ItemVerificationStatus, list[str], list[str]]:
         record = listing.record
         checks, flags = [], []
         source_domain = registrable_domain(source.url)
         listing_domain = registrable_domain(record.source_url)
+        # Employers often embed their ATS board in their own site (oneacrefund.org/vacancies/?gh_jid=…),
+        # so the linked company's registered website counts as official too.
+        company_domain = registrable_domain(company.website_url) if company is not None and company.website_url else None
         canonical = record_canonical_url(record)
         if source.source_type.value == "AGGREGATOR" or is_aggregator_url(record.source_url):
             flags.append("DISCOVERY_ONLY_SOURCE")
             return ItemVerificationStatus.UNVERIFIED, ["source is discovery-only; locate the official listing"], flags
         if is_aggregator_url(canonical):
             flags.append("APPLICATION_URL_ON_AGGREGATOR")
-        on_official_host = listing_domain == source_domain or is_ats_url(record.source_url)
+        on_official_host = listing_domain == source_domain or is_ats_url(record.source_url) or (company_domain is not None and listing_domain == company_domain)
         if on_official_host:
-            checks.append("listing URL is on the registered source's domain or its official ATS")
+            checks.append("listing URL is on the registered source's domain, the organization's website or its official ATS")
         else:
             flags.append("LISTING_OFF_SOURCE_DOMAIN")
         if listing.method == "AI_RESEARCH":
