@@ -1,9 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
-import "package:intl/intl.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/widgets/widgets.dart";
 import "../data/email_tracking_models.dart";
@@ -74,7 +74,7 @@ class _EventGroup extends StatelessWidget {
             icon: event.needsReview ? Icons.mark_email_unread_outlined : Icons.mark_email_read_outlined,
             tone: event.needsReview ? AppTone.primary : AppTone.neutral,
             title: event.detectedStage != null ? "Possible ${event.detectedStage!.label} update" : "Recruitment email",
-            subtitle: "${event.senderDomain} · ${DateFormat.yMMMd().format(event.receivedAt)} · ${_statusLabel(event.status)}",
+            subtitle: "${event.senderDomain} · ${DateLabels.shortDate(event.receivedAt)} · ${_statusLabel(event.status)}",
             trailing: event.confidenceLabel != null ? _ConfidenceBadge(label: event.confidenceLabel!) : null,
             onTap: () => context.push("/settings/tracking/events/${event.id}"),
           ),

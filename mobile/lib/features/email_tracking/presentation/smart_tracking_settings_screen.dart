@@ -2,9 +2,9 @@ import "package:flutter/material.dart";
 import "package:flutter/services.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
-import "package:intl/intl.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/widgets/widgets.dart";
 import "../data/email_tracking_models.dart";
@@ -207,7 +207,7 @@ class _ProviderCard extends StatelessWidget {
               if (connection!.lastSyncAt != null)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.xxs),
-                  child: Text("Last synced: ${DateFormat.yMMMd().add_jm().format(connection!.lastSyncAt!)}", style: context.text.bodySmall),
+                  child: Text("Last synced: ${DateLabels.dateTime(connection!.lastSyncAt!)}", style: context.text.bodySmall),
                 ),
             ] else if (connection!.status == EmailConnectionStatus.reauthorizationRequired)
               const StatusChip(label: "Reauthorization Required", tone: AppTone.warning, icon: Icons.warning_amber_rounded)

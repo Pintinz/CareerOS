@@ -24,25 +24,31 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Value leads with the icon tucked top-right, so the label gets the card's full width and short
+    // labels ("Tests completed") stay on one line in a two-column grid.
     return CareerCard(
       onTap: onTap,
       semanticLabel: "$label: ${value ?? "not available"}",
-      padding: const EdgeInsets.all(AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
       child: ExcludeSemantics(
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            IconTile(icon: icon, tone: tone, size: 40),
-            Gap.sm,
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(value ?? "—", maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.headlineSmall),
-                  Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.bodySmall),
-                ],
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.xxs),
+                    child: Text(value ?? "—", maxLines: 1, overflow: TextOverflow.ellipsis, style: context.text.headlineSmall),
+                  ),
+                ),
+                IconTile(icon: icon, tone: tone, size: 32),
+              ],
             ),
+            Gap.xxs,
+            Text(label, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.text.bodySmall),
           ],
         ),
       ),

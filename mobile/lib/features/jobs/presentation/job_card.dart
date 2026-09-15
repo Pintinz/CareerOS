@@ -43,9 +43,11 @@ class JobCardTile extends StatelessWidget {
     return compact ? _buildCompact(context) : _buildList(context);
   }
 
-  Widget _tags() => Wrap(
+  /// [trailing] (the posted time on list cards) follows the last tag on the same line.
+  Widget _tags({Widget? trailing}) => Wrap(
         spacing: 6,
         runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           // Saved items and history can show listings that are no longer open.
           if (!_availability.isActive) TagChip(label: _availability.shortLabel, tone: _availability.tone),
@@ -67,6 +69,7 @@ class JobCardTile extends StatelessWidget {
             ),
           if (job.isUrgent) const TagChip(label: "Urgent", tone: AppTone.danger),
           if (job.isDemo) const TagChip(label: "DEMO"),
+          if (trailing != null) trailing,
         ],
       );
 
@@ -94,7 +97,25 @@ class JobCardTile extends StatelessWidget {
         ],
       );
 
+  /// Company name with the verified mark beside it, where users look for "who is hiring".
+  Widget _company(BuildContext context) => Row(
+        children: [
+          Flexible(
+            child: Text(job.company.name, style: context.text.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          if (job.isVerified) ...[
+            const SizedBox(width: 4),
+            Semantics(
+              label: "Verified employer",
+              child: const Icon(AppIcons.verified, size: 15, color: AppColors.success),
+            ),
+          ],
+        ],
+      );
+
   Widget _buildList(BuildContext context) {
+    final colors = context.colors;
+    final meta = _meta;
     return CareerCard(
       onTap: onTap,
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xxs, AppSpacing.md),
@@ -109,19 +130,26 @@ class JobCardTile extends StatelessWidget {
               children: [
                 Text(job.title, style: context.text.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
-                Text(job.company.name, style: context.text.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(AppIcons.location, size: 14, color: context.colors.textSecondary),
-                    const SizedBox(width: 4),
-                    Expanded(child: Text(_meta, style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                  ],
+                _company(context),
+                if (meta.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(AppIcons.location, size: 14, color: colors.textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(meta, style: context.text.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ],
+                Gap.sm,
+                _tags(
+                  trailing: job.publishedAt == null
+                      ? null
+                      : Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxs),
+                          child: Text(DateLabels.published(job.publishedAt!), style: context.text.bodySmall, maxLines: 1),
+                        ),
                 ),
-                Gap.sm,
-                _tags(),
-                Gap.sm,
-                Padding(padding: const EdgeInsets.only(right: AppSpacing.sm), child: _footer(context)),
               ],
             ),
           ),

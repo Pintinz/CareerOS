@@ -75,11 +75,15 @@ class ScholarshipCardTile extends StatelessWidget {
                     children: [
                       Icon(AppIcons.deadline, size: 14, color: DateLabels.deadlineTone(deadline).onTint(context)),
                       const SizedBox(width: 4),
-                      Text(
-                        DateLabels.deadline(deadline),
-                        style: context.text.bodySmall?.copyWith(
-                          color: DateLabels.deadlineTone(deadline).onTint(context),
-                          fontWeight: FontWeight.w600,
+                      Flexible(
+                        child: Text(
+                          DateLabels.deadline(deadline),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.text.bodySmall?.copyWith(
+                            color: DateLabels.deadlineTone(deadline).onTint(context),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],

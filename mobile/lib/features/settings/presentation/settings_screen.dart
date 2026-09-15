@@ -79,9 +79,10 @@ class SettingsScreen extends ConsumerWidget {
                       child: SegmentedButton<ThemeMode>(
                         showSelectedIcon: false,
                         segments: const [
-                          ButtonSegment(value: ThemeMode.system, icon: Icon(Icons.brightness_auto_outlined, size: 18), label: Text("System")),
-                          ButtonSegment(value: ThemeMode.light, icon: Icon(Icons.light_mode_outlined, size: 18), label: Text("Light")),
-                          ButtonSegment(value: ThemeMode.dark, icon: Icon(Icons.dark_mode_outlined, size: 18), label: Text("Dark")),
+                          // Labels only: with icons, "System" wraps onto two lines on 360dp phones.
+                          ButtonSegment(value: ThemeMode.system, label: Text("System", maxLines: 1, softWrap: false)),
+                          ButtonSegment(value: ThemeMode.light, label: Text("Light", maxLines: 1, softWrap: false)),
+                          ButtonSegment(value: ThemeMode.dark, label: Text("Dark", maxLines: 1, softWrap: false)),
                         ],
                         selected: {themeMode},
                         onSelectionChanged: (value) => ref.read(themeModeProvider.notifier).setMode(value.first),

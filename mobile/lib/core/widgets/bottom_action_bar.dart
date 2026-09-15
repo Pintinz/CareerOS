@@ -5,13 +5,14 @@ import "../design/design.dart";
 /// Pinned bottom bar for a detail screen's primary CTA (with an optional secondary beside it).
 /// Use as `Scaffold.bottomNavigationBar`.
 class BottomActionBar extends StatelessWidget {
-  const BottomActionBar({super.key, required this.primary, this.secondary, this.leading});
+  const BottomActionBar({super.key, required this.primary, this.secondary, this.caption});
 
   final Widget primary;
   final Widget? secondary;
 
-  /// Optional compact leading content (e.g. a deadline label).
-  final Widget? leading;
+  /// Optional one-line summary above the buttons (e.g. "20 questions · Mixed · Untimed"). It sits on
+  /// its own line so it never squeezes the primary label.
+  final Widget? caption;
 
   @override
   Widget build(BuildContext context) {
@@ -25,11 +26,26 @@ class BottomActionBar extends StatelessWidget {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.sm, AppSpacing.pageH, AppSpacing.sm),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (leading != null) ...[Flexible(child: leading!), Gap.sm],
-              if (secondary != null) ...[secondary!, Gap.sm],
-              Expanded(child: primary),
+              if (caption != null) ...[
+                DefaultTextStyle.merge(
+                  style: context.text.labelMedium,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  child: caption!,
+                ),
+                Gap.xs,
+              ],
+              Row(
+                children: [
+                  if (secondary != null) ...[secondary!, Gap.sm],
+                  Expanded(child: primary),
+                ],
+              ),
             ],
           ),
         ),

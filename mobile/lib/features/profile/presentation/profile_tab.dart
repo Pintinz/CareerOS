@@ -209,6 +209,8 @@ class _PassportStats extends ConsumerWidget {
 
     return CareerCard(
       child: Row(
+        // Top-aligned so the numbers share a baseline when one label wraps.
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: MetricTile(label: "Active applications", value: active?.toString(), alignment: CrossAxisAlignment.center)),
           Expanded(child: MetricTile(label: "CVs uploaded", value: cvs?.toString(), alignment: CrossAxisAlignment.center)),

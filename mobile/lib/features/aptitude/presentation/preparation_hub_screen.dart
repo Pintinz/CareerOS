@@ -51,10 +51,8 @@ class PreparationHubScreen extends ConsumerWidget {
             tone: AppTone.primary,
             title: "Aptitude Test",
             description: "Numerical, verbal, abstract, logical, situational judgement, and technical practice.",
-            action: PrimaryButton(
-              label: "Start Preparing",
-              onPressed: () => context.push("/prepare/aptitude/configure", extra: const AptitudeConfigureArgs()),
-            ),
+            actionLabel: "Start Preparing",
+            onTap: () => context.push("/prepare/aptitude/configure", extra: const AptitudeConfigureArgs()),
           ),
           Gap.sm,
           _AreaCard(
@@ -62,7 +60,8 @@ class PreparationHubScreen extends ConsumerWidget {
             tone: AppTone.warning,
             title: "Interview Preparation",
             description: "Company, job, technical, behavioral, and STAR interview practice.",
-            action: PrimaryButton(label: "Start Preparing", onPressed: () => context.push("/prepare/interview")),
+            actionLabel: "Start Preparing",
+            onTap: () => context.push("/prepare/interview"),
           ),
           Gap.sm,
           _AreaCard(
@@ -70,7 +69,8 @@ class PreparationHubScreen extends ConsumerWidget {
             tone: AppTone.purple,
             title: "CV & Career Tools",
             description: "Check how your CV reads to applicant tracking systems and how well it matches a role.",
-            action: SecondaryButton(label: "Analyze CV", onPressed: () => context.push("/ats/analyze")),
+            actionLabel: "Analyze CV",
+            onTap: () => context.push("/ats/analyze"),
           ),
           const _AptitudeProgress(),
           const _InterviewProgress(),
@@ -152,33 +152,58 @@ class _PrepareHero extends StatelessWidget {
   }
 }
 
+/// A whole-card entry point into one preparation area. The action reads as a link rather than a
+/// filled button, so three areas don't compete as three primary CTAs on one screen.
 class _AreaCard extends StatelessWidget {
-  const _AreaCard({required this.icon, required this.tone, required this.title, required this.description, required this.action});
+  const _AreaCard({
+    required this.icon,
+    required this.tone,
+    required this.title,
+    required this.description,
+    required this.actionLabel,
+    required this.onTap,
+  });
 
   final IconData icon;
   final AppTone tone;
   final String title;
   final String description;
-  final Widget action;
+  final String actionLabel;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return CareerCard(
       variant: CareerCardVariant.feature,
-      child: Column(
+      onTap: onTap,
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconTile(icon: icon, tone: tone, size: 48),
-              Gap.md,
-              Expanded(child: Text(title, style: context.text.titleLarge)),
-            ],
-          ),
-          Gap.sm,
-          Text(description, style: context.text.bodyMedium),
+          IconTile(icon: icon, tone: tone, size: 52),
           Gap.md,
-          action,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(header: true, child: Text(title, style: context.text.titleLarge)),
+                const SizedBox(height: 2),
+                Text(description, style: context.text.bodyMedium),
+                Gap.sm,
+                Semantics(
+                  button: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: Text(actionLabel, style: context.text.labelLarge?.copyWith(color: colors.primary))),
+                      Gap.xxs,
+                      Icon(Icons.arrow_forward_rounded, size: 18, color: colors.primary),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -200,7 +225,7 @@ class _AptitudeProgress extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: "Aptitude progress", actionLabel: "View All", onAction: () => context.push("/prepare/aptitude/analytics")),
+          SectionHeader(title: "Aptitude progress", actionLabel: "See all", onAction: () => context.push("/prepare/aptitude/analytics")),
           analyticsAsync.when(
             loading: () => const Column(children: [LoadingSkeleton(height: 72, radius: AppRadius.card), Gap.sm, LoadingSkeleton(height: 72, radius: AppRadius.card)]),
             error: (_, __) => const ErrorState(compact: true, message: "We couldn't load your aptitude progress right now."),
@@ -243,14 +268,14 @@ class _InterviewProgress extends ConsumerWidget {
     final readiness = ref.watch(interviewReadinessProvider(null));
     final a = analytics.valueOrNull;
     final r = readiness.valueOrNull;
-    final readinessLabel = r == null ? null : (r.insufficientData || r.overall == null ? "N/A" : "${r.overall!.round()}%");
+    final readinessLabel = r == null ? null : (r.insufficientData || r.overall == null ? "—" : "${r.overall!.round()}%");
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.section),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: "Interview progress", actionLabel: "View All", onAction: () => context.push("/prepare/interview/analytics")),
+          SectionHeader(title: "Interview progress", actionLabel: "See all", onAction: () => context.push("/prepare/interview/analytics")),
           _statPair(
             StatCard(label: "Interview Sessions", value: a?.sessionsCompleted.toString(), icon: AppIcons.interview, tone: AppTone.warning),
             StatCard(label: "Interview Readiness", value: readinessLabel, icon: Icons.speed_rounded, tone: AppTone.success),

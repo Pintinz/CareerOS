@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
+import "package:intl/intl.dart";
 
 import "../../../core/design/design.dart";
 import "../../../core/utils/date_labels.dart";
@@ -94,13 +95,11 @@ class HomeTab extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(AppSpacing.pageH, AppSpacing.sm, AppSpacing.pageH, AppSpacing.xxl),
         children: [
-          _GreetingRow(onSelectTab: selectTab),
-          _CareerProgressCard(onSelectTab: selectTab),
-          _StatGrid(onSelectTab: selectTab),
+          _HomeHero(onSelectTab: selectTab),
           const _RecruitmentActivity(),
-          _NextStepCard(onSelectTab: selectTab),
           Gap.xl,
           _QuickActions(onSelectTab: selectTab),
+          _CareerProgressCard(onSelectTab: selectTab),
           _LatestJobsSection(onSeeAll: () => selectTab(HomeTabIndex.opportunities)),
           const _RecentApplicationsSection(),
           _ScholarshipsSection(onSeeAll: () => selectTab(HomeTabIndex.opportunities)),
@@ -292,8 +291,10 @@ String _greetingFor(DateTime now) {
   return "Good evening";
 }
 
-class _GreetingRow extends ConsumerWidget {
-  const _GreetingRow({required this.onSelectTab});
+/// Greeting hero: today's date, the user's first name and their real pipeline numbers in one
+/// branded surface. Each figure opens the place it counts.
+class _HomeHero extends ConsumerWidget {
+  const _HomeHero({required this.onSelectTab});
 
   final ValueChanged<int> onSelectTab;
 
@@ -306,62 +307,182 @@ class _GreetingRow extends ConsumerWidget {
     final firstName = nameParts.isEmpty ? null : nameParts.first;
     final initials = nameParts.take(2).map((p) => p[0].toUpperCase()).join();
 
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final activeCount = ref.watch(activeApplicationsCountProvider).valueOrNull;
+    final applications = ref.watch(applicationListProvider);
+    final interviewCount =
+        applications.isLoading ? null : applications.items.where((a) => _interviewStages.contains(a.currentStage)).length;
+    final aptitudeTests = ref.watch(aptitudeAnalyticsProvider).valueOrNull?.testsCompleted;
+    final interviewSessions = ref.watch(interviewAnalyticsProvider).valueOrNull?.sessionsCompleted;
+    final practiceSessions = aptitudeTests == null || interviewSessions == null ? null : aptitudeTests + interviewSessions;
+
+    final onHeroMuted = Colors.white.withValues(alpha: 0.78);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.xs, AppSpacing.lg),
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.heroAll,
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors.heroGradient),
+        border: colors.isDark ? Border.all(color: colors.border) : null,
+        boxShadow: AppShadows.hero(context),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Semantics(
-                header: true,
+              Expanded(
                 child: Text(
-                  firstName == null ? "${_greetingFor(now)} 👋" : "${_greetingFor(now)}, $firstName 👋",
-                  maxLines: 2,
+                  DateFormat("EEEE, d MMMM").format(now),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: context.text.headlineSmall,
+                  style: context.text.labelMedium?.copyWith(color: onHeroMuted),
                 ),
               ),
-              const SizedBox(height: 2),
-              Text("Let's move your career forward.", style: context.text.bodyMedium),
+              IconButton(
+                tooltip: "Settings",
+                onPressed: () => context.push("/settings"),
+                icon: const Icon(AppIcons.settings, color: Colors.white),
+              ),
+              Semantics(
+                button: true,
+                label: "Open profile",
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => onSelectTab(HomeTabIndex.profile),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    margin: const EdgeInsets.only(right: AppSpacing.xs),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(colors: [AppColors.brightBlue, AppColors.cyan]),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 1.5),
+                    ),
+                    alignment: Alignment.center,
+                    child: ExcludeSemantics(
+                      child: initials.isEmpty
+                          ? const Icon(AppIcons.profileSelected, color: Colors.white, size: 20)
+                          : Text(initials, style: context.text.titleSmall?.copyWith(color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
-        IconButton(
-          tooltip: "Settings",
-          onPressed: () => context.push("/settings"),
-          icon: Icon(AppIcons.settings, color: colors.textSecondary),
-        ),
-        Semantics(
-          button: true,
-          label: "Open profile",
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => onSelectTab(HomeTabIndex.profile),
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(colors: [AppColors.blue, AppColors.cyan]),
-                border: Border.all(color: colors.surface, width: 2),
-                boxShadow: AppShadows.card(context),
-              ),
-              alignment: Alignment.center,
-              child: ExcludeSemantics(
-                child: initials.isEmpty
-                    ? const Icon(AppIcons.profileSelected, color: Colors.white, size: 22)
-                    : Text(initials, style: context.text.titleSmall?.copyWith(color: Colors.white)),
-              ),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    firstName == null ? _greetingFor(now) : "${_greetingFor(now)}, $firstName",
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.text.headlineSmall?.copyWith(color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text("Let's move your career forward.", style: context.text.bodyMedium?.copyWith(color: onHeroMuted)),
+                Gap.lg,
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.10),
+                    borderRadius: AppRadius.cardAll,
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _HeroStat(
+                          value: activeCount,
+                          label: "Applications",
+                          semanticLabel: "Active applications",
+                          onTap: () => context.push("/applications"),
+                        ),
+                        const _HeroDivider(),
+                        _HeroStat(
+                          value: interviewCount,
+                          label: "Interviews",
+                          semanticLabel: "Applications at interview stage",
+                          onTap: () => context.push("/applications"),
+                        ),
+                        const _HeroDivider(),
+                        _HeroStat(
+                          value: practiceSessions,
+                          label: "Practice",
+                          semanticLabel: "Practice sessions completed",
+                          onTap: () => onSelectTab(HomeTabIndex.prepare),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-/// Career setup progress from real account state. Hidden while loading and once complete — the
-/// mockup's "Career Score" is not shown because CareerOS does not compute one yet.
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({required this.value, required this.label, required this.semanticLabel, required this.onTap});
+
+  /// Null while loading — shown as "—", never a placeholder number.
+  final int? value;
+  final String label;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Semantics(
+        button: true,
+        label: "$semanticLabel: ${value ?? "not available"}",
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: AppRadius.cardAll,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: AppSpacing.xxs),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(value?.toString() ?? "—", maxLines: 1, style: context.text.headlineSmall?.copyWith(color: Colors.white)),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.text.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.78)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroDivider extends StatelessWidget {
+  const _HeroDivider();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: VerticalDivider(width: 1, thickness: 1, color: Colors.white.withValues(alpha: 0.16)),
+      );
+}
+
+/// Career setup progress from real account state, with the next unfinished step. Hidden while
+/// loading and once complete — the mockup's "Career Score" is not shown because CareerOS does not
+/// compute one yet.
 class _CareerProgressCard extends ConsumerWidget {
   const _CareerProgressCard({required this.onSelectTab});
 
@@ -372,119 +493,49 @@ class _CareerProgressCard extends ConsumerWidget {
     final steps = ref.watch(_setupStepsProvider);
     if (steps == null) return const SizedBox.shrink();
     final done = steps.where((s) => s.done).length;
-    if (done == steps.length) return const SizedBox.shrink();
-    final (status, tone) = switch (done) {
-      0 || 1 => ("Getting started", AppTone.primary),
-      2 || 3 => ("Good progress", AppTone.success),
-      _ => ("Almost there", AppTone.success),
-    };
+    final next = steps.where((s) => !s.done).firstOrNull;
+    if (next == null) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.lg),
+      padding: const EdgeInsets.only(top: AppSpacing.xl),
       child: CareerCard(
-        variant: CareerCardVariant.feature,
         onTap: () => _showSetupSheet(context, steps, onSelectTab),
-        semanticLabel: "Career setup, $done of ${steps.length} steps complete. Opens the checklist.",
-        child: ExcludeSemantics(
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.md),
+        child: Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                button: true,
+                label: "Career setup, $done of ${steps.length} steps complete. Next: ${next.title}. Opens the checklist.",
+                excludeSemantics: true,
+                child: Row(
                   children: [
-                    Text("Career Setup", style: context.text.titleMedium),
-                    Gap.xs,
-                    Text.rich(
-                      TextSpan(
+                    CareerProgressRing(
+                      value: done / steps.length,
+                      size: 56,
+                      strokeWidth: 6,
+                      tone: AppTone.success,
+                      semanticLabel: "Career setup",
+                      child: Text("$done/${steps.length}", style: context.text.labelMedium?.copyWith(color: context.colors.textPrimary)),
+                    ),
+                    Gap.md,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          TextSpan(text: "$done", style: context.text.displaySmall),
-                          TextSpan(
-                            text: " / ${steps.length}",
-                            style: context.text.titleLarge?.copyWith(color: context.colors.textSecondary),
-                          ),
+                          Text("Complete your career setup", style: context.text.titleSmall),
+                          const SizedBox(height: 2),
+                          Text("Next: ${next.title}", style: context.text.bodySmall, maxLines: 2, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
-                    Gap.xs,
-                    StatusChip(label: status, tone: tone, dense: true),
                   ],
                 ),
               ),
-              CareerProgressRing(
-                value: done / steps.length,
-                size: 92,
-                strokeWidth: 10,
-                semanticLabel: "Career setup",
-                child: Text("${(done / steps.length * 100).round()}%", style: context.text.titleMedium),
-              ),
-            ],
-          ),
+            ),
+            TextButton(onPressed: () => _runSetupStep(context, next.kind, onSelectTab), child: const Text("Start")),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class _StatGrid extends ConsumerWidget {
-  const _StatGrid({required this.onSelectTab});
-
-  final ValueChanged<int> onSelectTab;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final activeCount = ref.watch(activeApplicationsCountProvider).valueOrNull;
-    final applications = ref.watch(applicationListProvider);
-    final interviewCount =
-        applications.isLoading ? null : applications.items.where((a) => _interviewStages.contains(a.currentStage)).length;
-    final aptitudeTests = ref.watch(aptitudeAnalyticsProvider).valueOrNull?.testsCompleted;
-    final interviewSessions = ref.watch(interviewAnalyticsProvider).valueOrNull?.sessionsCompleted;
-    final practiceSessions = aptitudeTests == null || interviewSessions == null ? null : aptitudeTests + interviewSessions;
-    final scholarshipTotal = ref.watch(_scholarshipsProvider).valueOrNull?.total;
-
-    Widget pair(Widget a, Widget b) => IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [Expanded(child: a), Gap.sm, Expanded(child: b)],
-          ),
-        );
-
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sm),
-      child: Column(
-        children: [
-          pair(
-            StatCard(
-              label: "Active applications",
-              value: activeCount?.toString(),
-              icon: AppIcons.application,
-              onTap: () => context.push("/applications"),
-            ),
-            StatCard(
-              label: "At interview stage",
-              value: interviewCount?.toString(),
-              icon: AppIcons.interview,
-              tone: AppTone.warning,
-              onTap: () => context.push("/applications"),
-            ),
-          ),
-          Gap.sm,
-          pair(
-            StatCard(
-              label: "Practice sessions",
-              value: practiceSessions?.toString(),
-              icon: AppIcons.prepare,
-              tone: AppTone.success,
-              onTap: () => onSelectTab(HomeTabIndex.prepare),
-            ),
-            StatCard(
-              label: "Scholarships open",
-              value: scholarshipTotal?.toString(),
-              icon: AppIcons.scholarship,
-              tone: AppTone.purple,
-              onTap: () => onSelectTab(HomeTabIndex.opportunities),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -657,34 +708,6 @@ class _UpcomingInterviewStageCard extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Recommended next action
-// ---------------------------------------------------------------------------
-
-class _NextStepCard extends ConsumerWidget {
-  const _NextStepCard({required this.onSelectTab});
-
-  final ValueChanged<int> onSelectTab;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final steps = ref.watch(_setupStepsProvider);
-    if (steps == null) return const SizedBox.shrink();
-    final next = steps.where((s) => !s.done).firstOrNull;
-    if (next == null) return const SizedBox.shrink();
-    return _Spaced(
-      child: InsightCard(
-        icon: next.icon,
-        tone: AppTone.success,
-        title: "Next step: ${next.title}",
-        message: next.subtitle,
-        actionLabel: "Start",
-        onAction: () => _runSetupStep(context, next.kind, onSelectTab),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Quick actions (max four)
 // ---------------------------------------------------------------------------
 
@@ -745,18 +768,7 @@ class _QuickAction extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxs),
               child: Column(
                 children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: colors.surface,
-                      borderRadius: AppRadius.featureAll,
-                      border: Border.all(color: colors.border),
-                      boxShadow: AppShadows.card(context),
-                    ),
-                    alignment: Alignment.center,
-                    child: IconTile(icon: icon, tone: tone, size: 40),
-                  ),
+                  IconTile(icon: icon, tone: tone, size: 56),
                   Gap.xs,
                   Text(
                     label,
@@ -779,9 +791,10 @@ class _QuickAction extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.child, this.onSeeAll});
+  const _Section({required this.title, required this.child, this.onSeeAll, this.subtitle});
 
   final String title;
+  final String? subtitle;
   final Widget child;
   final VoidCallback? onSeeAll;
 
@@ -792,7 +805,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SectionHeader(title: title, actionLabel: onSeeAll == null ? null : "See all", onAction: onSeeAll),
+          SectionHeader(title: title, subtitle: subtitle, actionLabel: onSeeAll == null ? null : "See all", onAction: onSeeAll),
           child,
         ],
       ),
@@ -888,7 +901,8 @@ class _ScholarshipsSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final all = ref.watch(_scholarshipsProvider).valueOrNull?.items ?? const <ScholarshipCard>[];
+    final page = ref.watch(_scholarshipsProvider).valueOrNull;
+    final all = page?.items ?? const <ScholarshipCard>[];
     // Soonest real upcoming deadline first; scholarships without a deadline follow; closed ones hide.
     final open = all.where((s) => s.applicationDeadline == null || DateLabels.daysUntil(s.applicationDeadline!) >= 0).toList()
       ..sort((a, b) {
@@ -902,6 +916,7 @@ class _ScholarshipsSection extends ConsumerWidget {
 
     return _Section(
       title: "Scholarships closing soon",
+      subtitle: page == null ? null : "${page.total} open now",
       onSeeAll: onSeeAll,
       child: Column(
         children: [

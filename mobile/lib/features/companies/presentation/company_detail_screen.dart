@@ -104,15 +104,7 @@ class _CompanyHeader extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(child: Text(company.name, style: context.text.headlineSmall)),
-                      if (company.isVerified) ...[
-                        Gap.xxs,
-                        Semantics(label: "Verified", child: const Icon(AppIcons.verified, size: 18, color: AppColors.success)),
-                      ],
-                    ],
-                  ),
+                  Text(company.name, style: context.text.headlineSmall),
                   if (company.industry != null || company.headquarters != null)
                     Text(
                       [if (company.industry != null) company.industry!, if (company.headquarters != null) company.headquarters!].join(" · "),
@@ -127,7 +119,19 @@ class _CompanyHeader extends ConsumerWidget {
                 : PrimaryButton(label: "Follow", icon: AppIcons.add, expand: false, onPressed: onToggleFollow),
           ],
         ),
-        if (company.isDemo) ...[Gap.xs, const TagChip(label: "DEMO")],
+        // Verification sits with the other labels rather than beside the name, where a long name
+        // squeezed by the Follow button left the mark stranded on its own line.
+        if (company.isVerified || company.isDemo) ...[
+          Gap.xs,
+          Wrap(
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
+            children: [
+              if (company.isVerified) const StatusChip(label: "Verified", tone: AppTone.success, icon: AppIcons.verified),
+              if (company.isDemo) const TagChip(label: "DEMO"),
+            ],
+          ),
+        ],
         Gap.md,
         IntrinsicHeight(
           child: Row(

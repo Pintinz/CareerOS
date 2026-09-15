@@ -55,7 +55,7 @@ void main() {
     await tester.tap(find.byType(CareerListRow).first);
     await tester.pumpAndSettle();
 
-    expect(find.text('APTITUDE TEST'), findsOneWidget);
+    expect(find.text('Aptitude Test'), findsWidgets);
     expect(find.text('Confirm Stage'), findsOneWidget);
     expect(find.text('Wrong Application'), findsOneWidget);
     expect(find.text('Ignore'), findsOneWidget);

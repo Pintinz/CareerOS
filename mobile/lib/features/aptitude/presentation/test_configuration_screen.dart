@@ -132,7 +132,7 @@ class _TestConfigurationScreenState extends ConsumerState<TestConfigurationScree
     return Scaffold(
       appBar: AppBar(title: const Text("Set Up Assessment")),
       bottomNavigationBar: BottomActionBar(
-        leading: Text(summary, style: context.text.labelMedium, maxLines: 2),
+        caption: Text(summary),
         primary: PrimaryButton(label: "Start Assessment", isLoading: creationState.isLoading, onPressed: _start),
       ),
       body: ListView(

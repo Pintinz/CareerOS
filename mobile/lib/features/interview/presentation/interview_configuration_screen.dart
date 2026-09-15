@@ -101,10 +101,8 @@ class _InterviewConfigurationScreenState extends ConsumerState<InterviewConfigur
     return Scaffold(
       appBar: AppBar(title: const Text("Set Up Interview Practice")),
       bottomNavigationBar: BottomActionBar(
-        leading: Text(
+        caption: Text(
           ["$_questionCount questions", _kDifficultyLabels[_difficulty]!, if (_useTimer) "${_timePerQuestionSeconds}s each"].join(" · "),
-          style: context.text.labelMedium,
-          maxLines: 2,
         ),
         primary: PrimaryButton(
           label: "Start Practice",

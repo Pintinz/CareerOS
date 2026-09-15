@@ -1,9 +1,9 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
-import "package:intl/intl.dart";
 
 import "../../../core/design/design.dart";
+import "../../../core/utils/date_labels.dart";
 import "../../../core/utils/error_message.dart";
 import "../../../core/widgets/widgets.dart";
 import "../../aptitude/data/aptitude_models.dart";
@@ -198,7 +198,7 @@ class _RecruitmentEventDetailScreenState extends ConsumerState<RecruitmentEventD
                   children: [
                     IconTile(icon: stageIcon(event.detectedStage!), tone: stageTone(event.detectedStage!), size: 40),
                     Gap.sm,
-                    Expanded(child: Text(event.detectedStage!.label.toUpperCase(), style: context.text.titleLarge)),
+                    Expanded(child: Text(event.detectedStage!.label, style: context.text.titleLarge)),
                   ],
                 ),
                 Gap.md,
@@ -209,7 +209,7 @@ class _RecruitmentEventDetailScreenState extends ConsumerState<RecruitmentEventD
                 children: [
                   if (event.confidenceLabel != null)
                     StatusChip(label: "Confidence: ${_confidenceLabel(event.confidenceLabel!)}", tone: confidenceTone, icon: Icons.speed_rounded),
-                  TagChip(label: "Email received ${DateFormat.yMMMd().format(event.receivedAt)}", icon: AppIcons.email),
+                  TagChip(label: "Email received ${DateLabels.shortDate(event.receivedAt)}", icon: AppIcons.email),
                 ],
               ),
               Gap.sm,
@@ -273,7 +273,7 @@ class _EmailDetailsCard extends StatelessWidget {
         children: [
           _EmailField(label: "From", value: event.senderName != null ? "${event.senderName} <${event.senderEmail}>" : event.senderEmail),
           _EmailField(label: "Subject", value: event.subject),
-          _EmailField(label: "Date", value: DateFormat.yMMMd().add_jm().format(event.receivedAt)),
+          _EmailField(label: "Date", value: DateLabels.dateTime(event.receivedAt)),
           if (event.evidenceExcerpt != null) _EmailField(label: "Excerpt", value: event.evidenceExcerpt!),
           Gap.xs,
           Text("Detected because:", style: context.text.labelMedium),

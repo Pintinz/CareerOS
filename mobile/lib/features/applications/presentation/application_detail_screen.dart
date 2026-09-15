@@ -1,7 +1,6 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "package:go_router/go_router.dart";
-import "package:intl/intl.dart";
 
 import "../../../core/design/design.dart";
 import "../../../core/utils/date_labels.dart";
@@ -228,7 +227,7 @@ class _InterviewPrepCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final readiness = ref.watch(interviewReadinessProvider(application.id)).valueOrNull;
     final analytics = ref.watch(interviewAnalyticsProvider).valueOrNull;
-    final readinessLabel = readiness == null ? null : (readiness.insufficientData || readiness.overall == null ? "N/A" : "${readiness.overall!.round()}%");
+    final readinessLabel = readiness == null ? null : (readiness.insufficientData || readiness.overall == null ? "—" : "${readiness.overall!.round()}%");
 
     return CareerCard(
       variant: CareerCardVariant.outlined,
@@ -257,29 +256,24 @@ class _InterviewPrepCard extends ConsumerWidget {
             ],
           ),
           Gap.md,
-          Row(
-            children: [
-              if (application.jobId != null) ...[
-                Expanded(
-                  child: AppOutlineButton(
-                    label: "Company Research",
-                    onPressed: () => context.push("/prepare/interview/company-prep/${application.id}"),
-                  ),
-                ),
-                Gap.xs,
-              ],
-              Expanded(
-                flex: 2,
-                child: PrimaryButton(
-                  label: "Continue Preparation",
-                  onPressed: () => context.push(
-                    "/prepare/interview/configure",
-                    extra: InterviewConfigureArgs(initialMode: InterviewSessionMode.practice, applicationId: application.id),
-                  ),
-                ),
-              ),
-            ],
+          // Stacked: side by side, "Company Research" truncated to "Comp…" on phones. Secondary
+          // because the screen's primary action is Update Stage.
+          SecondaryButton(
+            label: "Continue Preparation",
+            icon: Icons.play_arrow_rounded,
+            onPressed: () => context.push(
+              "/prepare/interview/configure",
+              extra: InterviewConfigureArgs(initialMode: InterviewSessionMode.practice, applicationId: application.id),
+            ),
           ),
+          if (application.jobId != null) ...[
+            Gap.xs,
+            AppOutlineButton(
+              label: "Company Research",
+              icon: AppIcons.company,
+              onPressed: () => context.push("/prepare/interview/company-prep/${application.id}"),
+            ),
+          ],
         ],
       ),
     );
@@ -293,13 +287,12 @@ class _DetailsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dateTime = DateFormat.yMMMd().add_jm();
-    final rows = <(IconData, String, String?)>[
+        final rows = <(IconData, String, String?)>[
       (AppIcons.location, "Location", application.location),
       (Icons.send_rounded, "Applied", application.appliedDate != null ? DateLabels.shortDate(application.appliedDate!) : null),
       (AppIcons.deadline, "Deadline", application.deadline != null ? DateLabels.shortDate(application.deadline!) : null),
-      (AppIcons.interview, "Interview", application.interviewDate != null ? dateTime.format(application.interviewDate!) : null),
-      (AppIcons.aptitude, "Assessment", application.assessmentDate != null ? dateTime.format(application.assessmentDate!) : null),
+      (AppIcons.interview, "Interview", application.interviewDate != null ? DateLabels.dateTime(application.interviewDate!) : null),
+      (AppIcons.aptitude, "Assessment", application.assessmentDate != null ? DateLabels.dateTime(application.assessmentDate!) : null),
       (Icons.payments_outlined, "Salary", application.salary),
       (AppIcons.profile, "Contact", application.contactName),
       (Icons.alternate_email_rounded, "Contact email", application.contactEmail),
@@ -373,8 +366,7 @@ class _TimelineTab extends StatelessWidget {
       );
     }
     final next = _nextExpected;
-    final dateTime = DateFormat.yMMMd().add_jm();
-
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -382,7 +374,7 @@ class _TimelineTab extends StatelessWidget {
           _TimelineEntry(
             marker: i == events.length - 1 ? _Marker.current : _Marker.done,
             title: events[i].stage.label,
-            subtitle: dateTime.format(events[i].occurredAt),
+            subtitle: DateLabels.dateTime(events[i].occurredAt),
             note: events[i].note,
             tone: stageTone(events[i].stage),
             showRail: i < events.length - 1 || next != null,
@@ -560,7 +552,7 @@ class _NotesTabState extends ConsumerState<_NotesTab> {
                   children: [
                     Text(note.text, style: context.text.bodyLarge),
                     Gap.xs,
-                    Text(DateFormat.yMMMd().add_jm().format(note.createdAt), style: context.text.bodySmall),
+                    Text(DateLabels.dateTime(note.createdAt), style: context.text.bodySmall),
                   ],
                 ),
               ),

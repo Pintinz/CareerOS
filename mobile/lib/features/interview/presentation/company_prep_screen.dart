@@ -96,6 +96,9 @@ class CompanyPrepScreen extends ConsumerWidget {
                 error: (e, _) => Text(e.userMessage, style: context.text.bodyMedium?.copyWith(color: AppColors.error)),
                 data: (progress) {
                   final done = progress.checklist.where((i) => i.isDone).length;
+                  if (progress.checklist.isEmpty) {
+                    return Text("No research checklist for this application yet.", style: context.text.bodyMedium);
+                  }
                   return CareerCard(
                     variant: CareerCardVariant.outlined,
                     padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.xs, AppSpacing.xs),

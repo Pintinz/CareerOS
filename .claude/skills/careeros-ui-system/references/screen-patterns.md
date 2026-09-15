@@ -7,7 +7,7 @@
 | `PrimaryButton`, `SecondaryButton`, `AppOutlineButton`, `DangerButton`, `AppTextButton` | `app_buttons.dart` | `isLoading`, `icon`, `expand` |
 | `CareerCard` | `career_card.dart` | Surface + border + radius; `variant: standard/feature/muted/outlined`, optional `onTap` |
 | `SectionHeader` | `section_header.dart` | Title, optional subtitle and "See all"-style action |
-| `StatCard`, `MetricTile` | `stat_card.dart` | Real values only; `null` renders "—" |
+| `StatCard`, `MetricTile` | `stat_card.dart` | Real values only; `null` renders "—" (also use "—", never "N/A", for not-enough-data). StatCard: value first, small icon top-right, full-width label |
 | `InsightCard` | `insight_card.dart` | Tone accent bar + icon + title + body + action (alerts, next action) |
 | `StatusChip`, `AppFilterChip`, `TagChip` | `chips.dart` | Status always has text (+icon), never color alone |
 | `AppSearchField` | `app_search_field.dart` | Debounce in the caller |
@@ -15,7 +15,7 @@
 | `CareerProgressBar`, `CareerProgressRing` | `career_progress.dart` | Value 0–1 with semantic label |
 | `showCareerBottomSheet`, `showCareerDialog` | `career_sheet.dart` | Handle, 24 px top radius |
 | `NetworkImageWithFallback` | `network_image.dart` | Initials/icon fallback, cached |
-| `BottomActionBar` | `bottom_action_bar.dart` | Pinned primary + secondary CTA |
+| `BottomActionBar` | `bottom_action_bar.dart` | Pinned primary + secondary CTA; optional one-line `caption` above the buttons (never beside them) |
 | `CareerPillTabBar` | `career_pill_tab_bar.dart` | Filled-blue segmented pills for peer views (Opportunities, Saved) |
 | `FeedToolbar`, `FilterOptionGroup` | `feed_toolbar.dart` | Search + quick filters + "Filters · n" sheet entry |
 | `DetailScaffold`, `DetailSection`, `BulletList`, `FactRow`, `DetailSkeleton`, `DetailError` | `detail_layout.dart` | Collapsing banner hero, overlapping logo, pinned tabs, fully scrolling tab bodies; `showBanner: false` for records |
@@ -41,10 +41,12 @@ title → one-sentence body → page dots → **Next** / **Create Account** → 
 account" underneath. No ads, no bottom nav.
 
 ## Home
-Order: greeting hero (date, name, real stats) → recruitment attention cards (only when present) →
-quick actions (max 4: Find Opportunities, Analyze CV, Prepare, Track Application) → career setup
-progress (checklist from real account state; hides when complete) → latest jobs carousel →
-scholarships closing soon → company intelligence (3) → nothing else. No endless feed; every
+Order: greeting hero (navy gradient: date, first name, and one inline strip of real pipeline
+stats — Applications · Interviews · Practice, each tappable) → recruitment attention cards (only
+when present) → quick actions (max 4: Find Opportunities, Analyze CV, Prepare, Track Application)
+→ one compact career setup card (progress ring, next unfinished step, Start; hides when complete)
+→ latest jobs → recent applications → scholarships closing soon (open total as the section subtitle)
+→ company intelligence (3) → nothing else. No endless feed; every
 section has "See all" into its hub. Readiness scores appear only when the backend computes one.
 
 ## Discovered content (DISCOVERY_ENGINE.md)
@@ -80,8 +82,9 @@ Primary CTA: Update Stage. Historical stage events are never edited or reordered
 
 ## Prepare hub
 Hero "Prepare with confidence" + resume-active-session banner (when a session is in progress) →
-three primary area cards (Aptitude Testing, Interview Preparation, CV & Career Tools) → secondary
-list rows (History, Analytics, STAR Stories).
+three area cards (Aptitude Testing, Interview Preparation, CV & Career Tools), each a whole-card tap
+target with an arrow link ("Start Preparing →") rather than a filled button, so three areas never read
+as three primary CTAs → progress stats → secondary list rows (History, Analytics, STAR Stories).
 
 ## Distraction-free flows
 Active aptitude test and mock interview: minimal AppBar (section, "Question X of Y", timer), thin
