@@ -51,7 +51,9 @@ solution → components reused → functional risk. Then:
    `mobile/test/ui_audit/ui_audit_test.dart` — it renders each screen in light + dark at 360dp and at
    320dp with 1.3× text and fails on any overflow. For visual QA without a backend:
    `flutter test test/ui_audit --dart-define=UI_AUDIT_CAPTURE=true` → `mobile/build/ui_audit/*.png`
-   (button/app-bar labels render as blocks there — a test-font artifact, not a bug).
+   (add `--dart-define=UI_AUDIT_HEIGHT=1500` to capture whole scrolling pages and
+   `--dart-define=UI_AUDIT_ONLY=<name part>` to run a subset). Images decode asynchronously, so a
+   brand logo can be missing from the first capture of a run — check the next screen before calling it a bug.
 
 Screen quality questions are in `references/ux-rules.md` — go through them before calling a screen done.
 

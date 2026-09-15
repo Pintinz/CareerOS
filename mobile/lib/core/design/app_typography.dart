@@ -11,9 +11,15 @@ abstract final class AppTypography {
   static const String? fontFamily = null;
   static const List<String> fontFamilyFallback = ["Plus Jakarta Sans", "Inter", "SF Pro Text", "Roboto"];
 
+  /// Test-only family for styles used outside the localized text theme (buttons, app bars). Widget
+  /// tests have no platform default font, so without it those labels render as placeholder blocks
+  /// in UI audit captures.
+  @visibleForTesting
+  static String? debugFontFamily;
+
   static TextTheme textTheme(CareerColors c) {
     TextStyle style(double size, FontWeight weight, Color color, {double? height, double spacing = 0}) => TextStyle(
-          fontFamily: fontFamily,
+          fontFamily: fontFamily ?? debugFontFamily,
           fontFamilyFallback: fontFamilyFallback,
           fontSize: size,
           fontWeight: weight,

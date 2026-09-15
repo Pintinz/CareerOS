@@ -25,7 +25,31 @@ import 'package:careeros/features/ats/data/ats_repository.dart';
 import 'package:careeros/features/ats/presentation/ats_analyze_screen.dart';
 import 'package:careeros/features/ats/presentation/ats_providers.dart';
 import 'package:careeros/features/auth/presentation/login_screen.dart';
+import 'package:careeros/core/monetization/consent_manager.dart';
+import 'package:careeros/features/applications/presentation/create_application_screen.dart';
+import 'package:careeros/features/aptitude/presentation/active_test_screen.dart';
+import 'package:careeros/features/aptitude/presentation/aptitude_analytics_screen.dart';
+import 'package:careeros/features/aptitude/presentation/question_review_screen.dart';
+import 'package:careeros/features/aptitude/presentation/test_results_screen.dart';
+import 'package:careeros/features/auth/presentation/register_screen.dart';
 import 'package:careeros/features/companies/data/company_models.dart';
+import 'package:careeros/features/companies/data/company_repository.dart';
+import 'package:careeros/features/companies/presentation/company_detail_screen.dart';
+import 'package:careeros/features/companies/presentation/company_providers.dart';
+import 'package:careeros/features/email_tracking/presentation/recruitment_events_screen.dart';
+import 'package:careeros/features/email_tracking/presentation/smart_tracking_settings_screen.dart';
+import 'package:careeros/features/intelligence/presentation/intelligence_detail_screen.dart';
+import 'package:careeros/features/interview/data/interview_models.dart';
+import 'package:careeros/features/interview/presentation/company_prep_screen.dart';
+import 'package:careeros/features/interview/presentation/interview_analytics_screen.dart';
+import 'package:careeros/features/interview/presentation/interview_configuration_screen.dart';
+import 'package:careeros/features/interview/presentation/interview_results_screen.dart';
+import 'package:careeros/features/interview/presentation/interview_session_screen.dart';
+import 'package:careeros/features/interview/presentation/star_story_list_screen.dart';
+import 'package:careeros/features/profile/presentation/saved_items_screen.dart';
+import 'package:careeros/features/scholarships/presentation/scholarship_list_tab.dart';
+import 'package:careeros/features/settings/presentation/ads_privacy_screen.dart';
+import 'package:careeros/features/settings/presentation/pro_screen.dart';
 import 'package:careeros/features/email_tracking/presentation/email_tracking_providers.dart';
 import 'package:careeros/features/email_tracking/presentation/recruitment_event_detail_screen.dart';
 import 'package:careeros/features/home/presentation/home_shell.dart';
@@ -65,6 +89,13 @@ import '../features/email_tracking/email_tracking_test_support.dart';
 import '../features/interview/interview_test_support.dart';
 
 const _capture = bool.fromEnvironment('UI_AUDIT_CAPTURE');
+
+/// Capture height in logical pixels; raise it (e.g. `--dart-define=UI_AUDIT_HEIGHT=1600`) to review
+/// whole scrolling pages.
+const _captureHeight = int.fromEnvironment('UI_AUDIT_HEIGHT', defaultValue: 780);
+
+/// Restricts the run to screens whose name contains this text (e.g. `UI_AUDIT_ONLY=home`).
+const _only = String.fromEnvironment('UI_AUDIT_ONLY');
 
 // ---------------------------------------------------------------------------------------------
 // Sample data (clearly fictional, mirrors the backend demo seed)
@@ -292,6 +323,8 @@ class _ScholarshipRepo extends ScholarshipRepository {
       (items: _scholarships(), total: 1);
   @override
   Future<ScholarshipDetail> getByIdOrSlug(String idOrSlug) async => _scholarshipDetail();
+  @override
+  Future<({List<ScholarshipCard> items, int total})> listSaved({int page = 1}) async => (items: _scholarships(), total: 1);
 }
 
 class _IntelligenceRepo extends IntelligenceRepository {
@@ -305,7 +338,101 @@ class _IntelligenceRepo extends IntelligenceRepository {
   }) async =>
       // The demo user follows no companies.
       followedOnly ? (items: <IntelligenceCard>[], total: 0) : (items: _posts(), total: 1);
+  @override
+  Future<IntelligenceDetail> getByIdOrSlug(String idOrSlug) async => IntelligenceDetail(
+        id: 'i1',
+        slug: 'expansion',
+        headline: 'Demo Energy Corp announces a new offshore project and graduate hiring drive',
+        category: 'HIRING',
+        company: _company,
+        summary: 'The project is expected to open technician and engineering roles next year.',
+        fullContent: 'Demo Energy Corp said the offshore project will move into construction next year, with '
+            'recruitment for process technicians, instrumentation engineers and graduate trainees.',
+        whyItMatters: 'Graduate and technician roles usually open months before construction starts.',
+        relevantRoles: const ['Process Technician', 'Instrumentation Engineer'],
+        relevantSkills: const ['Process safety', 'PLC'],
+        sourceUrl: 'https://example.com/news',
+        sourceName: 'Demo Energy Corp newsroom',
+        publishedAt: _now.subtract(const Duration(hours: 5)),
+        isVerified: true,
+        isDemo: true,
+      );
+  @override
+  Future<({List<IntelligenceCard> items, int total})> listByCompany(String companyId, {int page = 1}) async =>
+      (items: _posts(), total: 1);
 }
+
+class _CompanyRepo extends CompanyRepository {
+  _CompanyRepo() : super(apiClient: ApiClient());
+  @override
+  Future<Company> getByIdOrSlug(String idOrSlug) async => _jobDetail().company.copyWithWebsite();
+}
+
+extension on Company {
+  Company copyWithWebsite() => Company(
+        id: id,
+        name: name,
+        slug: slug,
+        industry: industry,
+        headquarters: headquarters,
+        country: 'Nigeria',
+        websiteUrl: 'https://example.com',
+        careerUrl: 'https://example.com/careers',
+        description: description,
+        isVerified: isVerified,
+        isActive: isActive,
+        isDemo: isDemo,
+      );
+}
+
+class _Consent implements ConsentManager {
+  @override
+  Future<void> gatherConsent({bool debugForceEea = false}) async {}
+  @override
+  Future<bool> canRequestAds() async => false;
+  @override
+  Future<bool> isPrivacyOptionsRequired() async => true;
+  @override
+  Future<void> showPrivacyOptionsForm() async {}
+}
+
+final _starStory = StarStory(
+  id: 'star-1',
+  title: 'Stopped a pump failure during night shift',
+  category: StarCategory.equipmentFailure,
+  situation: 'A feed pump started vibrating during a night shift.',
+  task: 'Keep the unit running safely until maintenance arrived.',
+  action: 'I isolated the pump, switched to the standby unit and logged readings every 15 minutes.',
+  result: 'No downtime and the fault was fixed the next morning.',
+  skillsDemonstrated: const ['Process safety', 'Troubleshooting'],
+  completeness: const StarCompleteness(sections: {}, gaps: [], isComplete: true),
+  createdAt: _now.subtract(const Duration(days: 4)),
+  updatedAt: _now.subtract(const Duration(days: 1)),
+);
+
+SessionReview _review() => const SessionReview(
+      sessionId: 'session-1',
+      questions: [
+        ReviewQuestion(
+          id: 'q1',
+          orderIndex: 0,
+          questionText: 'What is 15% of 200?',
+          questionType: QuestionType.singleChoice,
+          difficulty: QuestionDifficulty.easy,
+          categoryName: 'Numerical Reasoning',
+          topicName: 'Percentages',
+          options: [
+            TestOption(id: 'opt-correct', optionText: '30', displayOrder: 0, isCorrect: true),
+            TestOption(id: 'opt-wrong', optionText: '20', displayOrder: 1, isCorrect: false),
+          ],
+          selectedOptionIds: ['opt-wrong'],
+          isCorrect: false,
+          marksAwarded: -0.25,
+          explanation: '15% of 200 is 0.15 × 200 = 30.',
+          timeSpentSeconds: 42,
+        ),
+      ],
+    );
 
 class _ProfileRepo extends ProfileRepository {
   _ProfileRepo() : super(apiClient: ApiClient());
@@ -351,14 +478,45 @@ Future<List<Override>> _overrides() async {
       questionsAnswered: 62,
       averageScore: 71,
       bestScore: 90,
-      byCategory: {},
+      byCategory: {
+        'Numerical Reasoning': CategoryStat(attempted: 34, correct: 26, percentage: 76),
+        'Verbal Reasoning': CategoryStat(attempted: 28, correct: 17, percentage: 61),
+      },
       byTopic: {},
+    )
+    ..reviewOverride = _review()
+    ..sessionProvider = ((id) => buildSampleSession(id: id, status: id == 'session-done' ? TestStatus.submitted : TestStatus.inProgress))
+    ..historyOverride = [
+      TestSessionSummary(
+        id: 'session-0',
+        mode: TestMode.practice,
+        status: TestStatus.submitted,
+        questionCount: 20,
+        percentage: 70,
+        createdAt: _now.subtract(const Duration(days: 2)),
+      ),
+    ];
+  final interview = FakeInterviewRepository()
+    ..sessionProvider = ((id) => buildSampleInterviewSession(
+          id: id,
+          status: id == 'interview-done' ? InterviewSessionStatus.completed : InterviewSessionStatus.inProgress,
+        ))
+    ..starStoriesOverride = [_starStory]
+    ..analyticsOverride = const InterviewAnalytics(
+      sessionsCompleted: 3,
+      questionsPracticed: 21,
+      averageSelfRating: 3.7,
+      starStoriesCreated: 1,
+      starStoriesReady: 1,
+      companyPrepCompleted: 0,
+      technicalTopicsCovered: 2,
+      byCategory: {'Behavioral': CategoryCompletion(completed: 12, total: 15)},
     );
   final email = FakeEmailTrackingRepository()..events = [buildSampleRecruitmentEvent(matchedApplicationId: 'app-1')];
   final base = await aptitudeTestOverrides(
     repository: aptitude,
     applicationRepository: FakeApplicationRepository(items: [_application()]),
-    interviewRepository: FakeInterviewRepository(),
+    interviewRepository: interview,
   );
   return [
     ...base,
@@ -369,6 +527,8 @@ Future<List<Override>> _overrides() async {
     intelligenceRepositoryProvider.overrideWithValue(_IntelligenceRepo()),
     profileRepositoryProvider.overrideWithValue(_ProfileRepo()),
     atsRepositoryProvider.overrideWithValue(_AtsRepo()),
+    companyRepositoryProvider.overrideWithValue(_CompanyRepo()),
+    consentManagerProvider.overrideWithValue(_Consent()),
     emailTrackingRepositoryProvider.overrideWithValue(email),
     monetizationConfigProvider.overrideWith((ref) async => _disabledAds),
     entitlementProvider.overrideWith((ref) async => _freeEntitlement),
@@ -391,6 +551,7 @@ Future<void> _loadFonts() async {
     ..addFont(read('roboto-bold.ttf'))
     ..addFont(read('roboto-black.ttf'));
   await roboto.load();
+  AppTypography.debugFontFamily = 'Roboto';
   final icons = FontLoader('MaterialIcons')..addFont(read('materialicons-regular.otf'));
   await icons.load();
 }
@@ -416,22 +577,42 @@ final _screens = <_Screen>[
     ),
   ),
   _Screen('03_login', () => const LoginScreen()),
+  _Screen('03b_register', () => const RegisterScreen()),
   _Screen('04_home', () => const HomeShell()),
   _Screen('05_opportunities', () => const Scaffold(body: SafeArea(child: OpportunitiesTab()))),
+  _Screen('05b_scholarships_feed', () => const Scaffold(body: SafeArea(child: ScholarshipListTab()))),
   _Screen('06_job_detail', () => const JobDetailScreen(idOrSlug: 'process-technician')),
   _Screen('06b_job_detail_unavailable_programme', () => const JobDetailScreen(idOrSlug: 'graduate-programme-removed')),
   _Screen('06c_graduate_programmes_feed', () => const Scaffold(body: SafeArea(child: JobListTab(feed: JobFeed.graduatePrograms)))),
   _Screen('07_scholarship_detail', () => const ScholarshipDetailScreen(idOrSlug: 'global-masters')),
+  _Screen('07b_company_detail', () => const CompanyDetailScreen(idOrSlug: 'demo-energy-corp')),
   _Screen('08_intelligence', () => const Scaffold(body: SafeArea(child: IntelligenceFeedTab()))),
+  _Screen('08b_intelligence_detail', () => const IntelligenceDetailScreen(idOrSlug: 'expansion')),
   _Screen('09_applications', () => const ApplicationListScreen()),
+  _Screen('09b_create_application', () => const CreateApplicationScreen()),
   _Screen('10_application_detail', () => const ApplicationDetailScreen(applicationId: 'app-1')),
   _Screen('11_prepare', () => const Scaffold(body: SafeArea(child: PreparationHubScreen()))),
   _Screen('12_aptitude_setup', () => const TestConfigurationScreen(args: AptitudeConfigureArgs())),
+  _Screen('12b_active_test', () => const ActiveTestScreen(sessionId: 'session-1')),
+  _Screen('12c_test_results', () => const TestResultsScreen(sessionId: 'session-done')),
+  _Screen('12d_question_review', () => const QuestionReviewScreen(sessionId: 'session-1')),
+  _Screen('12e_aptitude_analytics', () => const AptitudeAnalyticsScreen()),
   _Screen('13_interview_home', () => const InterviewHomeScreen()),
+  _Screen('13b_interview_setup', () => const InterviewConfigurationScreen(args: InterviewConfigureArgs())),
+  _Screen('13c_interview_session', () => const InterviewSessionScreen(sessionId: 'interview-session-1')),
+  _Screen('13d_interview_results', () => const InterviewResultsScreen(sessionId: 'interview-done')),
+  _Screen('13e_interview_analytics', () => const InterviewAnalyticsScreen()),
+  _Screen('13f_star_stories', () => const StarStoryListScreen()),
+  _Screen('13g_company_prep', () => const CompanyPrepScreen(applicationId: 'app-1')),
   _Screen('14_star_editor', () => const StarStoryEditorScreen()),
   _Screen('15_cv_tools', () => const AtsAnalyzeScreen()),
   _Screen('16_profile', () => const Scaffold(body: SafeArea(child: ProfileTab()))),
+  _Screen('16b_saved', () => const SavedItemsScreen()),
   _Screen('17_settings', () => const SettingsScreen()),
+  _Screen('17b_ads_privacy', () => const AdsPrivacyScreen()),
+  _Screen('17c_pro', () => const ProScreen()),
+  _Screen('17d_smart_tracking', () => const SmartTrackingSettingsScreen()),
+  _Screen('17e_recruitment_updates', () => const RecruitmentEventsScreen()),
   _Screen('18_email_update', () => const RecruitmentEventDetailScreen(eventId: 'event-1')),
 ];
 
@@ -488,13 +669,20 @@ Future<void> _captureTo(WidgetTester tester, GlobalKey key, String fileName) asy
 void main() {
   setUpAll(_loadFonts);
 
-  for (final screen in _screens) {
+  for (final screen in _screens.where((s) => s.name.contains(_only))) {
     for (final mode in [ThemeMode.light, ThemeMode.dark]) {
       testWidgets('${screen.name} renders without overflow — ${mode.name}, 360dp', (tester) async {
         final key = GlobalKey();
-        await _pumpScreen(tester, screen: screen, mode: mode, size: const Size(360, 780), textScale: 1.0, boundaryKey: key);
-        _expectNoException(tester);
-        if (_capture) await _captureTo(tester, key, '${screen.name}_${mode.name}');
+        final size = Size(360, _captureHeight.toDouble());
+        // Tests paint shadows as solid offset shapes by default; captures should show real soft shadows.
+        if (_capture) debugDisableShadows = false;
+        try {
+          await _pumpScreen(tester, screen: screen, mode: mode, size: size, textScale: 1.0, boundaryKey: key);
+          _expectNoException(tester);
+          if (_capture) await _captureTo(tester, key, '${screen.name}_${mode.name}');
+        } finally {
+          debugDisableShadows = true;
+        }
       });
     }
 
