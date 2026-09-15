@@ -270,11 +270,13 @@ documents an existing, already-enforced code behavior rather than introducing a 
 
 ## Demo/seed data
 
-All seed content used in development is clearly flagged in the database. `companies`, `jobs`, and
-`scholarships` already carry an `is_demo` boolean column (see `scripts/seed_demo_data.py`); the same
-convention applies to questions/applications/news once those tables exist. Demo content must never be
-presented to a production user as a real, current vacancy or opportunity — the mobile/admin UI should
-visibly badge `is_demo` records once real-vs-demo content coexists in the same environment.
+All seed content used in development is clearly flagged in the database with an `is_demo` column
+(`companies`, `jobs`, `scholarships`, `applications`, `intelligence_posts`, question banks). The
+fictional demo listings (demo companies, jobs and a scholarship) and their seed script were removed on
+2026-09-15; opportunities now come only from real sources. The aptitude and interview question banks
+keep `is_demo=True` — they are original practice questions with real answers, not fictional vacancies.
+Demo content must never be presented to a production user as a real, current vacancy or opportunity —
+the mobile/admin UI still badges any `is_demo` listing as DEMO if one is ever created.
 
 The 30 abstract-reasoning image questions seeded in Phase 7.5 (`scripts/generate_abstract_images.py`
 + `seed_abstract_image_questions.py`) are **original, procedurally-generated shapes** — not scans,
