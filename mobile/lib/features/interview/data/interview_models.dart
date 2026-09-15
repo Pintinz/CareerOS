@@ -1,3 +1,5 @@
+import "../../../core/utils/api_dates.dart";
+
 enum InterviewDifficulty {
   easy,
   medium,
@@ -316,7 +318,7 @@ class InterviewSessionSummary {
         mode: InterviewSessionMode.fromWire(json["mode"] as String),
         status: InterviewSessionStatus.fromWire(json["status"] as String),
         questionCount: json["question_count"] as int,
-        createdAt: DateTime.parse(json["created_at"] as String),
+        createdAt: parseApiDateTime(json["created_at"] as String),
       );
 }
 
@@ -435,8 +437,8 @@ class StarStory {
         relevantRoles: (json["relevant_roles"] as List? ?? []).map((e) => e as String).toList(),
         relevantQuestions: (json["relevant_questions"] as List? ?? []).map((e) => e as String).toList(),
         completeness: StarCompleteness.fromJson(json["completeness"] as Map<String, dynamic>),
-        createdAt: DateTime.parse(json["created_at"] as String),
-        updatedAt: DateTime.parse(json["updated_at"] as String),
+        createdAt: parseApiDateTime(json["created_at"] as String),
+        updatedAt: parseApiDateTime(json["updated_at"] as String),
         version: json["version"] as int? ?? 1,
       );
 }
@@ -529,7 +531,7 @@ class RecentDevelopment {
         id: json["id"] as String,
         headline: json["headline"] as String,
         summary: json["summary"] as String?,
-        publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
+        publishedAt: parseApiDateTimeOrNull(json["published_at"]),
       );
 }
 
@@ -631,7 +633,7 @@ class Recording {
         durationSeconds: json["duration_seconds"] as int,
         title: json["title"] as String?,
         uploadStatus: json["upload_status"] as String,
-        createdAt: DateTime.parse(json["created_at"] as String),
+        createdAt: parseApiDateTime(json["created_at"] as String),
       );
 }
 

@@ -1,3 +1,4 @@
+import "../../../core/utils/api_dates.dart";
 import "../../companies/data/company_models.dart";
 
 class IntelligenceCard {
@@ -31,7 +32,7 @@ class IntelligenceCard {
         company: json["company"] != null ? CompanySummary.fromJson(json["company"] as Map<String, dynamic>) : null,
         thumbnailUrl: json["thumbnail_url"] as String?,
         summary: json["summary"] as String?,
-        publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
+        publishedAt: parseApiDateTimeOrNull(json["published_at"]),
         isFeatured: json["is_featured"] as bool? ?? false,
       );
 }
@@ -92,7 +93,7 @@ class IntelligenceDetail {
         relevantSkills: (json["relevant_skills"] as List?)?.map((e) => e as String).toList(),
         sourceUrl: json["source_url"] as String?,
         sourceName: json["source_name"] as String?,
-        publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
+        publishedAt: parseApiDateTimeOrNull(json["published_at"]),
         isVerified: json["is_verified"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,
       );

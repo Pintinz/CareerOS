@@ -1,3 +1,5 @@
+import "../../../core/utils/api_dates.dart";
+
 /// Mirrors backend `TestMode` (spec §6).
 enum TestMode {
   practice,
@@ -346,9 +348,9 @@ class TestSessionDetail {
         status: TestStatus.fromWire(json["status"] as String),
         applicationId: json["application_id"] as String?,
         jobId: json["job_id"] as String?,
-        startedAt: json["started_at"] != null ? DateTime.parse(json["started_at"] as String) : null,
-        submittedAt: json["submitted_at"] != null ? DateTime.parse(json["submitted_at"] as String) : null,
-        expiresAt: json["expires_at"] != null ? DateTime.parse(json["expires_at"] as String) : null,
+        startedAt: parseApiDateTimeOrNull(json["started_at"]),
+        submittedAt: parseApiDateTimeOrNull(json["submitted_at"]),
+        expiresAt: parseApiDateTimeOrNull(json["expires_at"]),
         timeLimitSeconds: json["time_limit_seconds"] as int?,
         timeUsedSeconds: json["time_used_seconds"] as int?,
         autoSubmitted: json["auto_submitted"] as bool,
@@ -362,7 +364,7 @@ class TestSessionDetail {
         sectionBreakdown: json["section_breakdown"] as Map<String, dynamic>?,
         questions:
             (json["questions"] as List).map((e) => SessionQuestion.fromJson(e as Map<String, dynamic>)).toList(),
-        serverTime: DateTime.parse(json["server_time"] as String),
+        serverTime: parseApiDateTime(json["server_time"] as String),
         remainingSeconds: json["remaining_seconds"] as int?,
       );
 
@@ -415,7 +417,7 @@ class TestSessionSummary {
         status: TestStatus.fromWire(json["status"] as String),
         questionCount: json["question_count"] as int,
         percentage: (json["percentage"] as num?)?.toDouble(),
-        createdAt: DateTime.parse(json["created_at"] as String),
+        createdAt: parseApiDateTime(json["created_at"] as String),
       );
 }
 

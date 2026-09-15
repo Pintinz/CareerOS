@@ -588,3 +588,21 @@ async def _register_admin_and_login(client: AsyncClient, db_session: AsyncSessio
         "/api/v1/admin/auth/login", json={"email": "apt-admin@example.com", "password": "adminpass1"}
     )
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+async def test_timed_session_timestamps_carry_utc_offset_after_reload(client: AsyncClient, db_session: AsyncSession) -> None:
+    """Regression: SQLite returns naive datetimes, which were serialized without an offset, so an app in
+    Lagos (UTC+1) read expires_at an hour early and auto-submitted a fresh 30-minute test."""
+    from datetime import datetime
+
+    await _seed_numerical_bank(db_session)
+    headers = await _user_headers(client)
+    session = await _create_session(client, headers, timing="OVERALL", time_limit_minutes=30)
+    db_session.expunge_all()  # force the next read to load from the database
+
+    reloaded = (await client.get(f"/api/v1/aptitude/sessions/{session['id']}", headers=headers)).json()
+    expires_at, server_time = datetime.fromisoformat(reloaded["expires_at"]), datetime.fromisoformat(reloaded["server_time"])
+    assert expires_at.tzinfo is not None and server_time.tzinfo is not None
+    assert 29 * 60 <= (expires_at - server_time).total_seconds() <= 30 * 60
+    assert 29 * 60 <= reloaded["remaining_seconds"] <= 30 * 60
+    assert reloaded["status"] == "IN_PROGRESS"

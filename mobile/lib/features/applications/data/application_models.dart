@@ -1,3 +1,5 @@
+import "../../../core/utils/api_dates.dart";
+
 /// Mirrors backend `ApplicationStage` (spec §36). Order matters for the visual timeline —
 /// this is the same order the backend enum declares them in.
 enum ApplicationStage {
@@ -87,7 +89,7 @@ class ApplicationStageEvent {
   factory ApplicationStageEvent.fromJson(Map<String, dynamic> json) => ApplicationStageEvent(
         id: json["id"] as String,
         stage: ApplicationStage.fromWire(json["stage"] as String),
-        occurredAt: DateTime.parse(json["occurred_at"] as String),
+        occurredAt: parseApiDateTime(json["occurred_at"] as String),
         note: json["note"] as String?,
       );
 }
@@ -102,7 +104,7 @@ class ApplicationNote {
   factory ApplicationNote.fromJson(Map<String, dynamic> json) => ApplicationNote(
         id: json["id"] as String,
         text: json["text"] as String,
-        createdAt: DateTime.parse(json["created_at"] as String),
+        createdAt: parseApiDateTime(json["created_at"] as String),
       );
 }
 
@@ -155,15 +157,15 @@ class Application {
         location: json["location"] as String?,
         jobUrl: json["job_url"] as String?,
         currentStage: ApplicationStage.fromWire(json["current_stage"] as String),
-        appliedDate: json["applied_date"] != null ? DateTime.parse(json["applied_date"] as String) : null,
-        deadline: json["deadline"] != null ? DateTime.parse(json["deadline"] as String) : null,
-        interviewDate: json["interview_date"] != null ? DateTime.parse(json["interview_date"] as String) : null,
-        assessmentDate: json["assessment_date"] != null ? DateTime.parse(json["assessment_date"] as String) : null,
+        appliedDate: parseApiDateTimeOrNull(json["applied_date"]),
+        deadline: parseApiDateTimeOrNull(json["deadline"]),
+        interviewDate: parseApiDateTimeOrNull(json["interview_date"]),
+        assessmentDate: parseApiDateTimeOrNull(json["assessment_date"]),
         salary: json["salary"] as String?,
         contactName: json["contact_name"] as String?,
         contactEmail: json["contact_email"] as String?,
         coverLetterText: json["cover_letter_text"] as String?,
-        updatedAt: DateTime.parse(json["updated_at"] as String),
+        updatedAt: parseApiDateTime(json["updated_at"] as String),
         timeline: (json["timeline"] as List? ?? [])
             .map((e) => ApplicationStageEvent.fromJson(e as Map<String, dynamic>))
             .toList(),

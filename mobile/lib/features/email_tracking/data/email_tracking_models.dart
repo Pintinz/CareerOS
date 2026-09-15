@@ -1,3 +1,4 @@
+import "../../../core/utils/api_dates.dart";
 import "../../applications/data/application_models.dart";
 
 enum EmailProvider { gmail, outlook, forwarded }
@@ -90,10 +91,10 @@ class EmailConnection {
         providerEmail: json["provider_email"] as String,
         status: EmailConnectionStatusWire.fromWire(json["status"] as String),
         grantedScopes: (json["granted_scopes"] as List? ?? []).map((e) => e as String).toList(),
-        lastSyncAt: json["last_sync_at"] != null ? DateTime.parse(json["last_sync_at"] as String) : null,
-        lastErrorAt: json["last_error_at"] != null ? DateTime.parse(json["last_error_at"] as String) : null,
+        lastSyncAt: parseApiDateTimeOrNull(json["last_sync_at"]),
+        lastErrorAt: parseApiDateTimeOrNull(json["last_error_at"]),
         lastErrorCode: json["last_error_code"] as String?,
-        createdAt: DateTime.parse(json["created_at"] as String),
+        createdAt: parseApiDateTime(json["created_at"] as String),
       );
 }
 
@@ -148,7 +149,7 @@ class RecruitmentEmailEvent {
       senderName: json["sender_name"] as String?,
       subject: json["subject"] as String,
       evidenceExcerpt: json["evidence_excerpt"] as String?,
-      receivedAt: DateTime.parse(json["received_at"] as String),
+      receivedAt: parseApiDateTime(json["received_at"] as String),
       matchedApplicationId: json["matched_application_id"] as String?,
       candidateApplicationIds: (json["candidate_application_ids"] as List? ?? []).map((e) => e as String).toList(),
       detectedStage: json["detected_stage"] != null ? ApplicationStage.fromWire(json["detected_stage"] as String) : null,
@@ -156,8 +157,8 @@ class RecruitmentEmailEvent {
       confidenceLabel: json["confidence_label"] as String?,
       evidence: (reason["evidence"] as List? ?? []).map((e) => e as String).toList(),
       status: RecruitmentEventStatusWire.fromWire(json["status"] as String),
-      createdAt: DateTime.parse(json["created_at"] as String),
-      reviewedAt: json["reviewed_at"] != null ? DateTime.parse(json["reviewed_at"] as String) : null,
+      createdAt: parseApiDateTime(json["created_at"] as String),
+      reviewedAt: parseApiDateTimeOrNull(json["reviewed_at"]),
     );
   }
 }

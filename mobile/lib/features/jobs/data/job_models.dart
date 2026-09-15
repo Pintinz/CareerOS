@@ -1,3 +1,4 @@
+import "../../../core/utils/api_dates.dart";
 import "../../companies/data/company_models.dart";
 
 class JobCard {
@@ -71,13 +72,13 @@ class JobCard {
         isVerified: json["is_verified"] as bool? ?? false,
         isSaved: json["is_saved"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,
-        publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
+        publishedAt: parseApiDateTimeOrNull(json["published_at"]),
         applicationDeadline:
-            json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,
+            parseApiDateTimeOrNull(json["application_deadline"]),
         opportunityType: json["opportunity_type"] as String? ?? "JOB",
         availability: json["availability"] as String? ?? "ACTIVE",
         isOfficialSource: json["is_official_source"] as bool? ?? false,
-        lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
+        lastVerifiedAt: parseApiDateTimeOrNull(json["last_verified_at"]),
         verificationStatus: json["verification_status"] as String? ?? "UNVERIFIED",
       );
 
@@ -240,9 +241,9 @@ class JobDetail {
         applicationInstructions: json["application_instructions"] as String?,
         sourceType: json["source_type"] as String,
         sourceUrl: json["source_url"] as String?,
-        publishedAt: json["published_at"] != null ? DateTime.parse(json["published_at"] as String) : null,
+        publishedAt: parseApiDateTimeOrNull(json["published_at"]),
         applicationDeadline:
-            json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,
+            parseApiDateTimeOrNull(json["application_deadline"]),
         isVerified: json["is_verified"] as bool? ?? false,
         isFeatured: json["is_featured"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,
@@ -250,11 +251,11 @@ class JobDetail {
         opportunityType: json["opportunity_type"] as String? ?? "JOB",
         availability: json["availability"] as String? ?? "ACTIVE",
         isOfficialSource: json["is_official_source"] as bool? ?? false,
-        lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
+        lastVerifiedAt: parseApiDateTimeOrNull(json["last_verified_at"]),
         educationRequirements: _stringList(json["education_requirements"]),
         experienceRequirements: _stringList(json["experience_requirements"]),
         programDuration: json["program_duration"] as String?,
-        programStartDate: json["program_start_date"] != null ? DateTime.parse(json["program_start_date"] as String) : null,
+        programStartDate: parseApiDateTimeOrNull(json["program_start_date"]),
         eligibility: (json["eligibility_json"] as Map<String, dynamic>?) ?? const {},
         verificationStatus: json["verification_status"] as String? ?? "UNVERIFIED",
         jobFunction: json["job_function"] as String?,

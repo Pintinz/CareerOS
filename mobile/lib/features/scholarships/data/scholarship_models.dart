@@ -1,3 +1,5 @@
+import "../../../core/utils/api_dates.dart";
+
 class ScholarshipCard {
   const ScholarshipCard({
     required this.id,
@@ -46,7 +48,7 @@ class ScholarshipCard {
         degreeLevels: (json["degree_levels"] as List?)?.map((e) => e as String).toList(),
         fundingType: json["funding_type"] as String,
         applicationDeadline:
-            json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,
+            parseApiDateTimeOrNull(json["application_deadline"]),
         thumbnailUrl: json["thumbnail_url"] as String?,
         isVerified: json["is_verified"] as bool? ?? false,
         isFeatured: json["is_featured"] as bool? ?? false,
@@ -178,7 +180,7 @@ class ScholarshipDetail {
         postImageUrl: json["post_image_url"] as String?,
         officialUrl: json["official_url"] as String?,
         applicationDeadline:
-            json["application_deadline"] != null ? DateTime.parse(json["application_deadline"] as String) : null,
+            parseApiDateTimeOrNull(json["application_deadline"]),
         isVerified: json["is_verified"] as bool? ?? false,
         isDemo: json["is_demo"] as bool? ?? false,
         isFeatured: json["is_featured"] as bool? ?? false,
@@ -186,8 +188,8 @@ class ScholarshipDetail {
         awardType: json["award_type"] as String? ?? "SCHOLARSHIP",
         availability: json["availability"] as String? ?? "ACTIVE",
         isOfficialSource: json["is_official_source"] as bool? ?? false,
-        lastVerifiedAt: json["last_verified_at"] != null ? DateTime.parse(json["last_verified_at"] as String) : null,
-        openingDate: json["opening_date"] != null ? DateTime.parse(json["opening_date"] as String) : null,
+        lastVerifiedAt: parseApiDateTimeOrNull(json["last_verified_at"]),
+        openingDate: parseApiDateTimeOrNull(json["opening_date"]),
         sourceUrl: json["source_url"] as String?,
       );
 }
