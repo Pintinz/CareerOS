@@ -890,3 +890,31 @@ analyze clean and 148 tests pass; admin production build passes. Real-web read-o
 the Lever, Greenhouse and Ashby public job-board APIs; SmartRecruiters was correctly refused by its
 robots.txt. Not verified: PostgreSQL migration run, Workday/RSS/JSON-LD against live sites, real
 Anthropic calls, full live source → publish flow, authenticated admin screens in a browser.
+
+## 50. Direct company career feed integration audit (2026-09-15)
+
+**Before building:** the source registry, discovery queue, runs, change history, adapters, scheduler with
+leader lock, admin pages and app integration already existed (section 49). Gaps: no starter company pack,
+no per-source readiness or sync health fields, no Oracle Recruiting support, Workday unscoped and
+experimental, no microdata/sitemap reading, no country scoping, removal after a single missed sync, no
+draft fast path, no trainee/apprenticeship types, no region filtering or verification label.
+
+**Research:** 75 starter companies' official careers sites probed live (robots.txt honoured, ~1 request/s),
+then platform endpoints and job pages checked individually. Result: 21 ready via public ATS/APIs, 5 via
+official pages, 25 need configuration, 7 manual-only, 16 blocked (HTTP 403 or robots.txt) — recorded in
+docs/career_sources.md and never worked around.
+
+**Defects found by the live sync and fixed:** Oracle sources defaulted to the manual method and were
+skipped; large Greenhouse boards exceeded the response cap; first-page search listings were treated as
+complete listings (would have produced false removals); postcodes hid SuccessFactors countries;
+out-of-scope roles consumed the per-run item cap. Earlier in the same work: an N+1 query in source health
+(one query per source) replaced by a single latest-run query; stale ORM state could double-count removals.
+
+**Security review:** no new outbound paths bypass the SSRF/robots client; sitemap XML parsed with
+defusedxml; new adapter config keys validated (types, lengths, URLs); Oracle `Internal*` fields excluded
+from stored payloads; Test connection bounded; seed import admin-only and audited.
+
+**Verification:** backend 337 tests pass; Flutter analyze clean and 153 tests pass; admin production build
+and debug APK build pass; migration upgrade/downgrade/check clean on a fresh database. Live: every READY
+source synced once into the dev database; 15 Nigeria roles published and served by the public API. Not
+verified: production scheduling over time, PostgreSQL migration, device-level mobile flow for these imports.

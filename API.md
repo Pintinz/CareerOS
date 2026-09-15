@@ -288,6 +288,24 @@ saved items and applications keep working, while drafts and archived rows still 
 fields). `employment_type`, `work_mode` and `funding_type` may be `UNSPECIFIED` when a source didn't
 state them.
 
+## Implemented endpoints (Direct Company Career Feed Integration)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/v1/admin/sources/import-seed` | ADMIN. `{dry_run}` → applies the bundled career-source pack idempotently; returns companies/sources created, updated, unchanged. |
+| POST | `/api/v1/admin/sources/{id}/test` | EDITOR+. Test connection: bounded live fetch (≤15 requests, 5 listings), nothing stored → `{ok, adapter, found, complete, sample_titles, warnings, error_code, error, http_status, requests}`. |
+| GET | `/api/v1/admin/sources` | Adds `job_search_url`, `ats_provider`, `readiness`, `readiness_note`, `auto_create_draft`, `last_http_status`, `items_last_found`, `requires_review`, `health` (HEALTHY/DEGRADED/FAILING/PAUSED/UNKNOWN), `adapter_name`, `company_name`, last run new/updated/duplicates/removed. |
+| POST / PUT | `/api/v1/admin/sources[/{id}]` | Accept the new registry fields; adapter config adds `country_filter`, `removal_confirmations`, `search_text`, `max_pages`, `max_detail_fetches`, `site_number`, `listing_complete`, `sitemap_urls`, `link_filters`. |
+| GET | `/api/v1/admin/discovery` | Items add `source_type`, `external_id`, `missing_runs` (and a `POSSIBLY_REMOVED` flag). |
+| GET | `/api/v1/admin/discovery/metrics` | Adds `healthy_sources`, `sources_by_readiness`, `last_run_at`, `items_new_24h`, `items_updated_24h`, `possibly_removed`, `jobs_by_country`, `jobs_by_industry`. |
+
+Public: `GET /jobs?country=` accepts a region (`Africa`, `Europe`, `Middle East`, `North America`); new
+`job_function` filter; search also covers country, job function and company industry; `industry` matches
+the job or its company. Job cards/details add `verification_status` (OFFICIAL_ATS / OFFICIAL_SOURCE /
+VERIFIED / UNVERIFIED / STALE / SOURCE_REMOVED); details add `job_function`. `opportunity_type` may be
+`APPRENTICESHIP` (included in `opportunity_type=INTERNSHIP`) or `TRAINEE_PROGRAM` (included in
+`GRADUATE_PROGRAM`); `source_state` may be `POSSIBLY_REMOVED` (still listed).
+
 ## Planned endpoint groups (filled in per phase, not yet built)
 
 ```

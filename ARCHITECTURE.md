@@ -495,6 +495,17 @@ use it is a separate, per-setting task — only the email-classifier confidence 
 as of Phase 9 (see PROJECT_STATUS.md's Phase 9 section for the full list of what's stored-but-not-
 yet-consumed).
 
+## Direct company career feeds (`app/ingestion/adapters/`, `app/services/discovery/`)
+
+Official employer career sources flow through the same discovery pipeline as every other source:
+adapter → validation → dedup → change detection → queue → admin/publishing policy → app. Adapters are
+per **provider** (Greenhouse, Lever, Ashby, Workday, Oracle Recruiting Cloud, schema.org official pages via
+JSON-LD/microdata/listing pages/sitemaps) and configured per employer in the source registry, so adding a
+company is data (`app/seeds/career_sources.json` or the admin Sources page), not code. Sources can be
+scoped to countries/regions (Workday and Oracle scope server-side through the site's own facets). A
+listing missing from a complete source listing is `POSSIBLY_REMOVED` until repeated confirmation, then
+`SOURCE_REMOVED` pending admin confirmation. Details: **CAREER_SOURCE_INTEGRATION.md**.
+
 ## Environment-gated integrations
 
 | Integration | Interface | Mock/dev provider | Real provider needs |

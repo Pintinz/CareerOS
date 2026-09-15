@@ -341,6 +341,22 @@ tracks it so later phases implement against a single source of truth instead of 
 - Verified: upgrade → downgrade → upgrade and `alembic check` on SQLite. **Not yet run against
   PostgreSQL.**
 
+### Career source integration (migration `d8e2f4a6b7c9`)
+
+- `content_sources` + `job_search_url`, `ats_provider`, `readiness` (READY_STRUCTURED / READY_HTML /
+  REQUIRES_CONFIGURATION / MANUAL_ONLY / BLOCKED / UNVERIFIED, VARCHAR), `readiness_note`, `auto_create_draft`,
+  `last_http_status`, `items_last_found`.
+- `discovered_items.missing_runs`, `jobs.source_missing_runs`: consecutive complete syncs a listing was absent.
+- `jobs.job_function` (department / job family as the employer names it).
+- New values: `jobs.opportunity_type` APPRENTICESHIP / TRAINEE_PROGRAM and `jobs.source_state` POSSIBLY_REMOVED
+  (both VARCHAR, no type change); `discovereditemtype` APPRENTICESHIP / TRAINEE_PROGRAM (native PostgreSQL enum,
+  added in an autocommit block; not removed on downgrade).
+- Existing indexes already cover the sync lookups (`jobs.content_source_id`, `external_job_id`, `requisition_id`,
+  `country`, `opportunity_type`, `source_state`, `published_at`, `application_deadline`, `status`;
+  `discovered_items.source_id`, `external_id`, `canonical_url`, `status`), so none were added.
+- Verified: upgrade → downgrade → upgrade and `alembic check` on a clean SQLite database, and an upgrade of the
+  local dev database. **Not yet run against PostgreSQL.**
+
 ## Entity groups (target — filled in phase by phase)
 
 ```

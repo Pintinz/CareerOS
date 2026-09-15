@@ -209,6 +209,20 @@ See **DISCOVERY_ENGINE.md** for the design.
 6. **Start small:** register a handful of official sources, keep polling off until a manual run looks
    right in the queue, then enable polling. Verify source ownership before ever allowing auto-publish.
 
+## Direct company career feeds — production setup
+
+1. Migrate to `d8e2f4a6b7c9` (PostgreSQL: a role allowed to `ALTER TYPE`).
+2. Import the starter pack: `cd backend && python -m scripts.import_career_sources --dry-run`, then without
+   `--dry-run` (or **Sources → Import starter pack**). Only READY sources are created with polling on.
+3. Flags: `CAREER_SOURCE_SYNC_ENABLED`, `STRUCTURED_ATS_SYNC_ENABLED`, `HTML_SOURCE_SYNC_ENABLED`,
+   `WORKDAY_DISCOVERY_ENABLED`, `ORACLE_RECRUITING_DISCOVERY_ENABLED`, `DISCOVERY_REMOVAL_CONFIRMATIONS`
+   (default 2). Keep `SOURCE_AUTO_PUBLISH_ENABLED=false`; use per-source auto-drafts for trusted sources.
+4. Capacity: large boards are bounded per run (pages, detail requests, 60 requests, 3 MB responses) and
+   paced per host; stagger first syncs rather than enabling every source at once. Workday tenants
+   without a country facet sync daily.
+5. Watch **Sources** health and the Discovery metrics; re-audit a failing or blocked site with Test connection
+   and update its pack entry (docs/career_sources.md) when its platform changes.
+
 ## AdMob production setup (Phase 10 — not done in this environment)
 
 Full detail in **MONETIZATION.md**. In development, every ad request uses Google's official

@@ -126,6 +126,19 @@ official URL is set, and a listing that already exists in CareerOS is reviewed a
 published again. The manual `POST /admin/discovery/ingest` entry point remains for things an editor
 spots by hand.
 
+### Career sources (official company career feeds)
+
+**Sources** is also the career-feed console: readiness (ready structured / ready official pages / needs
+configuration / manual only / blocked) with the audit note, health, ATS provider and adapter, last sync,
+HTTP status and listings in scope, country scope. Actions: **Run sync now** (queued, returns at once),
+**Test connection** (reads at most five listings, stores nothing), **Edit** (automatic sync and interval,
+auto-create drafts, country scope, listing pages, job-search URL, ATS, readiness), Enable/Disable, Runs,
+Items. Admins can **Import starter pack** (dry-run preview first; existing sources keep their polling,
+trust and publishing settings). The Discovery queue shows external job ids, source types, first-discovered
+dates, missed syncs and a "View original" link, with Create draft on each row; its dashboard adds healthy
+and failed sources, last sync, new/updated items, possibly removed listings and live jobs by country and
+industry. See CAREER_SOURCE_INTEGRATION.md and docs/career_sources.md.
+
 ## Notifications
 
 Creating and "sending" a notification campaign is real data-model work, but there is **no FCM/APNs

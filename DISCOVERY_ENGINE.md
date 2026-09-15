@@ -63,13 +63,14 @@ Code map: `backend/app/ingestion/` (fetching, adapters, validation, research pro
 | `GreenhouseAdapter` | `boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true` | yes | on |
 | `AshbyAdapter` | `api.ashbyhq.com/posting-api/job-board/{name}` (unlisted jobs skipped) | yes | on |
 | `SmartRecruitersAdapter` | `api.smartrecruiters.com/v1/companies/{id}/postings` + detail (paginated) | yes | **off** — its robots.txt disallows all crawlers except LinkedInBot (checked 2026-09-14) |
-| `WorkdayAdapter` | public career-site JSON `/wday/cxs/{tenant}/{site}/jobs` + detail | yes | **off** — undocumented, tenant-specific; experimental |
+| `WorkdayAdapter` | public career-site JSON `/wday/cxs/{tenant}/{site}/jobs` + detail; server-side country facet scoping | yes | on (live-verified on 12 employer tenants, 2026-09-15) |
+| `OracleRecruitingAdapter` | Oracle Recruiting Cloud Candidate Experience REST (search + detail); location facet scoping; external fields only | yes | on (live-verified: MTN, TotalEnergies, Emerson, Honeywell, Oracle) |
 | `RssAdapter` | RSS 2.0 / RSS 1.0 / Atom via defusedxml | no (rolling window) | on |
 | `StructuredPageAdapter` | schema.org JSON-LD `JobPosting` / `NewsArticle` on listed official pages, or on every opening linked from `listing_pages` (links containing `job_link_contains`, same host as the listing page or the source); a closing date stated in the posting text is used when `validThrough` is absent | no | on (live-verified on a Flair-hosted board, 2026-09-15) |
 
-SuccessFactors and Oracle Recruiting were investigated: there is no single public structured
-job-board API across tenants. Register their pages as `STRUCTURED_DATA` (JSON-LD is commonly
-embedded) or `AI_RESEARCH` sources.
+Oracle Recruiting now has its own adapter. SAP SuccessFactors career sites have no public job API;
+register them as `STRUCTURED_DATA` sources — their job pages carry schema.org microdata, which the
+structured page adapter reads (live-verified on EY and SAP). See CAREER_SOURCE_INTEGRATION.md.
 
 Each adapter maps **only fields the source returns**. Unstated salary, deadline, work mode,
 employment type or funding stay empty/`UNSPECIFIED` (the app hides them). Adapter config holds
@@ -261,7 +262,8 @@ posts). Discovery never copies or hotlinks images; logos and banners come from a
 | `WEB_DISCOVERY_ENABLED` | true | Master kill switch for fetching and verification (manual CMS unaffected) |
 | `LEVER_/GREENHOUSE_/ASHBY_DISCOVERY_ENABLED` | true | Per adapter |
 | `SMARTRECRUITERS_DISCOVERY_ENABLED` | false | robots.txt currently disallows |
-| `WORKDAY_DISCOVERY_ENABLED` | false | Experimental |
+| `WORKDAY_DISCOVERY_ENABLED` | true | Live-verified on employer tenants |
+| `ORACLE_RECRUITING_DISCOVERY_ENABLED` | true | Live-verified on employer sites |
 | `RSS_DISCOVERY_ENABLED`, `STRUCTURED_PAGE_DISCOVERY_ENABLED` | true | Per adapter |
 | `AUTO_PUBLISH_DISCOVERY` | **false** | Never on by default |
 | `AI_RESEARCH_ENABLED`, `ANTHROPIC_RESEARCH_ENABLED` | false | AI research |
