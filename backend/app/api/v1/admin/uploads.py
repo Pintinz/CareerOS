@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +10,9 @@ from app.db.session import get_db
 from app.models.admin_user import AdminRole
 from app.models.media import MediaAsset
 from app.security.admin_dependencies import require_admin_role
+from app.ingestion.url_safety import UnsafeUrlError
 from app.services import audit_service
+from app.services.logo_capture import LogoNotFoundError, capture_logo, get_logo_client_factory
 from app.services.storage_provider import LocalStorageProvider
 
 router = APIRouter()
@@ -68,6 +71,47 @@ async def upload_image(
         "height": stored.height,
         "mime_type": stored.mime_type,
         "file_size": stored.file_size,
+    }
+
+
+class LogoFromWebsiteIn(BaseModel):
+    website_url: str = Field(min_length=1, max_length=1024)
+    alt_text: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/image/from-website")
+async def logo_from_website(
+    payload: LogoFromWebsiteIn,
+    db: AsyncSession = Depends(get_db),
+    admin=Depends(_CAN_WRITE),
+    client_factory=Depends(get_logo_client_factory),
+) -> dict:
+    """Finds an organization's logo on its official website and stores a normalized copy as a media
+    asset (never a hotlink). The caller decides where to use the returned URL."""
+    client = client_factory()
+    try:
+        captured = await capture_logo(payload.website_url, client=client)
+    except UnsafeUrlError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Enter a public http(s) website URL.") from exc
+    except LogoNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    finally:
+        await client.aclose()
+    stored = get_storage_provider().save_png_bytes(captured.png, width=captured.width, height=captured.height)
+    asset = MediaAsset(
+        storage_key=stored.storage_key, url=stored.url, mime_type=stored.mime_type, width=stored.width,
+        height=stored.height, file_size=stored.file_size, alt_text=payload.alt_text,
+    )
+    db.add(asset)
+    await db.flush()
+    audit_service.add(
+        db, admin_id=admin.id, action="logo_captured", entity_type="media_asset", entity_id=asset.id,
+        metadata={"website": payload.website_url, "image_source": captured.source_url},
+    )
+    await db.commit()
+    return {
+        "url": stored.url, "media_asset_id": asset.id, "alt_text": payload.alt_text, "width": stored.width,
+        "height": stored.height, "mime_type": stored.mime_type, "file_size": stored.file_size, "source_url": captured.source_url,
     }
 
 

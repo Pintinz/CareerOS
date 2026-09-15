@@ -88,6 +88,14 @@ fields, or a question/option's image field. This is implemented as a fixed-list 
 because the column list is a hardcoded constant, never user input, but an approximation worth
 replacing with a real reference table if the media library grows large.
 
+**Organization logos.** Company pages ("Fetch logo from website") and scholarship forms ("Fetch
+provider logo") call `POST /admin/uploads/image/from-website`, which reads the official site's declared
+icons (apple-touch-icon, large PNG icons, schema.org Organization `logo`, then `/apple-touch-icon.png`
+and `/favicon.ico`) through the discovery HTTP client (robots.txt, SSRF checks, size limits), decodes
+and re-encodes the image as a square PNG (max 256px) and stores it as a media asset — a copy, never
+a hotlink. SVG-only sites and icons under 48px return a clear error; upload a logo instead. Nothing
+changes until the form is saved. Admin sessions that expire (30-minute tokens) now return to sign-in.
+
 ## Content sources & discovery queue
 
 The admin works like an editorial research desk: **Sources → Discovery → Verification → Draft →

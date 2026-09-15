@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import { LogoFromWebsite } from "@/components/LogoFromWebsite";
 import { useAdminGuard } from "@/components/useAdminGuard";
 import { ApiError, api } from "@/lib/apiClient";
 import { Company, JobAdmin, IntelligencePostAdmin, PaginatedResponse } from "@/types/models";
@@ -117,7 +118,18 @@ export default function CompanyDetailPage() {
             <Field label="Logo URL" value={form.logoUrl} onChange={(v) => setForm({ ...form, logoUrl: v })} />
             <Field label="Banner URL" value={form.bannerUrl} onChange={(v) => setForm({ ...form, bannerUrl: v })} />
           </div>
-          {form.logoUrl && <img src={form.logoUrl} alt="Logo preview" className="h-16 w-16 rounded-lg object-cover" />}
+          <div className="flex items-center gap-4">
+            {form.logoUrl ? (
+              <img src={form.logoUrl} alt="Logo preview" className="h-16 w-16 rounded-lg border border-line bg-white object-contain" />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg border border-dashed border-line text-xs text-muted">No logo</div>
+            )}
+            <LogoFromWebsite
+              websiteUrl={form.websiteUrl}
+              altText={`${form.name} logo`}
+              onCaptured={(url) => setForm((prev) => ({ ...prev, logoUrl: url }))}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Website URL" value={form.websiteUrl} onChange={(v) => setForm({ ...form, websiteUrl: v })} />
             <Field label="Career Page URL" value={form.careerUrl} onChange={(v) => setForm({ ...form, careerUrl: v })} />

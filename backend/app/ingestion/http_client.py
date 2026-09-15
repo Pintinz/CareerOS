@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import ssl
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -190,6 +191,9 @@ class DiscoveryHttpClient:
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     clock: Callable[[], float] = time.monotonic
     respect_robots: bool = True
+    # Verify TLS against the operating system's certificate store instead of certifi's bundle — for
+    # networks whose TLS-inspecting proxy or antivirus installs its own root. Verification stays on.
+    use_system_trust_store: bool = False
     requests_made: int = 0
     stats: dict = field(default_factory=lambda: {"requests": 0, "retries": 0, "bytes": 0, "hosts": {}})
 
@@ -198,8 +202,14 @@ class DiscoveryHttpClient:
         if _shared_throttle is None or _shared_throttle.min_interval_seconds != self.min_interval_seconds:
             _shared_throttle = HostThrottle(self.min_interval_seconds)
         self._throttle = _shared_throttle
+        verify: bool | ssl.SSLContext = True
+        if self.use_system_trust_store and self.transport is None:
+            import truststore  # lazy: only needed when enabled
+
+            verify = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         self._client = httpx.AsyncClient(
             transport=self.transport,
+            verify=verify,
             timeout=httpx.Timeout(self.timeout_seconds),
             follow_redirects=False,  # every hop is validated by hand
             headers={"User-Agent": self.user_agent, "Accept-Language": "en"},

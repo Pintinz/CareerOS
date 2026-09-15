@@ -275,6 +275,7 @@ auto-publish/ownership changes and source deletion for ADMIN/SUPER_ADMIN. Design
 | GET | `/api/v1/admin/discovery/{id}/review` | Evidence, extracted record, raw payload, existing record, pending changes, duplicate, publish blockers. |
 | POST | `/api/v1/admin/discovery/{id}/create-draft` \| `/publish` | Optional edits (`title`, `company_id`, `summary`, `description`, `location`, `country`, `application_url`, `deadline`, `category`, `career_relevance`); re-validated. Publish notifies followers. |
 | POST | `/api/v1/admin/discovery/{id}/create-company` | Create the proposed company (admin-confirmed fields only). |
+| POST | `/api/v1/admin/uploads/image/from-website` | `{website_url, alt_text}` → finds the organization's logo on its official site and stores a normalized PNG copy as a media asset (`url`, `media_asset_id`, `source_url`, size). 422 when no usable raster logo exists. |
 
 Public API changes: job and scholarship cards/details add `availability` (`ACTIVE`/`EXPIRED`/`CLOSED`/
 `UNAVAILABLE`), `is_official_source` and `last_verified_at`; jobs add `opportunity_type`

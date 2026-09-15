@@ -122,6 +122,7 @@ class DiscoveryPipeline:
             max_response_bytes=s.discovery_max_response_bytes,
             max_requests=s.discovery_max_requests_per_run,
             min_interval_seconds=s.discovery_min_request_interval_seconds,
+            use_system_trust_store=s.outbound_tls_trust_store == "system",
         )
 
     def _research(self) -> ResearchProvider | None:

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { LogoFromWebsite } from "@/components/LogoFromWebsite";
 import { ApiError, api } from "@/lib/apiClient";
 import { ContentStatus, DegreeLevel, FundingType, ScholarshipAdmin, SourceType } from "@/types/models";
 
@@ -362,12 +363,23 @@ export function ScholarshipForm({
       </Section>
 
       <Section title="Media & Source">
-        <Field label="Thumbnail URL">
+        <Field label="Thumbnail URL (shown as the provider's logo)">
           <input
             className={inputClass}
             value={state.thumbnail_url}
             onChange={(e) => set("thumbnail_url", e.target.value)}
           />
+          <div className="mt-2 flex items-center gap-3">
+            {state.thumbnail_url && (
+              <img src={state.thumbnail_url} alt="Thumbnail preview" className="h-12 w-12 rounded-lg border border-line bg-white object-contain" />
+            )}
+            <LogoFromWebsite
+              websiteUrl={state.official_url}
+              altText={`${state.organization || state.name} logo`}
+              label="Fetch provider logo"
+              onCaptured={(url) => set("thumbnail_url", url)}
+            />
+          </div>
         </Field>
         <Field label="Official application URL">
           <input

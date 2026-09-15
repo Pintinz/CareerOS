@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BrandLockup, BrandMark } from "@/components/BrandMark";
 import { setAdminToken } from "@/lib/adminAuth";
@@ -13,6 +13,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [expired, setExpired] = useState(false);
+
+  useEffect(() => {
+    setExpired(new URLSearchParams(window.location.search).has("expired"));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,6 +60,11 @@ export default function LoginPage() {
             Sign in
           </h1>
           <p className="mt-1 text-sm text-muted">Administrator access only.</p>
+          {expired && !error && (
+            <p role="status" className="mt-4 rounded-lg bg-brand/5 px-3 py-2 text-sm text-brand">
+              Your session expired. Sign in again to continue.
+            </p>
+          )}
 
           <div className="mt-8 space-y-4">
             <div>

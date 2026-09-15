@@ -24,6 +24,7 @@ APScheduler==3.11.3
 defusedxml==0.7.1
 lxml==6.1.3
 anthropic==1.5.0
+truststore==0.10.4
 
 # Phase 11 production server (spec §15) — gunicorn manages a pool of uvicorn worker processes with
 # proper graceful-shutdown/timeout/health behavior; never run `uvicorn --reload` in production.

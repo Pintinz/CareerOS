@@ -78,6 +78,7 @@ async def verify_active_opportunities(
             user_agent=settings.discovery_user_agent, timeout_seconds=settings.discovery_request_timeout_seconds,
             max_response_bytes=settings.discovery_max_response_bytes, max_requests=settings.verification_max_items_per_run + 20,
             min_interval_seconds=settings.discovery_min_request_interval_seconds,
+            use_system_trust_store=settings.outbound_tls_trust_store == "system",
         )
         try:
             await _recheck_urls(db, client, settings, stats, now)

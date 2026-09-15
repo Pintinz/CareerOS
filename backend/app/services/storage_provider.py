@@ -104,6 +104,17 @@ class LocalStorageProvider(StorageProvider):
         )
 
 
+    def save_png_bytes(self, data: bytes, *, width: int, height: int) -> StoredImage:
+        """Stores an image the server itself produced and already decoded (e.g. a logo re-encoded
+        by `logo_capture.normalize_logo`), under the same randomized key scheme as uploads."""
+        storage_key = f"{uuid.uuid4()}.png"
+        (self.upload_dir / storage_key).write_bytes(data)
+        return StoredImage(
+            url=f"{self.public_base_url}/{storage_key}", storage_key=storage_key, mime_type="image/png",
+            width=width, height=height, file_size=len(data),
+        )
+
+
 def _validate_image_upload(file: UploadFile) -> None:
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(

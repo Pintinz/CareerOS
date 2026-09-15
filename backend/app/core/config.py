@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -105,6 +106,9 @@ class Settings(BaseSettings):
     discovery_max_requests_per_run: int = 60
     discovery_max_response_bytes: int = 3_000_000
     discovery_max_items_per_run: int = 500
+    # "system": verify outbound discovery/logo TLS against the OS certificate store (TLS-inspecting
+    # corporate proxies or antivirus). "certifi" (default): the bundled Mozilla CA list.
+    outbound_tls_trust_store: Literal["certifi", "system"] = "certifi"
     discovery_dispatch_interval_minutes: int = 5
     discovery_runs_per_dispatch: int = 3
     verification_interval_hours: int = 12

@@ -193,7 +193,9 @@ See **DISCOVERY_ENGINE.md** for the design.
    `DISCOVERY_USER_AGENT` (identify the bot and a contact URL), politeness and budget settings
    (`DISCOVERY_MIN_REQUEST_INTERVAL_SECONDS`, `DISCOVERY_MAX_REQUESTS_PER_RUN`,
    `DISCOVERY_MAX_RESPONSE_BYTES`, `DISCOVERY_DISPATCH_INTERVAL_MINUTES`, `VERIFICATION_INTERVAL_HOURS`).
-   Turning discovery off never affects manual admin content management.
+   Turning discovery off never affects manual admin content management. Behind a TLS-inspecting
+   proxy or antivirus, set `OUTBOUND_TLS_TRUST_STORE=system` so outbound discovery and logo requests
+   verify against the OS certificate store (verification stays on; default `certifi`).
 3. **Optional AI research:** set `AI_RESEARCH_ENABLED=true`, `ANTHROPIC_RESEARCH_ENABLED=true` and
    `ANTHROPIC_API_KEY` **from the secret manager only** (never Git, images, the admin bundle, the
    mobile app or docs). Tune `ANTHROPIC_RESEARCH_MODEL`, `AI_RESEARCH_MAX_ITEMS_PER_RUN`,
