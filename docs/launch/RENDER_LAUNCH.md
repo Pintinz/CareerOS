@@ -101,8 +101,9 @@ flutter build apk --release --dart-define=API_BASE_URL=https://careeros-api.onre
 flutter build appbundle --release --dart-define=API_BASE_URL=https://careeros-api.onrender.com/api/v1 --dart-define=ENVIRONMENT=production
 ```
 
-- `app-release.apk` → the direct download link.
-- `app-release.aab` → what Play Console accepts.
+- `app-release.apk` → the direct download link (~70 MB: it carries every CPU architecture; add
+  `--split-per-abi` for ~25 MB per-architecture APKs if download size matters).
+- `app-release.aab` → what Play Console accepts (Play splits it per device automatically).
 
 `tool/build_release.sh` wraps both with the URL as its only argument.
 
