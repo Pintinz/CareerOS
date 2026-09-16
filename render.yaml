@@ -73,6 +73,12 @@ services:
         value: "false"
       - key: OUTBOUND_TLS_TRUST_STORE
         value: certifi
+      # Imports the bundled content pack (companies, opportunities, news, source registry, practice
+      # question banks and their images) on every start. Idempotent, content-only — and it also
+      # restores media after a deploy, since Render's filesystem resets. Turn off once you keep
+      # content only in the live database (see docs/launch/RENDER_LAUNCH.md).
+      - key: BOOTSTRAP_CONTENT
+        value: "true"
 
   # ---------------------------------------------------------------- Admin portal (Next.js)
   - type: web

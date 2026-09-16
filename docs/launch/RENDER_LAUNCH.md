@@ -68,9 +68,38 @@ Migrations run automatically on every deploy (`alembic upgrade head` before the 
 - Open `https://careeros-api.onrender.com/` — it returns the service name.
 - Log in to the admin portal with the seed admin, then **change that password** and remove
   `ADMIN_SEED_PASSWORD` from Render.
-- Your current content lives only in the local SQLite database. Either re-import the career-source
-  pack on the server (`python -m scripts.import_career_sources`, available as a Render shell
-  command on paid plans) or let discovery repopulate. Ask me and I'll prepare a migration script.
+- Your content is already there: `BOOTSTRAP_CONTENT=true` imports the bundled content pack at
+  startup (see below).
+
+## 3a. Your content goes live with the deployment
+
+`backend/data/content_pack/` is a committed snapshot of everything public in the local database:
+
+| | |
+|---|---|
+| Companies | 85 |
+| Opportunities | 203 (192 published) |
+| Scholarships | 5 |
+| Company intelligence posts | 21 |
+| Career sources | 99 (23 polling automatically) |
+| Aptitude questions | 171 (+ 666 options) |
+| Interview questions | 213 |
+| Media files (logos, question images) | 165 |
+
+No user, application, CV, recording or admin row is in it — production starts with real
+opportunities and zero personal data, and a test asserts that those tables can never be added to
+the pack.
+
+With `BOOTSTRAP_CONTENT=true` (already in `render.yaml`) the API imports it on every start. It is
+idempotent: rows are upserted by id, so a redeploy updates content instead of duplicating it. That
+repeat also matters on Render, whose filesystem resets on deploy — the pack restores logos and
+question images each time.
+
+**Refreshing it later:** run `cd backend && python -m scripts.export_content` here, commit the
+changed pack, and the next deploy picks it up. Once you start publishing directly in the live admin
+portal, set `BOOTSTRAP_CONTENT=false` so a deploy can't overwrite newer live edits with the
+snapshot, and add a Render persistent disk (or S3/Cloudflare R2) for uploads made in production —
+otherwise images uploaded through the live admin are lost on the next deploy.
 
 ## 4. Create the upload keystore (you)
 

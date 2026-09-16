@@ -17,6 +17,10 @@ from app.core.request_context import request_id_var
 from app.db.session import AsyncSessionLocal
 from app.scheduler import start_scheduler, stop_scheduler
 from app.services.admin_auth_service import ensure_seed_admin
+from app.services.content_pack import import_pack
+
+# Published content shipped with the deployment (see scripts/export_content.py).
+CONTENT_PACK_DIR = Path(__file__).resolve().parent.parent / "data" / "content_pack"
 
 settings = get_settings()
 configure_logging()
@@ -35,6 +39,23 @@ async def lifespan(app: FastAPI):
         await ensure_seed_admin(
             session, email=settings.admin_seed_email, password=settings.admin_seed_password
         )
+        # First-deployment content bootstrap (opt-in). Hosts without shell access can't run
+        # scripts/import_content.py, so the same idempotent import runs here when asked for. It
+        # upserts published content by primary key and restores its media files — also what
+        # repopulates media on hosts whose filesystem resets on deploy. Never touches user data.
+        if settings.bootstrap_content:
+            try:
+                counts = await import_pack(
+                    session,
+                    pack_dir=CONTENT_PACK_DIR,
+                    public_base_url=settings.public_base_url,
+                    upload_dir=Path(settings.upload_dir),
+                )
+                logger.info("content bootstrap complete: %s", counts)
+            except FileNotFoundError:
+                logger.warning("BOOTSTRAP_CONTENT is on but no content pack is bundled at %s", CONTENT_PACK_DIR)
+            except Exception:  # never block startup on a content import
+                logger.exception("content bootstrap failed; the API is starting without it")
     start_scheduler()
     yield
     stop_scheduler()

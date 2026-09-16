@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # Local-disk media storage (spec §12/§74). Swap for a cloud StorageProvider implementation
     # once object storage credentials exist — see app/services/storage_provider.py.
     upload_dir: str = "uploads"
+
+    # First-deployment content bootstrap: import the bundled content pack (published companies,
+    # opportunities, news, source registry and their media) at startup. Idempotent, content-only —
+    # never user data. Hosts with shell access can run `python -m scripts.import_content` instead.
+    bootstrap_content: bool = False
     public_base_url: str = "http://localhost:8000"
 
     google_client_id: str | None = None
