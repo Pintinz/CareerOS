@@ -15,7 +15,7 @@ databases:
     databaseName: careeros
     user: careeros
     plan: free
-    postgresMajorVersion: "16"
+    postgresMajorVersion: "17"
 
 services:
   # ---------------------------------------------------------------- API (FastAPI, Docker image)
@@ -29,10 +29,11 @@ services:
     healthCheckPath: /
     autoDeployTrigger: commit
     # Migrations run before the server starts, so a deploy can never serve an older schema.
-    # Two workers fit Render's smallest instances; raise with the plan.
+    # One async worker fits the free instance's 512 MB (and keeps the in-process scheduler
+    # single-leader); raise `--workers` when you move to a paid plan.
     dockerCommand: >-
       sh -c "alembic upgrade head &&
-      exec gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --workers 2
+      exec gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --workers 1
       --bind 0.0.0.0:8000 --timeout 60 --graceful-timeout 30 --access-logfile - --error-logfile -"
     envVars:
       - key: ENVIRONMENT
