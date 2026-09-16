@@ -91,3 +91,15 @@ def test_postgres_database_url_is_not_flagged() -> None:
 def test_is_production_reads_environment_case_insensitively() -> None:
     assert Settings(environment="Production").is_production
     assert not Settings(environment="development").is_production
+
+
+def test_managed_postgres_urls_get_the_async_driver() -> None:
+    """Managed hosts (Render, Railway, Fly, Heroku) hand out sync `postgres(ql)://` URLs; the async
+    engine and Alembic must still connect without anyone editing a URL containing a password."""
+    for given in ("postgres://u:p@host:5432/db", "postgresql://u:p@host:5432/db"):
+        assert Settings(database_url=given).normalized_database_url == "postgresql+asyncpg://u:p@host:5432/db"
+
+
+def test_already_async_and_sqlite_urls_are_left_alone() -> None:
+    for given in ("postgresql+asyncpg://u:p@host/db", "sqlite+aiosqlite:///./careeros_dev.db"):
+        assert Settings(database_url=given).normalized_database_url == given

@@ -7,7 +7,8 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-_is_sqlite = settings.database_url.startswith("sqlite")
+_database_url = settings.normalized_database_url
+_is_sqlite = _database_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
 # Phase 11 (spec §7): SQLite has no real pool to configure (NullPool-equivalent single-file
@@ -25,7 +26,7 @@ _pool_kwargs = (
     }
 )
 
-engine = create_async_engine(settings.database_url, echo=False, connect_args=connect_args, **_pool_kwargs)
+engine = create_async_engine(_database_url, echo=False, connect_args=connect_args, **_pool_kwargs)
 
 if _is_sqlite:
     # SQLite does NOT enforce foreign keys by default — every ondelete=CASCADE/RESTRICT/SET NULL

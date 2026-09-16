@@ -13,8 +13,10 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
 
     # Falls back to local SQLite so the backend runs with no Postgres/Docker installed. Production
-    # MUST set a real `postgresql+asyncpg://...` URL — see `uses_insecure_defaults` below, which
-    # refuses to boot a production-flagged process still pointed at the SQLite fallback.
+    # MUST set a real Postgres URL — see `uses_insecure_defaults` below, which refuses to boot a
+    # production-flagged process still pointed at the SQLite fallback. Managed hosts (Render,
+    # Railway, Fly, Heroku) hand out `postgres://` or `postgresql://` URLs; `normalized_database_url`
+    # upgrades those to this app's async driver so the platform value can be used as-is.
     database_url: str = "sqlite+aiosqlite:///./careeros_dev.db"
 
     # Phase 11 — production connection pool (spec §7). Ignored for SQLite (which has no real
@@ -137,6 +139,19 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"
+
+    @property
+    def normalized_database_url(self) -> str:
+        """The database URL with an async driver. Managed Postgres providers expose `postgres://`
+        or `postgresql://` connection strings (psycopg's sync form); SQLAlchemy's async engine needs
+        `postgresql+asyncpg://`. Rewriting here means a platform-provided value works unchanged and
+        nobody has to hand-edit a URL that contains a password."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return "postgresql+asyncpg://" + url[len("postgres://") :]
+        if url.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + url[len("postgresql://") :]
+        return url
 
     @property
     def uses_insecure_defaults(self) -> list[str]:
