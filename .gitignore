@@ -72,3 +72,7 @@ dev-env.sh
 Thumbs.db
 .vscode/
 .idea/
+
+# Owner-supplied working images kept out of the repository
+app.png
+Logos.png
