@@ -103,3 +103,18 @@ def test_managed_postgres_urls_get_the_async_driver() -> None:
 def test_already_async_and_sqlite_urls_are_left_alone() -> None:
     for given in ("postgresql+asyncpg://u:p@host/db", "sqlite+aiosqlite:///./careeros_dev.db"):
         assert Settings(database_url=given).normalized_database_url == given
+
+
+def test_libpq_ssl_options_become_asyncpg_options() -> None:
+    """Providers append libpq options asyncpg rejects as unknown keywords — Northflank/Neon/Supabase
+    URLs must still connect, with TLS kept on."""
+    given = "postgresql://u:p@host:5432/db?sslmode=require&channel_binding=require"
+    assert Settings(database_url=given).normalized_database_url == "postgresql+asyncpg://u:p@host:5432/db?ssl=require"
+
+
+def test_disabled_ssl_and_unrelated_options_are_handled() -> None:
+    assert Settings(database_url="postgresql://u:p@h/db?sslmode=disable").normalized_database_url == "postgresql+asyncpg://u:p@h/db"
+    assert (
+        Settings(database_url="postgres://u:p@h/db?sslmode=verify-full&prepared_statement_cache_size=0").normalized_database_url
+        == "postgresql+asyncpg://u:p@h/db?ssl=verify-full&prepared_statement_cache_size=0"
+    )

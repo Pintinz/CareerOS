@@ -1,5 +1,8 @@
 # Going live — Render backend + downloadable Android app
 
+> **Primary host is now Northflank** (free, always-on) — see `NORTHFLANK_LAUNCH.md`. This Render
+> guide stays valid as an alternative; `render.yaml` is kept in sync with the same image.
+
 Two tracks, same first half: the app is useless to a downloader until the backend is reachable on
 the internet, because the build currently points at `http://10.0.2.2:8000` (this PC).
 

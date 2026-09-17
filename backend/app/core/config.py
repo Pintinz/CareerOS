@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import parse_qsl, urlencode
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,8 +15,8 @@ class Settings(BaseSettings):
 
     # Falls back to local SQLite so the backend runs with no Postgres/Docker installed. Production
     # MUST set a real Postgres URL — see `uses_insecure_defaults` below, which refuses to boot a
-    # production-flagged process still pointed at the SQLite fallback. Managed hosts (Render,
-    # Railway, Fly, Heroku) hand out `postgres://` or `postgresql://` URLs; `normalized_database_url`
+    # production-flagged process still pointed at the SQLite fallback. Managed hosts (Northflank,
+    # Render, Railway, Neon) hand out `postgres://` or `postgresql://` URLs; `normalized_database_url`
     # upgrades those to this app's async driver so the platform value can be used as-is.
     database_url: str = "sqlite+aiosqlite:///./careeros_dev.db"
 
@@ -153,10 +154,23 @@ class Settings(BaseSettings):
         nobody has to hand-edit a URL that contains a password."""
         url = self.database_url
         if url.startswith("postgres://"):
-            return "postgresql+asyncpg://" + url[len("postgres://") :]
-        if url.startswith("postgresql://"):
-            return "postgresql+asyncpg://" + url[len("postgresql://") :]
-        return url
+            url = "postgresql+asyncpg://" + url[len("postgres://") :]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+        if not url.startswith("postgresql+asyncpg://") or "?" not in url:
+            return url
+        # libpq-style options that providers append (Northflank, Neon, Supabase) are rejected by
+        # asyncpg as unknown keywords. `sslmode` maps onto asyncpg's own `ssl` option; libpq-only
+        # options with no asyncpg equivalent are dropped.
+        base, _, query = url.partition("?")
+        options = []
+        for key, value in parse_qsl(query, keep_blank_values=True):
+            if key == "sslmode":
+                if value != "disable":
+                    options.append(("ssl", "require" if value in {"allow", "prefer"} else value))
+            elif key not in {"channel_binding", "target_session_attrs", "gssencmode"}:
+                options.append((key, value))
+        return f"{base}?{urlencode(options)}" if options else base
 
     @property
     def uses_insecure_defaults(self) -> list[str]:

@@ -26,18 +26,16 @@ services:
     region: frankfurt # closest of Render's regions to Nigeria; change before the first deploy if you prefer another
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    healthCheckPath: /
+    healthCheckPath: /api/v1/liveness
     autoDeployTrigger: commit
-    # Migrations run before the server starts, so a deploy can never serve an older schema.
-    # One async worker fits the free instance's 512 MB (and keeps the in-process scheduler
-    # single-leader); raise `--workers` when you move to a paid plan.
-    dockerCommand: >-
-      sh -c "alembic upgrade head &&
-      exec gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --workers 1
-      --bind 0.0.0.0:8000 --timeout 60 --graceful-timeout 30 --access-logfile - --error-logfile -"
+    # The image's start.sh runs migrations before serving; WEB_CONCURRENCY (below) sizes gunicorn.
     envVars:
       - key: ENVIRONMENT
         value: production
+      # One async worker fits the free instance's 512 MB and keeps the in-process scheduler
+      # single-leader; raise it on a paid plan.
+      - key: WEB_CONCURRENCY
+        value: "1"
       - key: DATABASE_URL
         fromDatabase:
           name: careeros-db

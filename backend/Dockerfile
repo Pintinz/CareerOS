@@ -26,7 +26,8 @@ USER careeros
 
 EXPOSE 8000
 
-# Worker count/timeouts are environment-configurable (spec §15) via gunicorn's own env vars
-# (GUNICORN_CMD_ARGS) or by overriding this CMD in your orchestrator — 4 workers and a 60s timeout
-# are reasonable single-instance defaults, not a hardcoded ceiling.
-CMD ["gunicorn", "app.main:app", "--worker-class", "uvicorn.workers.UvicornWorker", "--workers", "4", "--bind", "0.0.0.0:8000", "--timeout", "60", "--graceful-timeout", "30", "--access-logfile", "-", "--error-logfile", "-"]
+# start.sh runs migrations, then gunicorn with uvicorn workers. Worker count, port and whether to
+# migrate are environment-configurable (WEB_CONCURRENCY, PORT, RUN_MIGRATIONS) so the same image
+# runs unchanged on Northflank, Render or a VPS. Invoked through `sh` so it never depends on the
+# file's executable bit surviving a Windows checkout.
+CMD ["sh", "/app/start.sh"]
